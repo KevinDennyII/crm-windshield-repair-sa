@@ -203,47 +203,98 @@ export function JobDetailModal({
     notes: "",
   });
 
+  // Part Pricing Calculator state
+  const [calculator, setCalculator] = useState({
+    partPrice: 0,
+    markup: 0,
+    accessoriesPrice: 0,
+    urethanePrice: 15,
+    salesTaxPercent: 8.25,
+    laborPrice: 0,
+    calibrationPrice: 0,
+  });
+
+  // Calculate Parts Subtotal (Part Price + Markup + Accessories + Urethane) * (1 + Sales Tax %)
+  const partsSubtotal = 
+    (calculator.partPrice + calculator.markup + calculator.accessoriesPrice + calculator.urethanePrice) * 
+    (1 + calculator.salesTaxPercent / 100);
+
+  // Calculate Grand Total: Parts Subtotal + Labor + Calibration + 3.5% processing fee, rounded up
+  const subtotalBeforeFee = partsSubtotal + calculator.laborPrice + calculator.calibrationPrice;
+  const processingFee = subtotalBeforeFee * 0.035;
+  const grandTotalRaw = subtotalBeforeFee + processingFee;
+  const grandTotal = Math.ceil(grandTotalRaw);
+
+  const handleCalculatorChange = (field: keyof typeof calculator, value: number) => {
+    setCalculator(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleRecalculate = () => {
+    // Update formData with calculated values
+    setFormData(prev => ({
+      ...prev,
+      glassPrice: calculator.partPrice + calculator.markup,
+      calibrationPrice: calculator.calibrationPrice,
+      laborTotal: calculator.laborPrice,
+      urethaneKitPrice: calculator.urethanePrice,
+      taxRate: calculator.salesTaxPercent,
+      taxAmount: partsSubtotal - (calculator.partPrice + calculator.markup + calculator.accessoriesPrice + calculator.urethanePrice),
+      subtotal: subtotalBeforeFee,
+      totalDue: grandTotal,
+      balanceDue: grandTotal - (prev.amountPaid || 0),
+    }));
+  };
+
   useEffect(() => {
     if (job) {
       const { id, jobNumber, createdAt, ...jobData } = job;
       setFormData(jobData);
+      // Initialize calculator from existing job data
+      setCalculator({
+        partPrice: job.glassPrice || 0,
+        markup: 0,
+        accessoriesPrice: 0,
+        urethanePrice: job.urethaneKitPrice || 15,
+        salesTaxPercent: job.taxRate || 8.25,
+        laborPrice: job.laborTotal || 0,
+        calibrationPrice: job.calibrationPrice || 0,
+      });
     } else {
       setFormData(getDefaultFormData());
+      setCalculator({
+        partPrice: 0,
+        markup: 0,
+        accessoriesPrice: 0,
+        urethanePrice: 15,
+        salesTaxPercent: 8.25,
+        laborPrice: 0,
+        calibrationPrice: 0,
+      });
     }
     setActiveTab("customer");
     setNewPayment({ source: "cash", amount: 0, notes: "" });
   }, [job, isOpen]);
 
   const handleChange = (field: keyof InsertJob, value: string | number | boolean | undefined) => {
-    setFormData((prev) => {
-      const updated = { ...prev, [field]: value };
-      
-      // Auto-calculate totals when price-related fields change
-      if (["nagsListPrice", "laborHours", "laborRate", "calibrationPrice", "urethaneKitPrice", "deductible", "rebate"].includes(field)) {
-        const glassPrice = updated.nagsListPrice || 0;
-        const laborTotal = (updated.laborHours || 0) * (updated.laborRate || 0);
-        const calibration = updated.calibrationPrice || 0;
-        const urethane = updated.urethaneKitPrice || 0;
-        const subtotal = glassPrice + laborTotal + calibration + urethane;
-        const taxAmount = subtotal * ((updated.taxRate || 0) / 100);
-        const totalDue = subtotal + taxAmount;
-        const balanceDue = totalDue - (updated.amountPaid || 0);
-        
-        updated.glassPrice = glassPrice;
-        updated.laborTotal = laborTotal;
-        updated.subtotal = subtotal;
-        updated.taxAmount = taxAmount;
-        updated.totalDue = totalDue;
-        updated.balanceDue = Math.max(0, balanceDue);
-      }
-      
-      return updated;
-    });
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    // Apply calculator values to formData before saving
+    const updatedFormData = {
+      ...formData,
+      glassPrice: calculator.partPrice + calculator.markup,
+      calibrationPrice: calculator.calibrationPrice,
+      laborTotal: calculator.laborPrice,
+      urethaneKitPrice: calculator.urethanePrice,
+      taxRate: calculator.salesTaxPercent,
+      taxAmount: partsSubtotal - (calculator.partPrice + calculator.markup + calculator.accessoriesPrice + calculator.urethanePrice),
+      subtotal: subtotalBeforeFee,
+      totalDue: grandTotal,
+      balanceDue: Math.max(0, grandTotal - (formData.amountPaid || 0)),
+    };
+    onSave(updatedFormData);
   };
 
   const handleAddPayment = () => {
@@ -709,45 +760,6 @@ export function JobDetailModal({
                         </div>
                       </div>
                     </div>
-                    
-                    <div className="grid sm:grid-cols-3 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="nagsListPrice">NAGS List Price ($)</Label>
-                        <Input
-                          id="nagsListPrice"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={formData.nagsListPrice}
-                          onChange={(e) => handleChange("nagsListPrice", parseFloat(e.target.value) || 0)}
-                          data-testid="input-nags-list-price"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="laborHours">Labor Hours</Label>
-                        <Input
-                          id="laborHours"
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          value={formData.laborHours}
-                          onChange={(e) => handleChange("laborHours", parseFloat(e.target.value) || 0)}
-                          data-testid="input-labor-hours"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="laborRate">Labor Rate ($/hr)</Label>
-                        <Input
-                          id="laborRate"
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={formData.laborRate}
-                          onChange={(e) => handleChange("laborRate", parseFloat(e.target.value) || 0)}
-                          data-testid="input-labor-rate"
-                        />
-                      </div>
-                    </div>
 
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="grid gap-2">
@@ -769,21 +781,6 @@ export function JobDetailModal({
                         </Select>
                       </div>
                       <div className="grid gap-2">
-                        <Label htmlFor="calibrationPrice">Calibration Price ($)</Label>
-                        <Input
-                          id="calibrationPrice"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={formData.calibrationPrice}
-                          onChange={(e) => handleChange("calibrationPrice", parseFloat(e.target.value) || 0)}
-                          data-testid="input-calibration-price"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-3 gap-4">
-                      <div className="grid gap-2">
                         <Label htmlFor="distributor">Distributor</Label>
                         <Input
                           id="distributor"
@@ -793,6 +790,9 @@ export function JobDetailModal({
                           data-testid="input-distributor"
                         />
                       </div>
+                    </div>
+
+                    <div className="grid sm:grid-cols-3 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor="glassOrderedDate">Glass Ordered</Label>
                         <Input
@@ -813,9 +813,6 @@ export function JobDetailModal({
                           data-testid="input-glass-arrival-date"
                         />
                       </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor="urethaneKit">Urethane Kit</Label>
                         <Input
@@ -824,18 +821,6 @@ export function JobDetailModal({
                           onChange={(e) => handleChange("urethaneKit", e.target.value)}
                           placeholder="Standard / Premium"
                           data-testid="input-urethane-kit"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="urethaneKitPrice">Urethane Kit Price ($)</Label>
-                        <Input
-                          id="urethaneKitPrice"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={formData.urethaneKitPrice}
-                          onChange={(e) => handleChange("urethaneKitPrice", parseFloat(e.target.value) || 0)}
-                          data-testid="input-urethane-kit-price"
                         />
                       </div>
                     </div>
@@ -850,6 +835,167 @@ export function JobDetailModal({
                         rows={2}
                         data-testid="input-install-notes"
                       />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Part Pricing Calculator */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Part Pricing Calculator</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {/* Part Price */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calculator.partPrice}
+                        onChange={(e) => handleCalculatorChange("partPrice", parseFloat(e.target.value) || 0)}
+                        className="max-w-[200px]"
+                        data-testid="input-calc-part-price"
+                      />
+                      <Label className="text-muted-foreground">Part Price</Label>
+                    </div>
+
+                    {/* Markup */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calculator.markup}
+                        onChange={(e) => handleCalculatorChange("markup", parseFloat(e.target.value) || 0)}
+                        className="max-w-[200px]"
+                        data-testid="input-calc-markup"
+                      />
+                      <Label className="text-muted-foreground">Markup</Label>
+                    </div>
+
+                    {/* Accessories Price */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calculator.accessoriesPrice}
+                        onChange={(e) => handleCalculatorChange("accessoriesPrice", parseFloat(e.target.value) || 0)}
+                        className="max-w-[200px]"
+                        placeholder="Total accessories price in $"
+                        data-testid="input-calc-accessories"
+                      />
+                      <Label className="text-muted-foreground">+ Accessories Price</Label>
+                    </div>
+
+                    {/* Urethane Price */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calculator.urethanePrice}
+                        onChange={(e) => handleCalculatorChange("urethanePrice", parseFloat(e.target.value) || 0)}
+                        className="max-w-[200px]"
+                        data-testid="input-calc-urethane"
+                      />
+                      <Label className="text-muted-foreground">+ Urethane Price</Label>
+                    </div>
+
+                    {/* Sales Tax % */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.0001"
+                        value={calculator.salesTaxPercent}
+                        onChange={(e) => handleCalculatorChange("salesTaxPercent", parseFloat(e.target.value) || 0)}
+                        className="max-w-[200px]"
+                        data-testid="input-calc-sales-tax"
+                      />
+                      <Label className="text-muted-foreground">% Sales Tax</Label>
+                    </div>
+
+                    {/* Parts Subtotal (calculated) */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="text"
+                        value={partsSubtotal.toFixed(2)}
+                        readOnly
+                        className="max-w-[200px] bg-muted"
+                        data-testid="display-parts-subtotal"
+                      />
+                      <Label className="font-medium">Parts Subtotal</Label>
+                    </div>
+
+                    <div className="border-t my-2" />
+
+                    {/* Labor Price */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calculator.laborPrice}
+                        onChange={(e) => handleCalculatorChange("laborPrice", parseFloat(e.target.value) || 0)}
+                        className="max-w-[200px]"
+                        placeholder="Labor price in $"
+                        data-testid="input-calc-labor"
+                      />
+                      <Label className="text-muted-foreground">+ Labor Price</Label>
+                    </div>
+
+                    {/* Calibration Price */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calculator.calibrationPrice}
+                        onChange={(e) => handleCalculatorChange("calibrationPrice", parseFloat(e.target.value) || 0)}
+                        className="max-w-[200px]"
+                        placeholder="Calibration price in $"
+                        data-testid="input-calc-calibration"
+                      />
+                      <Label className="text-muted-foreground">+ Calibration Price</Label>
+                    </div>
+
+                    <div className="border-t my-2" />
+
+                    {/* Grand Total (rounded up) */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="text"
+                        value={`$${grandTotal.toFixed(2)}`}
+                        readOnly
+                        className="max-w-[200px] bg-muted font-semibold text-lg"
+                        data-testid="display-grand-total"
+                      />
+                      <Label className="font-semibold text-lg">Total</Label>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Includes 3.5% processing fee. Total rounded up to next whole dollar.
+                    </p>
+
+                    {/* Buttons */}
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleRecalculate}
+                        data-testid="button-recalculate"
+                      >
+                        Recalculate
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setActiveTab("customer")}
+                        data-testid="button-calculator-close"
+                      >
+                        Close
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
