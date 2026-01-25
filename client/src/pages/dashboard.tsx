@@ -18,6 +18,7 @@ const stageLabels: Record<string, string> = {
   glass_ordered: "Glass Ordered",
   glass_arrived: "Glass Arrived",
   scheduled: "Scheduled",
+  in_progress: "In Progress",
   paid_completed: "Paid/Completed",
 };
 
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const paidJobs = jobs.filter((job) => job.paymentStatus === "paid").length;
   const pendingJobs = jobs.filter((job) => job.paymentStatus === "pending").length;
   const scheduledJobs = jobs.filter((job) => job.pipelineStage === "scheduled").length;
+  const totalCollected = jobs.reduce((sum, job) => sum + job.amountPaid, 0);
 
   const jobsByStage = jobs.reduce((acc, job) => {
     acc[job.pipelineStage] = (acc[job.pipelineStage] || 0) + 1;
@@ -44,6 +46,13 @@ export default function Dashboard() {
       return dateB - dateA;
     })
     .slice(0, 5);
+
+  const getCustomerName = (job: Job) => {
+    if (job.isBusiness && job.businessName) {
+      return job.businessName;
+    }
+    return `${job.firstName} ${job.lastName}`;
+  };
 
   if (isLoading) {
     return (
@@ -183,9 +192,9 @@ export default function Dashboard() {
                   <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Collection Rate</p>
+                  <p className="text-sm font-medium">Collected</p>
                   <p className="text-xs text-muted-foreground">
-                    {totalJobs > 0 ? ((paidJobs / totalJobs) * 100).toFixed(0) : 0}% jobs paid
+                    ${totalCollected.toLocaleString("en-US", { minimumFractionDigits: 0 })} received
                   </p>
                 </div>
               </div>
@@ -238,7 +247,10 @@ export default function Dashboard() {
                       <Car className="h-4 w-4 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{job.customerName}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">#{job.jobNumber}</span>
+                        <p className="text-sm font-medium">{getCustomerName(job)}</p>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {job.vehicleYear} {job.vehicleMake} {job.vehicleModel}
                       </p>

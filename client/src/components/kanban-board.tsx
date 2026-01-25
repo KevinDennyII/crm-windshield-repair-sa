@@ -37,6 +37,11 @@ const stageConfig: Record<
     color: "text-cyan-600 dark:text-cyan-400",
     bgColor: "bg-cyan-50 dark:bg-cyan-950/30",
   },
+  in_progress: {
+    label: "In Progress",
+    color: "text-orange-600 dark:text-orange-400",
+    bgColor: "bg-orange-50 dark:bg-orange-950/30",
+  },
   paid_completed: {
     label: "Paid/Completed",
     color: "text-green-600 dark:text-green-400",
@@ -120,6 +125,13 @@ export function KanbanBoard({
     }
   };
 
+  const getCustomerName = (job: Job) => {
+    if (job.isBusiness && job.businessName) {
+      return job.businessName;
+    }
+    return `${job.firstName} ${job.lastName}`;
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-4 border-b">
@@ -136,7 +148,7 @@ export function KanbanBoard({
       </div>
 
       <ScrollArea className="flex-1 p-4">
-        <div className="flex gap-4 min-w-max pb-4 md:min-w-0 md:grid md:grid-cols-5">
+        <div className="flex gap-4 min-w-max pb-4 md:min-w-0 md:grid md:grid-cols-6">
           {pipelineStages.map((stage) => {
             const config = stageConfig[stage];
             const stageJobs = getJobsByStage(stage);
@@ -146,7 +158,7 @@ export function KanbanBoard({
               <div
                 key={stage}
                 className={cn(
-                  "flex flex-col min-w-[280px] md:min-w-0 rounded-lg transition-colors",
+                  "flex flex-col min-w-[260px] md:min-w-0 rounded-lg transition-colors",
                   config.bgColor,
                   isDragOver && "ring-2 ring-primary ring-offset-2"
                 )}
@@ -186,16 +198,19 @@ export function KanbanBoard({
                         <GripVertical className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0 cursor-grab" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="font-medium text-sm truncate">
-                              {job.customerName}
-                            </span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-xs text-muted-foreground">#{job.jobNumber}</span>
+                              <span className="font-medium text-sm truncate">
+                                {getCustomerName(job)}
+                              </span>
+                            </div>
                             {getPaymentBadge(job)}
                           </div>
 
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Phone className="h-3 w-3 flex-shrink-0" />
-                              <span className="truncate">{job.customerPhone}</span>
+                              <span className="truncate">{job.phone}</span>
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Car className="h-3 w-3 flex-shrink-0" />
@@ -207,13 +222,18 @@ export function KanbanBoard({
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <DollarSign className="h-3 w-3 flex-shrink-0" />
                               <span>${job.totalDue.toFixed(2)}</span>
+                              {job.balanceDue > 0 && job.balanceDue < job.totalDue && (
+                                <span className="text-amber-600 dark:text-amber-400">
+                                  (${job.balanceDue.toFixed(2)} due)
+                                </span>
+                              )}
                             </div>
                           </div>
 
-                          {job.glassType && (
+                          {job.glassPartNumber && (
                             <div className="mt-2">
                               <Badge variant="outline" className="text-xs">
-                                {job.glassType}
+                                {job.glassPartNumber}
                               </Badge>
                             </div>
                           )}

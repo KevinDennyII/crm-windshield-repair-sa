@@ -4,12 +4,16 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -17,8 +21,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type Job, type InsertJob, pipelineStages, paymentStatuses } from "@shared/schema";
-import { User, Car, Wrench, Sparkles, Save, X } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  type Job,
+  type InsertJob,
+  pipelineStages,
+  paymentStatuses,
+  jobTypes,
+  repairLocations,
+  calibrationTypes,
+  causesOfLoss,
+  paymentSources,
+  type PaymentHistoryEntry,
+} from "@shared/schema";
+import {
+  User,
+  Car,
+  Wrench,
+  DollarSign,
+  Save,
+  X,
+  Send,
+  FileText,
+  Search,
+  Plus,
+} from "lucide-react";
 
 interface JobDetailModalProps {
   job: Job | null;
@@ -26,6 +60,7 @@ interface JobDetailModalProps {
   onClose: () => void;
   onSave: (job: InsertJob) => void;
   onDelete?: (jobId: string) => void;
+  onAddPayment?: (jobId: string, payment: PaymentHistoryEntry) => void;
   isNew?: boolean;
 }
 
@@ -34,14 +69,122 @@ const stageLabels: Record<string, string> = {
   glass_ordered: "Glass Ordered",
   glass_arrived: "Glass Arrived",
   scheduled: "Scheduled",
+  in_progress: "In Progress",
   paid_completed: "Paid/Completed",
 };
 
-const paymentLabels: Record<string, string> = {
-  pending: "Pending",
-  partial: "Partial",
-  paid: "Paid",
+const jobTypeLabels: Record<string, string> = {
+  windshield_replacement: "Windshield Replacement",
+  windshield_repair: "Windshield Repair",
+  door_glass: "Door Glass",
+  back_glass: "Back Glass",
+  quarter_glass: "Quarter Glass",
+  sunroof: "Sunroof",
+  side_mirror: "Side Mirror",
 };
+
+const locationLabels: Record<string, string> = {
+  in_shop: "In-Shop",
+  mobile: "Mobile",
+  customer_location: "Customer Location",
+};
+
+const calibrationLabels: Record<string, string> = {
+  none: "None Required",
+  static: "Static Calibration",
+  dynamic: "Dynamic Calibration",
+  dual: "Dual Calibration",
+};
+
+const causeLabels: Record<string, string> = {
+  rock_chip: "Rock Chip",
+  crack: "Crack",
+  vandalism: "Vandalism",
+  accident: "Accident",
+  weather: "Weather",
+  unknown: "Unknown",
+  other: "Other",
+};
+
+const sourceLabels: Record<string, string> = {
+  cash: "Cash",
+  credit_card: "Credit Card",
+  debit_card: "Debit Card",
+  check: "Check",
+  insurance: "Insurance",
+  other: "Other",
+};
+
+const durationOptions = [
+  { value: "0.5", label: "30 minutes" },
+  { value: "1", label: "1 hour" },
+  { value: "1.5", label: "1.5 hours" },
+  { value: "2", label: "2 hours" },
+  { value: "2.5", label: "2.5 hours" },
+  { value: "3", label: "3 hours" },
+  { value: "4", label: "4 hours" },
+];
+
+const getDefaultFormData = (): InsertJob => ({
+  isBusiness: false,
+  businessName: "",
+  firstName: "",
+  lastName: "",
+  phone: "",
+  email: "",
+  streetAddress: "",
+  city: "",
+  state: "",
+  zipCode: "",
+  vin: "",
+  licensePlate: "",
+  mileage: "",
+  vehicleYear: "",
+  vehicleMake: "",
+  vehicleModel: "",
+  bodyStyle: "",
+  nagsCarId: "",
+  vehicleColor: "",
+  jobType: "windshield_replacement",
+  pipelineStage: "quote",
+  repairLocation: "in_shop",
+  installer: "",
+  installDate: "",
+  installTime: "",
+  jobDuration: "2",
+  glassPartNumber: "",
+  isAftermarket: true,
+  nagsListPrice: 0,
+  laborHours: 1.5,
+  laborRate: 50,
+  calibrationType: "none",
+  calibrationLocation: "",
+  calibrationPrice: 0,
+  distributor: "",
+  glassOrderedDate: "",
+  glassArrivalDate: "",
+  urethaneKit: "",
+  urethaneKitPrice: 0,
+  claimNumber: "",
+  dispatchNumber: "",
+  policyNumber: "",
+  dateOfLoss: "",
+  causeOfLoss: undefined,
+  insuranceCompany: "",
+  glassPrice: 0,
+  laborTotal: 0,
+  subtotal: 0,
+  taxRate: 0,
+  taxAmount: 0,
+  totalDue: 0,
+  deductible: 0,
+  rebate: 0,
+  amountPaid: 0,
+  balanceDue: 0,
+  paymentStatus: "pending",
+  paymentHistory: [],
+  installNotes: "",
+});
 
 export function JobDetailModal({
   job,
@@ -49,86 +192,53 @@ export function JobDetailModal({
   onClose,
   onSave,
   onDelete,
+  onAddPayment,
   isNew = false,
 }: JobDetailModalProps) {
-  const [formData, setFormData] = useState<InsertJob>({
-    customerName: "",
-    customerPhone: "",
-    customerEmail: "",
-    customerAddress: "",
-    vehicleYear: "",
-    vehicleMake: "",
-    vehicleModel: "",
-    vehicleVin: "",
-    vehicleColor: "",
-    glassType: "",
-    glassPartNumber: "",
-    glassSupplier: "",
-    installDate: "",
-    installTime: "",
-    installLocation: "",
-    installNotes: "",
-    totalDue: 0,
-    deductible: 0,
-    paymentStatus: "pending",
-    pipelineStage: "quote",
-  });
-
+  const [formData, setFormData] = useState<InsertJob>(getDefaultFormData());
   const [activeTab, setActiveTab] = useState("customer");
+  const [newPayment, setNewPayment] = useState({
+    source: "cash" as const,
+    amount: 0,
+    notes: "",
+  });
 
   useEffect(() => {
     if (job) {
-      setFormData({
-        customerName: job.customerName,
-        customerPhone: job.customerPhone,
-        customerEmail: job.customerEmail || "",
-        customerAddress: job.customerAddress || "",
-        vehicleYear: job.vehicleYear,
-        vehicleMake: job.vehicleMake,
-        vehicleModel: job.vehicleModel,
-        vehicleVin: job.vehicleVin || "",
-        vehicleColor: job.vehicleColor || "",
-        glassType: job.glassType,
-        glassPartNumber: job.glassPartNumber || "",
-        glassSupplier: job.glassSupplier || "",
-        installDate: job.installDate || "",
-        installTime: job.installTime || "",
-        installLocation: job.installLocation || "",
-        installNotes: job.installNotes || "",
-        totalDue: job.totalDue,
-        deductible: job.deductible,
-        paymentStatus: job.paymentStatus,
-        pipelineStage: job.pipelineStage,
-      });
+      const { id, jobNumber, createdAt, ...jobData } = job;
+      setFormData(jobData);
     } else {
-      setFormData({
-        customerName: "",
-        customerPhone: "",
-        customerEmail: "",
-        customerAddress: "",
-        vehicleYear: "",
-        vehicleMake: "",
-        vehicleModel: "",
-        vehicleVin: "",
-        vehicleColor: "",
-        glassType: "",
-        glassPartNumber: "",
-        glassSupplier: "",
-        installDate: "",
-        installTime: "",
-        installLocation: "",
-        installNotes: "",
-        totalDue: 0,
-        deductible: 0,
-        paymentStatus: "pending",
-        pipelineStage: "quote",
-      });
+      setFormData(getDefaultFormData());
     }
     setActiveTab("customer");
+    setNewPayment({ source: "cash", amount: 0, notes: "" });
   }, [job, isOpen]);
 
-  const handleChange = (field: keyof InsertJob, value: string | number) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleChange = (field: keyof InsertJob, value: string | number | boolean | undefined) => {
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+      
+      // Auto-calculate totals when price-related fields change
+      if (["nagsListPrice", "laborHours", "laborRate", "calibrationPrice", "urethaneKitPrice", "deductible", "rebate"].includes(field)) {
+        const glassPrice = updated.nagsListPrice || 0;
+        const laborTotal = (updated.laborHours || 0) * (updated.laborRate || 0);
+        const calibration = updated.calibrationPrice || 0;
+        const urethane = updated.urethaneKitPrice || 0;
+        const subtotal = glassPrice + laborTotal + calibration + urethane;
+        const taxAmount = subtotal * ((updated.taxRate || 0) / 100);
+        const totalDue = subtotal + taxAmount;
+        const balanceDue = totalDue - (updated.amountPaid || 0);
+        
+        updated.glassPrice = glassPrice;
+        updated.laborTotal = laborTotal;
+        updated.subtotal = subtotal;
+        updated.taxAmount = taxAmount;
+        updated.totalDue = totalDue;
+        updated.balanceDue = Math.max(0, balanceDue);
+      }
+      
+      return updated;
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -136,318 +246,913 @@ export function JobDetailModal({
     onSave(formData);
   };
 
+  const handleAddPayment = () => {
+    if (job && onAddPayment && newPayment.amount > 0) {
+      const payment: PaymentHistoryEntry = {
+        id: crypto.randomUUID(),
+        date: new Date().toISOString().split('T')[0],
+        source: newPayment.source,
+        amount: newPayment.amount,
+        notes: newPayment.notes,
+      };
+      onAddPayment(job.id, payment);
+      setNewPayment({ source: "cash", amount: 0, notes: "" });
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {isNew ? "New Auto Glass Job" : "Job Details"}
-            {!isNew && job && (
-              <span className="text-sm font-normal text-muted-foreground">
-                #{job.id.slice(0, 8)}
-              </span>
+          <DialogTitle className="flex items-center gap-3">
+            {isNew ? "New Auto Glass Job" : (
+              <>
+                <span>Job #{job?.jobNumber}</span>
+                {job && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {job.vehicleYear} {job.vehicleMake} {job.vehicleModel}
+                  </span>
+                )}
+              </>
             )}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isNew ? "Create a new auto glass job" : `Edit job ${job?.jobNumber}`}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
-            <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+            <TabsList className="grid w-full grid-cols-3 flex-shrink-0">
               <TabsTrigger value="customer" className="gap-1.5" data-testid="tab-customer">
                 <User className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Customer</span>
-              </TabsTrigger>
-              <TabsTrigger value="vehicle" className="gap-1.5" data-testid="tab-vehicle">
-                <Car className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Vehicle</span>
+                <span className="hidden sm:inline">Customer & Vehicle</span>
+                <span className="sm:hidden">Customer</span>
               </TabsTrigger>
               <TabsTrigger value="install" className="gap-1.5" data-testid="tab-install">
                 <Wrench className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Install</span>
+                <span className="hidden sm:inline">Install & Glass</span>
+                <span className="sm:hidden">Install</span>
               </TabsTrigger>
-              <TabsTrigger value="glass" className="gap-1.5" data-testid="tab-glass">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Glass</span>
+              <TabsTrigger value="payments" className="gap-1.5" data-testid="tab-payments">
+                <DollarSign className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Insurance & Payments</span>
+                <span className="sm:hidden">Payments</span>
               </TabsTrigger>
             </TabsList>
 
-            <div className="flex-1 overflow-y-auto mt-4">
-              <TabsContent value="customer" className="mt-0 space-y-4">
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="customerName">Customer Name *</Label>
-                    <Input
-                      id="customerName"
-                      value={formData.customerName}
-                      onChange={(e) => handleChange("customerName", e.target.value)}
-                      placeholder="John Smith"
-                      required
-                      data-testid="input-customer-name"
-                    />
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-4">
+            <div className="flex-1 overflow-y-auto mt-4 pr-2">
+              {/* Customer & Vehicle Tab */}
+              <TabsContent value="customer" className="mt-0 space-y-6">
+                {/* Customer Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Customer Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        id="isBusiness"
+                        checked={formData.isBusiness}
+                        onCheckedChange={(checked) => handleChange("isBusiness", checked)}
+                        data-testid="switch-is-business"
+                      />
+                      <Label htmlFor="isBusiness">Business Account</Label>
+                    </div>
+                    
+                    {formData.isBusiness && (
+                      <div className="grid gap-2">
+                        <Label htmlFor="businessName">Business Name</Label>
+                        <Input
+                          id="businessName"
+                          value={formData.businessName}
+                          onChange={(e) => handleChange("businessName", e.target.value)}
+                          placeholder="Company Name"
+                          data-testid="input-business-name"
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="firstName">First Name *</Label>
+                        <Input
+                          id="firstName"
+                          value={formData.firstName}
+                          onChange={(e) => handleChange("firstName", e.target.value)}
+                          placeholder="John"
+                          required
+                          data-testid="input-first-name"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="lastName">Last Name *</Label>
+                        <Input
+                          id="lastName"
+                          value={formData.lastName}
+                          onChange={(e) => handleChange("lastName", e.target.value)}
+                          placeholder="Smith"
+                          required
+                          data-testid="input-last-name"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="phone">Phone *</Label>
+                        <Input
+                          id="phone"
+                          value={formData.phone}
+                          onChange={(e) => handleChange("phone", e.target.value)}
+                          placeholder="(555) 123-4567"
+                          required
+                          data-testid="input-phone"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => handleChange("email", e.target.value)}
+                          placeholder="john@example.com"
+                          data-testid="input-email"
+                        />
+                      </div>
+                    </div>
+                    
                     <div className="grid gap-2">
-                      <Label htmlFor="customerPhone">Phone *</Label>
+                      <Label htmlFor="streetAddress">Street Address</Label>
                       <Input
-                        id="customerPhone"
-                        value={formData.customerPhone}
-                        onChange={(e) => handleChange("customerPhone", e.target.value)}
-                        placeholder="(555) 123-4567"
-                        required
-                        data-testid="input-customer-phone"
+                        id="streetAddress"
+                        value={formData.streetAddress}
+                        onChange={(e) => handleChange("streetAddress", e.target.value)}
+                        placeholder="123 Main Street"
+                        data-testid="input-street-address"
                       />
                     </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="customerEmail">Email</Label>
-                      <Input
-                        id="customerEmail"
-                        type="email"
-                        value={formData.customerEmail}
-                        onChange={(e) => handleChange("customerEmail", e.target.value)}
-                        placeholder="john@example.com"
-                        data-testid="input-customer-email"
-                      />
+                    
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="city">City</Label>
+                        <Input
+                          id="city"
+                          value={formData.city}
+                          onChange={(e) => handleChange("city", e.target.value)}
+                          placeholder="Springfield"
+                          data-testid="input-city"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="state">State</Label>
+                        <Input
+                          id="state"
+                          value={formData.state}
+                          onChange={(e) => handleChange("state", e.target.value)}
+                          placeholder="IL"
+                          data-testid="input-state"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="zipCode">Zip Code</Label>
+                        <Input
+                          id="zipCode"
+                          value={formData.zipCode}
+                          onChange={(e) => handleChange("zipCode", e.target.value)}
+                          placeholder="62701"
+                          data-testid="input-zip-code"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="customerAddress">Address</Label>
-                    <Textarea
-                      id="customerAddress"
-                      value={formData.customerAddress}
-                      onChange={(e) => handleChange("customerAddress", e.target.value)}
-                      placeholder="123 Main St, City, State 12345"
-                      rows={2}
-                      data-testid="input-customer-address"
-                    />
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
+
+                {/* Vehicle Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Car className="h-4 w-4" />
+                      Vehicle Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="vin">VIN</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="vin"
+                            value={formData.vin}
+                            onChange={(e) => handleChange("vin", e.target.value.toUpperCase())}
+                            placeholder="1HGCV1F34NA012345"
+                            className="flex-1"
+                            data-testid="input-vin"
+                          />
+                          <Button type="button" variant="outline" size="icon" title="Decode VIN" data-testid="button-decode-vin">
+                            <Search className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="licensePlate">License Plate</Label>
+                        <Input
+                          id="licensePlate"
+                          value={formData.licensePlate}
+                          onChange={(e) => handleChange("licensePlate", e.target.value.toUpperCase())}
+                          placeholder="ABC1234"
+                          data-testid="input-license-plate"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid sm:grid-cols-4 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="vehicleYear">Year *</Label>
+                        <Input
+                          id="vehicleYear"
+                          value={formData.vehicleYear}
+                          onChange={(e) => handleChange("vehicleYear", e.target.value)}
+                          placeholder="2024"
+                          required
+                          data-testid="input-vehicle-year"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="vehicleMake">Make *</Label>
+                        <Input
+                          id="vehicleMake"
+                          value={formData.vehicleMake}
+                          onChange={(e) => handleChange("vehicleMake", e.target.value)}
+                          placeholder="Honda"
+                          required
+                          data-testid="input-vehicle-make"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="vehicleModel">Model *</Label>
+                        <Input
+                          id="vehicleModel"
+                          value={formData.vehicleModel}
+                          onChange={(e) => handleChange("vehicleModel", e.target.value)}
+                          placeholder="Accord"
+                          required
+                          data-testid="input-vehicle-model"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="mileage">Mileage</Label>
+                        <Input
+                          id="mileage"
+                          value={formData.mileage}
+                          onChange={(e) => handleChange("mileage", e.target.value)}
+                          placeholder="45000"
+                          data-testid="input-mileage"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="bodyStyle">Body Style</Label>
+                        <Input
+                          id="bodyStyle"
+                          value={formData.bodyStyle}
+                          onChange={(e) => handleChange("bodyStyle", e.target.value)}
+                          placeholder="Sedan"
+                          data-testid="input-body-style"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="vehicleColor">Color</Label>
+                        <Input
+                          id="vehicleColor"
+                          value={formData.vehicleColor}
+                          onChange={(e) => handleChange("vehicleColor", e.target.value)}
+                          placeholder="White"
+                          data-testid="input-vehicle-color"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="nagsCarId">NAGS Car ID</Label>
+                        <Input
+                          id="nagsCarId"
+                          value={formData.nagsCarId}
+                          onChange={(e) => handleChange("nagsCarId", e.target.value.toUpperCase())}
+                          placeholder="HON24ACC"
+                          data-testid="input-nags-car-id"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
 
-              <TabsContent value="vehicle" className="mt-0 space-y-4">
-                <div className="grid gap-4">
-                  <div className="grid sm:grid-cols-3 gap-4">
+              {/* Install & Glass Tab */}
+              <TabsContent value="install" className="mt-0 space-y-6">
+                {/* Job Details */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Job Details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div className="grid gap-2">
+                        <Label>Job Type</Label>
+                        <Select
+                          value={formData.jobType}
+                          onValueChange={(value) => handleChange("jobType", value)}
+                        >
+                          <SelectTrigger data-testid="select-job-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {jobTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {jobTypeLabels[type]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Job Stage</Label>
+                        <Select
+                          value={formData.pipelineStage}
+                          onValueChange={(value) => handleChange("pipelineStage", value)}
+                        >
+                          <SelectTrigger data-testid="select-pipeline-stage">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {pipelineStages.map((stage) => (
+                              <SelectItem key={stage} value={stage}>
+                                {stageLabels[stage]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Repair Location</Label>
+                        <Select
+                          value={formData.repairLocation}
+                          onValueChange={(value) => handleChange("repairLocation", value)}
+                        >
+                          <SelectTrigger data-testid="select-repair-location">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {repairLocations.map((loc) => (
+                              <SelectItem key={loc} value={loc}>
+                                {locationLabels[loc]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Scheduling */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Scheduling</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid sm:grid-cols-4 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="installer">Installer</Label>
+                        <Input
+                          id="installer"
+                          value={formData.installer}
+                          onChange={(e) => handleChange("installer", e.target.value)}
+                          placeholder="Technician name"
+                          data-testid="input-installer"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="installDate">Install Date</Label>
+                        <Input
+                          id="installDate"
+                          type="date"
+                          value={formData.installDate}
+                          onChange={(e) => handleChange("installDate", e.target.value)}
+                          data-testid="input-install-date"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="installTime">Install Time</Label>
+                        <Input
+                          id="installTime"
+                          type="time"
+                          value={formData.installTime}
+                          onChange={(e) => handleChange("installTime", e.target.value)}
+                          data-testid="input-install-time"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Duration</Label>
+                        <Select
+                          value={formData.jobDuration}
+                          onValueChange={(value) => handleChange("jobDuration", value)}
+                        >
+                          <SelectTrigger data-testid="select-job-duration">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {durationOptions.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Glass Parts */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Glass & Parts</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="glassPartNumber">Part Number</Label>
+                        <Input
+                          id="glassPartNumber"
+                          value={formData.glassPartNumber}
+                          onChange={(e) => handleChange("glassPartNumber", e.target.value.toUpperCase())}
+                          placeholder="DW02002GTY"
+                          data-testid="input-glass-part-number"
+                        />
+                      </div>
+                      <div className="flex items-end gap-4">
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            id="isAftermarket"
+                            checked={formData.isAftermarket}
+                            onCheckedChange={(checked) => handleChange("isAftermarket", checked)}
+                            data-testid="switch-is-aftermarket"
+                          />
+                          <Label htmlFor="isAftermarket">
+                            {formData.isAftermarket ? "Aftermarket" : "OEM/Dealer"}
+                          </Label>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="nagsListPrice">NAGS List Price ($)</Label>
+                        <Input
+                          id="nagsListPrice"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.nagsListPrice}
+                          onChange={(e) => handleChange("nagsListPrice", parseFloat(e.target.value) || 0)}
+                          data-testid="input-nags-list-price"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="laborHours">Labor Hours</Label>
+                        <Input
+                          id="laborHours"
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={formData.laborHours}
+                          onChange={(e) => handleChange("laborHours", parseFloat(e.target.value) || 0)}
+                          data-testid="input-labor-hours"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="laborRate">Labor Rate ($/hr)</Label>
+                        <Input
+                          id="laborRate"
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={formData.laborRate}
+                          onChange={(e) => handleChange("laborRate", parseFloat(e.target.value) || 0)}
+                          data-testid="input-labor-rate"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label>Calibration Type</Label>
+                        <Select
+                          value={formData.calibrationType}
+                          onValueChange={(value) => handleChange("calibrationType", value)}
+                        >
+                          <SelectTrigger data-testid="select-calibration-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {calibrationTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {calibrationLabels[type]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="calibrationPrice">Calibration Price ($)</Label>
+                        <Input
+                          id="calibrationPrice"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.calibrationPrice}
+                          onChange={(e) => handleChange("calibrationPrice", parseFloat(e.target.value) || 0)}
+                          data-testid="input-calibration-price"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="distributor">Distributor</Label>
+                        <Input
+                          id="distributor"
+                          value={formData.distributor}
+                          onChange={(e) => handleChange("distributor", e.target.value)}
+                          placeholder="Pilkington"
+                          data-testid="input-distributor"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="glassOrderedDate">Glass Ordered</Label>
+                        <Input
+                          id="glassOrderedDate"
+                          type="date"
+                          value={formData.glassOrderedDate}
+                          onChange={(e) => handleChange("glassOrderedDate", e.target.value)}
+                          data-testid="input-glass-ordered-date"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="glassArrivalDate">Glass Arrival</Label>
+                        <Input
+                          id="glassArrivalDate"
+                          type="date"
+                          value={formData.glassArrivalDate}
+                          onChange={(e) => handleChange("glassArrivalDate", e.target.value)}
+                          data-testid="input-glass-arrival-date"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="urethaneKit">Urethane Kit</Label>
+                        <Input
+                          id="urethaneKit"
+                          value={formData.urethaneKit}
+                          onChange={(e) => handleChange("urethaneKit", e.target.value)}
+                          placeholder="Standard / Premium"
+                          data-testid="input-urethane-kit"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="urethaneKitPrice">Urethane Kit Price ($)</Label>
+                        <Input
+                          id="urethaneKitPrice"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.urethaneKitPrice}
+                          onChange={(e) => handleChange("urethaneKitPrice", parseFloat(e.target.value) || 0)}
+                          data-testid="input-urethane-kit-price"
+                        />
+                      </div>
+                    </div>
+
                     <div className="grid gap-2">
-                      <Label htmlFor="vehicleYear">Year *</Label>
-                      <Input
-                        id="vehicleYear"
-                        value={formData.vehicleYear}
-                        onChange={(e) => handleChange("vehicleYear", e.target.value)}
-                        placeholder="2024"
-                        required
-                        data-testid="input-vehicle-year"
+                      <Label htmlFor="installNotes">Notes</Label>
+                      <Textarea
+                        id="installNotes"
+                        value={formData.installNotes}
+                        onChange={(e) => handleChange("installNotes", e.target.value)}
+                        placeholder="Special instructions, access codes, etc."
+                        rows={2}
+                        data-testid="input-install-notes"
                       />
                     </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="vehicleMake">Make *</Label>
-                      <Input
-                        id="vehicleMake"
-                        value={formData.vehicleMake}
-                        onChange={(e) => handleChange("vehicleMake", e.target.value)}
-                        placeholder="Toyota"
-                        required
-                        data-testid="input-vehicle-make"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="vehicleModel">Model *</Label>
-                      <Input
-                        id="vehicleModel"
-                        value={formData.vehicleModel}
-                        onChange={(e) => handleChange("vehicleModel", e.target.value)}
-                        placeholder="Camry"
-                        required
-                        data-testid="input-vehicle-model"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="vehicleVin">VIN</Label>
-                      <Input
-                        id="vehicleVin"
-                        value={formData.vehicleVin}
-                        onChange={(e) => handleChange("vehicleVin", e.target.value)}
-                        placeholder="1HGBH41JXMN109186"
-                        data-testid="input-vehicle-vin"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="vehicleColor">Color</Label>
-                      <Input
-                        id="vehicleColor"
-                        value={formData.vehicleColor}
-                        onChange={(e) => handleChange("vehicleColor", e.target.value)}
-                        placeholder="Silver"
-                        data-testid="input-vehicle-color"
-                      />
-                    </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
 
-              <TabsContent value="install" className="mt-0 space-y-4">
-                <div className="grid gap-4">
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="installDate">Install Date</Label>
-                      <Input
-                        id="installDate"
-                        type="date"
-                        value={formData.installDate}
-                        onChange={(e) => handleChange("installDate", e.target.value)}
-                        data-testid="input-install-date"
-                      />
+              {/* Insurance & Payments Tab */}
+              <TabsContent value="payments" className="mt-0 space-y-6">
+                {/* Insurance Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Insurance Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="insuranceCompany">Insurance Company</Label>
+                        <Input
+                          id="insuranceCompany"
+                          value={formData.insuranceCompany}
+                          onChange={(e) => handleChange("insuranceCompany", e.target.value)}
+                          placeholder="State Farm"
+                          data-testid="input-insurance-company"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="policyNumber">Policy Number</Label>
+                        <Input
+                          id="policyNumber"
+                          value={formData.policyNumber}
+                          onChange={(e) => handleChange("policyNumber", e.target.value)}
+                          placeholder="POL-123456"
+                          data-testid="input-policy-number"
+                        />
+                      </div>
                     </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="installTime">Install Time</Label>
-                      <Input
-                        id="installTime"
-                        type="time"
-                        value={formData.installTime}
-                        onChange={(e) => handleChange("installTime", e.target.value)}
-                        data-testid="input-install-time"
-                      />
+                    
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="claimNumber">Claim Number</Label>
+                        <Input
+                          id="claimNumber"
+                          value={formData.claimNumber}
+                          onChange={(e) => handleChange("claimNumber", e.target.value)}
+                          placeholder="CLM-2024-1234"
+                          data-testid="input-claim-number"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="dispatchNumber">Dispatch Number</Label>
+                        <Input
+                          id="dispatchNumber"
+                          value={formData.dispatchNumber}
+                          onChange={(e) => handleChange("dispatchNumber", e.target.value)}
+                          placeholder="DSP-5678"
+                          data-testid="input-dispatch-number"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="installLocation">Install Location</Label>
-                    <Input
-                      id="installLocation"
-                      value={formData.installLocation}
-                      onChange={(e) => handleChange("installLocation", e.target.value)}
-                      placeholder="Shop / Mobile / Customer Location"
-                      data-testid="input-install-location"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="installNotes">Notes</Label>
-                    <Textarea
-                      id="installNotes"
-                      value={formData.installNotes}
-                      onChange={(e) => handleChange("installNotes", e.target.value)}
-                      placeholder="Special instructions, access codes, etc."
-                      rows={3}
-                      data-testid="input-install-notes"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="pipelineStage">Pipeline Stage</Label>
-                    <Select
-                      value={formData.pipelineStage}
-                      onValueChange={(value) => handleChange("pipelineStage", value)}
-                    >
-                      <SelectTrigger data-testid="select-pipeline-stage">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {pipelineStages.map((stage) => (
-                          <SelectItem key={stage} value={stage}>
-                            {stageLabels[stage]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </TabsContent>
+                    
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="dateOfLoss">Date of Loss</Label>
+                        <Input
+                          id="dateOfLoss"
+                          type="date"
+                          value={formData.dateOfLoss}
+                          onChange={(e) => handleChange("dateOfLoss", e.target.value)}
+                          data-testid="input-date-of-loss"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Cause of Loss</Label>
+                        <Select
+                          value={formData.causeOfLoss || ""}
+                          onValueChange={(value) => handleChange("causeOfLoss", value || undefined)}
+                        >
+                          <SelectTrigger data-testid="select-cause-of-loss">
+                            <SelectValue placeholder="Select cause" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {causesOfLoss.map((cause) => (
+                              <SelectItem key={cause} value={cause}>
+                                {causeLabels[cause]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-              <TabsContent value="glass" className="mt-0 space-y-4">
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="glassType">Glass Type *</Label>
-                    <Select
-                      value={formData.glassType}
-                      onValueChange={(value) => handleChange("glassType", value)}
-                    >
-                      <SelectTrigger data-testid="select-glass-type">
-                        <SelectValue placeholder="Select glass type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Windshield">Windshield</SelectItem>
-                        <SelectItem value="Front Door Left">Front Door Left</SelectItem>
-                        <SelectItem value="Front Door Right">Front Door Right</SelectItem>
-                        <SelectItem value="Rear Door Left">Rear Door Left</SelectItem>
-                        <SelectItem value="Rear Door Right">Rear Door Right</SelectItem>
-                        <SelectItem value="Back Glass">Back Glass</SelectItem>
-                        <SelectItem value="Quarter Glass">Quarter Glass</SelectItem>
-                        <SelectItem value="Sunroof">Sunroof</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="glassPartNumber">Part Number</Label>
-                      <Input
-                        id="glassPartNumber"
-                        value={formData.glassPartNumber}
-                        onChange={(e) => handleChange("glassPartNumber", e.target.value)}
-                        placeholder="FW04512GTY"
-                        data-testid="input-glass-part-number"
-                      />
+                {/* Payment Summary */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Payment Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Glass Price:</span>
+                          <span>${(formData.glassPrice || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Labor ({formData.laborHours}hrs @ ${formData.laborRate}/hr):</span>
+                          <span>${(formData.laborTotal || 0).toFixed(2)}</span>
+                        </div>
+                        {(formData.calibrationPrice || 0) > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Calibration:</span>
+                            <span>${(formData.calibrationPrice || 0).toFixed(2)}</span>
+                          </div>
+                        )}
+                        {(formData.urethaneKitPrice || 0) > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Urethane Kit:</span>
+                            <span>${(formData.urethaneKitPrice || 0).toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="border-t pt-2 flex justify-between font-medium">
+                          <span>Total Due:</span>
+                          <span className="text-lg">${(formData.totalDue || 0).toFixed(2)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="deductible">Deductible ($)</Label>
+                          <Input
+                            id="deductible"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.deductible}
+                            onChange={(e) => handleChange("deductible", parseFloat(e.target.value) || 0)}
+                            data-testid="input-deductible"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="rebate">Rebate ($)</Label>
+                          <Input
+                            id="rebate"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.rebate}
+                            onChange={(e) => handleChange("rebate", parseFloat(e.target.value) || 0)}
+                            data-testid="input-rebate"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="glassSupplier">Supplier</Label>
-                      <Input
-                        id="glassSupplier"
-                        value={formData.glassSupplier}
-                        onChange={(e) => handleChange("glassSupplier", e.target.value)}
-                        placeholder="Pilkington"
-                        data-testid="input-glass-supplier"
-                      />
+                    
+                    <div className="grid sm:grid-cols-3 gap-4 pt-4 border-t">
+                      <div className="text-center p-3 rounded-lg bg-muted/50">
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          ${(formData.amountPaid || 0).toFixed(2)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Amount Paid</div>
+                      </div>
+                      <div className="text-center p-3 rounded-lg bg-muted/50">
+                        <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                          ${(formData.balanceDue || 0).toFixed(2)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Balance Due</div>
+                      </div>
+                      <div className="text-center p-3 rounded-lg bg-muted/50">
+                        <Badge
+                          className={
+                            formData.paymentStatus === "paid"
+                              ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                              : formData.paymentStatus === "partial"
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                              : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                          }
+                        >
+                          {formData.paymentStatus === "paid"
+                            ? "Paid"
+                            : formData.paymentStatus === "partial"
+                            ? "Partial"
+                            : "Pending"}
+                        </Badge>
+                        <div className="text-xs text-muted-foreground mt-1">Status</div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="totalDue">Total Due ($) *</Label>
-                      <Input
-                        id="totalDue"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={formData.totalDue}
-                        onChange={(e) => handleChange("totalDue", parseFloat(e.target.value) || 0)}
-                        required
-                        data-testid="input-total-due"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="deductible">Deductible ($)</Label>
-                      <Input
-                        id="deductible"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={formData.deductible}
-                        onChange={(e) => handleChange("deductible", parseFloat(e.target.value) || 0)}
-                        data-testid="input-deductible"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="paymentStatus">Payment Status</Label>
-                    <Select
-                      value={formData.paymentStatus}
-                      onValueChange={(value) => handleChange("paymentStatus", value)}
-                    >
-                      <SelectTrigger data-testid="select-payment-status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {paymentStatuses.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {paymentLabels[status]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
+
+                {/* Payment Entry & History (only for existing jobs) */}
+                {!isNew && job && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Payment History</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Add Payment Form */}
+                      <div className="flex gap-3 items-end flex-wrap">
+                        <div className="grid gap-2">
+                          <Label>Source</Label>
+                          <Select
+                            value={newPayment.source}
+                            onValueChange={(value: typeof newPayment.source) =>
+                              setNewPayment((p) => ({ ...p, source: value }))
+                            }
+                          >
+                            <SelectTrigger className="w-[140px]" data-testid="select-payment-source">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {paymentSources.map((src) => (
+                                <SelectItem key={src} value={src}>
+                                  {sourceLabels[src]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>Amount ($)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={newPayment.amount || ""}
+                            onChange={(e) =>
+                              setNewPayment((p) => ({
+                                ...p,
+                                amount: parseFloat(e.target.value) || 0,
+                              }))
+                            }
+                            className="w-[120px]"
+                            data-testid="input-payment-amount"
+                          />
+                        </div>
+                        <div className="grid gap-2 flex-1 min-w-[150px]">
+                          <Label>Notes</Label>
+                          <Input
+                            value={newPayment.notes}
+                            onChange={(e) =>
+                              setNewPayment((p) => ({ ...p, notes: e.target.value }))
+                            }
+                            placeholder="Optional notes"
+                            data-testid="input-payment-notes"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={handleAddPayment}
+                          disabled={newPayment.amount <= 0}
+                          data-testid="button-add-payment"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add Payment
+                        </Button>
+                      </div>
+
+                      {/* Payment History Table */}
+                      {formData.paymentHistory && formData.paymentHistory.length > 0 ? (
+                        <div className="border rounded-lg overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Source</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                                <TableHead>Notes</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {formData.paymentHistory.map((payment, idx) => (
+                                <TableRow key={payment.id || idx}>
+                                  <TableCell>{payment.date}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline">{sourceLabels[payment.source]}</Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right font-medium">
+                                    ${payment.amount.toFixed(2)}
+                                  </TableCell>
+                                  <TableCell className="text-muted-foreground">
+                                    {payment.notes || "-"}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-muted-foreground text-sm">
+                          No payments recorded yet
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
             </div>
           </Tabs>
 
-          <div className="flex items-center justify-between gap-3 pt-4 border-t mt-4 flex-shrink-0">
-            <div>
+          {/* Action Buttons */}
+          <div className="flex items-center justify-between gap-3 pt-4 border-t mt-4 flex-shrink-0 flex-wrap">
+            <div className="flex gap-2">
               {!isNew && job && onDelete && (
                 <Button
                   type="button"
@@ -459,7 +1164,19 @@ export function JobDetailModal({
                 </Button>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {!isNew && (
+                <>
+                  <Button type="button" variant="outline" data-testid="button-send-quote">
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Quote
+                  </Button>
+                  <Button type="button" variant="outline" data-testid="button-download-receipt">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Receipt
+                  </Button>
+                </>
+              )}
               <Button
                 type="button"
                 variant="outline"

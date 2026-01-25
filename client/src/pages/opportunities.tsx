@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { KanbanBoard } from "@/components/kanban-board";
 import { JobDetailModal } from "@/components/job-detail-modal";
-import { type Job, type InsertJob, type PipelineStage } from "@shared/schema";
+import { type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -86,6 +86,34 @@ export default function Opportunities() {
     },
   });
 
+  const addPaymentMutation = useMutation({
+    mutationFn: async ({
+      id,
+      payment,
+    }: {
+      id: string;
+      payment: PaymentHistoryEntry;
+    }) => {
+      const response = await apiRequest("POST", `/api/jobs/${id}/payments`, payment);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      setSelectedJob(data);
+      toast({
+        title: "Payment added",
+        description: "Payment has been recorded successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add payment. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteJobMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/jobs/${id}`);
@@ -135,6 +163,10 @@ export default function Opportunities() {
     deleteJobMutation.mutate(jobId);
   };
 
+  const handleAddPayment = (jobId: string, payment: PaymentHistoryEntry) => {
+    addPaymentMutation.mutate({ id: jobId, payment });
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
@@ -147,8 +179,8 @@ export default function Opportunities() {
         </div>
         <div className="flex-1 p-4">
           <div className="flex gap-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="w-[280px] space-y-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="w-[260px] space-y-3">
                 <Skeleton className="h-10 w-full rounded-lg" />
                 <Skeleton className="h-24 w-full rounded-lg" />
                 <Skeleton className="h-24 w-full rounded-lg" />
@@ -175,6 +207,7 @@ export default function Opportunities() {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveJob}
         onDelete={handleDeleteJob}
+        onAddPayment={handleAddPayment}
         isNew={isNewJob}
       />
     </>

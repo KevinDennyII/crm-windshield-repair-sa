@@ -1,14 +1,11 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
+import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema } from "@shared/schema";
 import { z } from "zod";
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
-  
+export async function registerRoutes(server: Server, app: Express): Promise<void> {
+  // Get all jobs
   app.get("/api/jobs", async (req, res) => {
     try {
       const jobs = await storage.getAllJobs();
@@ -18,6 +15,7 @@ export async function registerRoutes(
     }
   });
 
+  // Get single job
   app.get("/api/jobs/:id", async (req, res) => {
     try {
       const job = await storage.getJob(req.params.id);
@@ -30,42 +28,57 @@ export async function registerRoutes(
     }
   });
 
+  // Create new job
   app.post("/api/jobs", async (req, res) => {
     try {
-      const validatedData = insertJobSchema.parse(req.body);
-      const job = await storage.createJob(validatedData);
+      const parsed = insertJobSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid job data", 
+          errors: parsed.error.errors 
+        });
+      }
+      const job = await storage.createJob(parsed.data);
       res.status(201).json(job);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Validation error", errors: error.errors });
-      }
       res.status(500).json({ message: "Failed to create job" });
     }
   });
 
+  // Update job
   app.patch("/api/jobs/:id", async (req, res) => {
     try {
-      const validatedData = insertJobSchema.partial().parse(req.body);
-      const job = await storage.updateJob(req.params.id, validatedData);
+      const parsed = insertJobSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid job data", 
+          errors: parsed.error.errors 
+        });
+      }
+      const job = await storage.updateJob(req.params.id, parsed.data);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
       res.json(job);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Validation error", errors: error.errors });
-      }
       res.status(500).json({ message: "Failed to update job" });
     }
   });
 
+  // Update job pipeline stage
   app.patch("/api/jobs/:id/stage", async (req, res) => {
     try {
-      const { pipelineStage } = req.body;
-      if (!pipelineStages.includes(pipelineStage)) {
-        return res.status(400).json({ message: "Invalid pipeline stage" });
+      const stageSchema = z.object({
+        pipelineStage: z.enum(pipelineStages),
+      });
+      const parsed = stageSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid stage", 
+          errors: parsed.error.errors 
+        });
       }
-      const job = await storage.updateJobStage(req.params.id, pipelineStage);
+      const job = await storage.updateJobStage(req.params.id, parsed.data.pipelineStage);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
@@ -75,10 +88,31 @@ export async function registerRoutes(
     }
   });
 
+  // Add payment to job
+  app.post("/api/jobs/:id/payments", async (req, res) => {
+    try {
+      const parsed = paymentHistorySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid payment data", 
+          errors: parsed.error.errors 
+        });
+      }
+      const job = await storage.addPaymentToJob(req.params.id, parsed.data);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      res.json(job);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to add payment" });
+    }
+  });
+
+  // Delete job
   app.delete("/api/jobs/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteJob(req.params.id);
-      if (!deleted) {
+      const success = await storage.deleteJob(req.params.id);
+      if (!success) {
         return res.status(404).json({ message: "Job not found" });
       }
       res.status(204).send();
@@ -86,6 +120,4 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to delete job" });
     }
   });
-
-  return httpServer;
 }

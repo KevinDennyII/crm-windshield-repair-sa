@@ -18,6 +18,7 @@ const stageLabels: Record<string, string> = {
   glass_ordered: "Glass Ordered",
   glass_arrived: "Glass Arrived",
   scheduled: "Scheduled",
+  in_progress: "In Progress",
   paid_completed: "Paid/Completed",
 };
 
@@ -32,8 +33,8 @@ export default function Payments() {
   const pendingJobs = jobs.filter((job) => job.paymentStatus === "pending");
   const partialJobs = jobs.filter((job) => job.paymentStatus === "partial");
 
-  const paidAmount = paidJobs.reduce((sum, job) => sum + job.totalDue, 0);
-  const pendingAmount = pendingJobs.reduce((sum, job) => sum + job.totalDue, 0);
+  const paidAmount = paidJobs.reduce((sum, job) => sum + job.amountPaid, 0);
+  const pendingAmount = jobs.reduce((sum, job) => sum + job.balanceDue, 0);
 
   const getPaymentBadge = (status: string) => {
     switch (status) {
@@ -56,6 +57,13 @@ export default function Payments() {
           </Badge>
         );
     }
+  };
+
+  const getCustomerName = (job: Job) => {
+    if (job.isBusiness && job.businessName) {
+      return job.businessName;
+    }
+    return `${job.firstName} ${job.lastName}`;
   };
 
   if (isLoading) {
@@ -136,7 +144,7 @@ export default function Payments() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
+            <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
             <Clock className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
@@ -174,11 +182,14 @@ export default function Payments() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Job #</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead className="hidden md:table-cell">Vehicle</TableHead>
                   <TableHead className="hidden sm:table-cell">Stage</TableHead>
                   <TableHead className="text-right">Total Due</TableHead>
                   <TableHead className="text-right hidden sm:table-cell">Deductible</TableHead>
+                  <TableHead className="text-right hidden lg:table-cell">Paid</TableHead>
+                  <TableHead className="text-right hidden lg:table-cell">Balance</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -186,7 +197,7 @@ export default function Payments() {
                 {jobs.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={9}
                       className="text-center py-8 text-muted-foreground"
                     >
                       No jobs found. Create your first job in Opportunities.
@@ -195,9 +206,12 @@ export default function Payments() {
                 ) : (
                   jobs.map((job) => (
                     <TableRow key={job.id} data-testid={`payment-row-${job.id}`}>
+                      <TableCell className="font-mono text-xs">
+                        #{job.jobNumber}
+                      </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{job.customerName}</div>
+                          <div className="font-medium">{getCustomerName(job)}</div>
                           <div className="text-sm text-muted-foreground md:hidden">
                             {job.vehicleYear} {job.vehicleMake} {job.vehicleModel}
                           </div>
@@ -214,6 +228,18 @@ export default function Payments() {
                       </TableCell>
                       <TableCell className="text-right hidden sm:table-cell">
                         ${job.deductible.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right hidden lg:table-cell text-green-600 dark:text-green-400">
+                        ${job.amountPaid.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right hidden lg:table-cell">
+                        {job.balanceDue > 0 ? (
+                          <span className="text-amber-600 dark:text-amber-400">
+                            ${job.balanceDue.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-green-600 dark:text-green-400">$0.00</span>
+                        )}
                       </TableCell>
                       <TableCell>{getPaymentBadge(job.paymentStatus)}</TableCell>
                     </TableRow>
