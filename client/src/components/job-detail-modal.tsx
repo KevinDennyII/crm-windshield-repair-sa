@@ -109,6 +109,7 @@ const calibrationLabels: Record<string, string> = {
   static: "Static Calibration",
   dynamic: "Dynamic Calibration",
   dual: "Dual Calibration",
+  declined: "Declined",
 };
 
 const causeLabels: Record<string, string> = {
@@ -728,27 +729,6 @@ export function JobDetailModal({
                       />
                     </div>
 
-                    {/* Calibration Declined - only show for windshield replacement jobs */}
-                    {formData.vehicles.some(v => v.parts.some(p => p.jobType === 'windshield_replacement')) && (
-                      <div className="border-t pt-4 mt-4">
-                        <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
-                          <Switch
-                            id="calibrationDeclined"
-                            checked={formData.calibrationDeclined}
-                            onCheckedChange={(checked) => handleChange("calibrationDeclined", checked)}
-                            data-testid="switch-calibration-declined"
-                          />
-                          <div>
-                            <Label htmlFor="calibrationDeclined" className="text-sm font-medium cursor-pointer">
-                              Customer Declined Calibration Service
-                            </Label>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Check this if the customer declined ADAS calibration after windshield replacement
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

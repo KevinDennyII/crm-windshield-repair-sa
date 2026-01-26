@@ -48,7 +48,7 @@ export type JobType = typeof jobTypes[number];
 export const repairLocations = ["in_shop", "mobile", "customer_location"] as const;
 export type RepairLocation = typeof repairLocations[number];
 
-export const calibrationTypes = ["none", "static", "dynamic", "dual"] as const;
+export const calibrationTypes = ["none", "static", "dynamic", "dual", "declined"] as const;
 export type CalibrationType = typeof calibrationTypes[number];
 
 export const causesOfLoss = [

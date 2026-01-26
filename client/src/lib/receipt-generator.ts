@@ -427,8 +427,11 @@ export async function generateReceiptPreview(job: Job): Promise<ReceiptResult> {
   
   yPos += 10;
   
-  // Add calibration declined disclaimer if applicable
-  if (job.calibrationDeclined && receiptType === 'windshield_replacement') {
+  // Add calibration declined disclaimer if any windshield part has calibration declined
+  const hasDeclinedCalibration = job.vehicles.some(v => 
+    v.parts.some(p => p.jobType === 'windshield_replacement' && p.calibrationType === 'declined')
+  );
+  if (hasDeclinedCalibration && receiptType === 'windshield_replacement') {
     if (yPos > 180) {
       doc.addPage();
       yPos = 20;
