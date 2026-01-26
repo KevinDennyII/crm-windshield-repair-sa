@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import type { Job, Vehicle, Part, JobType, CustomerType } from '@shared/schema';
-import logoImage from '@assets/WhatsApp_Image_2026-01-25_at_7.43.18_PM_1769391868741.jpeg';
+import logoImage from '@assets/logo-rectangle_1769393261807.jpeg';
 
 export type ReceiptType = 'dealer' | 'fleet' | 'rock_chip_repair' | 'windshield_replacement' | 'other_glass_replacement';
 
@@ -93,8 +93,8 @@ async function loadImageAsBase64(url: string): Promise<string> {
 async function addCompanyHeader(doc: jsPDF, yPos: number): Promise<number> {
   try {
     const logoData = await loadImageAsBase64(logoImage);
-    doc.addImage(logoData, 'JPEG', 20, yPos - 5, 60, 20);
-    yPos += 18;
+    doc.addImage(logoData, 'JPEG', 15, yPos - 5, 75, 22);
+    yPos += 20;
   } catch (e) {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
