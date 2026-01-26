@@ -34,7 +34,7 @@ Key server files:
 - `server/index.ts` - Express app setup and middleware configuration
 - `server/routes.ts` - API route definitions for job CRUD operations
 - `server/storage.ts` - Data access layer with in-memory storage (interface ready for database)
-- `server/gmail.ts` - Gmail API integration for sending emails to customers
+- `server/gmail.ts` - Gmail API integration for sending emails, fetching inbox, and replying to threads
 - `server/vite.ts` - Development server with Vite HMR integration
 - `server/static.ts` - Production static file serving
 
@@ -101,6 +101,9 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - **Gmail API**: Connected via Replit's Google Mail connector (windshieldrepairsa@gmail.com)
 - **googleapis**: Google API client library for sending emails
 - Enables direct customer communication from job cards and job detail modal
+- **Conversations page**: Unified inbox showing all email threads with reply functionality
+- Automatically links emails to jobs when sender matches customer email
+- SMS (Twilio) and Social (Facebook/Instagram) tabs are placeholders pending integration setup
 
 ### Additional Services (bundled but not actively used)
 - **Stripe**: Payment processing (included in build allowlist)
