@@ -215,6 +215,7 @@ export function JobDetailModal({
     salesTaxPercent: 8.25,
     laborPrice: 0,
     calibrationPrice: 0,
+    mobileFee: 0,
   });
 
   // Calculate Parts Subtotal (Part Price + Markup + Accessories + Urethane) * (1 + Sales Tax %)
@@ -222,8 +223,8 @@ export function JobDetailModal({
     (calculator.partPrice + calculator.markup + calculator.accessoriesPrice + calculator.urethanePrice) * 
     (1 + calculator.salesTaxPercent / 100);
 
-  // Calculate Grand Total: Parts Subtotal + Labor + Calibration + 3.5% processing fee, rounded up
-  const subtotalBeforeFee = partsSubtotal + calculator.laborPrice + calculator.calibrationPrice;
+  // Calculate Grand Total: Parts Subtotal + Labor + Calibration + Mobile Fee + 3.5% processing fee, rounded up
+  const subtotalBeforeFee = partsSubtotal + calculator.laborPrice + calculator.calibrationPrice + calculator.mobileFee;
   const processingFee = subtotalBeforeFee * 0.035;
   const grandTotalRaw = subtotalBeforeFee + processingFee;
   const grandTotal = Math.ceil(grandTotalRaw);
@@ -261,6 +262,7 @@ export function JobDetailModal({
         salesTaxPercent: job.taxRate || 8.25,
         laborPrice: job.laborTotal || 0,
         calibrationPrice: job.calibrationPrice || 0,
+        mobileFee: 0,
       });
     } else {
       setFormData(getDefaultFormData());
@@ -272,6 +274,7 @@ export function JobDetailModal({
         salesTaxPercent: 8.25,
         laborPrice: 0,
         calibrationPrice: 0,
+        mobileFee: 0,
       });
     }
     setActiveTab("customer");
@@ -968,6 +971,21 @@ export function JobDetailModal({
                         data-testid="input-calc-calibration"
                       />
                       <Label className="text-muted-foreground">+ Calibration Price</Label>
+                    </div>
+
+                    {/* Mobile Fee */}
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calculator.mobileFee}
+                        onChange={(e) => handleCalculatorChange("mobileFee", parseFloat(e.target.value) || 0)}
+                        className="max-w-[200px]"
+                        placeholder="Mobile fee in $"
+                        data-testid="input-calc-mobile-fee"
+                      />
+                      <Label className="text-muted-foreground">+ Mobile Fee</Label>
                     </div>
 
                     <div className="border-t my-2" />
