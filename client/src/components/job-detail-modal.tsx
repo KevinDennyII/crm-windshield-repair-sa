@@ -47,8 +47,11 @@ import {
   causesOfLoss,
   paymentSources,
   customerTypes,
+  timeFrames,
+  timeFrameDetails,
   type PaymentHistoryEntry,
   type CustomerType,
+  type TimeFrame,
 } from "@shared/schema";
 import {
   User,
@@ -229,7 +232,9 @@ const getDefaultFormData = (): InsertJob => ({
   repairLocation: "in_shop",
   installer: "",
   installDate: "",
+  timeFrame: undefined as TimeFrame | undefined,
   installTime: "",
+  installEndTime: "",
   jobDuration: "2",
   claimNumber: "",
   dispatchNumber: "",
@@ -734,15 +739,58 @@ export function JobDetailModal({
                         />
                       </div>
                       <div className="grid gap-2">
-                        <Label htmlFor="installTime">Install Time</Label>
-                        <Input
-                          id="installTime"
-                          type="time"
-                          value={formData.installTime}
-                          onChange={(e) => handleChange("installTime", e.target.value)}
-                          data-testid="input-install-time"
-                        />
+                        <Label htmlFor="timeFrame">Time Frame</Label>
+                        <Select
+                          value={formData.timeFrame || ""}
+                          onValueChange={(value: TimeFrame) => {
+                            handleChange("timeFrame", value);
+                            // Auto-fill start/end times from preset, or clear for custom
+                            if (value === "custom") {
+                              // Keep existing times or clear for custom entry
+                              if (!formData.installTime) handleChange("installTime", "");
+                              if (!formData.installEndTime) handleChange("installEndTime", "");
+                            } else if (timeFrameDetails[value]) {
+                              handleChange("installTime", timeFrameDetails[value].startTime);
+                              handleChange("installEndTime", timeFrameDetails[value].endTime);
+                            }
+                          }}
+                        >
+                          <SelectTrigger data-testid="select-time-frame">
+                            <SelectValue placeholder="Select time frame" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {timeFrames.map((frame) => (
+                              <SelectItem key={frame} value={frame}>
+                                {timeFrameDetails[frame]?.label || frame}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
+                      {formData.timeFrame === "custom" && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="installTime">Start Time</Label>
+                            <Input
+                              id="installTime"
+                              type="time"
+                              value={formData.installTime}
+                              onChange={(e) => handleChange("installTime", e.target.value)}
+                              data-testid="input-install-time"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="installEndTime">End Time</Label>
+                            <Input
+                              id="installEndTime"
+                              type="time"
+                              value={formData.installEndTime}
+                              onChange={(e) => handleChange("installEndTime", e.target.value)}
+                              data-testid="input-install-end-time"
+                            />
+                          </div>
+                        </div>
+                      )}
                       <div className="grid gap-2">
                         <Label>Duration</Label>
                         <Select

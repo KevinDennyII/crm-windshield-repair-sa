@@ -51,6 +51,26 @@ export type RepairLocation = typeof repairLocations[number];
 export const calibrationTypes = ["none", "static", "dynamic", "dual", "declined"] as const;
 export type CalibrationType = typeof calibrationTypes[number];
 
+export const timeFrames = [
+  "9a-12p",
+  "12p-3p",
+  "3p-6p",
+  "10a-2p",
+  "2p-6p",
+  "custom"
+] as const;
+export type TimeFrame = typeof timeFrames[number];
+
+// Map time frames to actual start/end times
+export const timeFrameDetails: Record<string, { startTime: string; endTime: string; label: string }> = {
+  "9a-12p": { startTime: "09:00", endTime: "12:00", label: "9am - 12pm" },
+  "12p-3p": { startTime: "12:00", endTime: "15:00", label: "12pm - 3pm" },
+  "3p-6p": { startTime: "15:00", endTime: "18:00", label: "3pm - 6pm" },
+  "10a-2p": { startTime: "10:00", endTime: "14:00", label: "10am - 2pm" },
+  "2p-6p": { startTime: "14:00", endTime: "18:00", label: "2pm - 6pm" },
+  "custom": { startTime: "", endTime: "", label: "Custom Time..." },
+};
+
 export const causesOfLoss = [
   "rock_chip",
   "crack",
@@ -149,6 +169,7 @@ export const jobSchema = z.object({
   // Scheduling
   installer: z.string().optional(),
   installDate: z.string().optional(),
+  timeFrame: z.enum(timeFrames).optional(),
   installTime: z.string().optional(),
   installEndTime: z.string().optional(),
   jobDuration: z.string().optional(),
