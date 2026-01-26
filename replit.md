@@ -103,7 +103,16 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - Enables direct customer communication from job cards and job detail modal
 - **Conversations page**: Unified inbox showing all email threads with reply functionality
 - Automatically links emails to jobs when sender matches customer email
-- SMS (Twilio) and Social (Facebook/Instagram) tabs are placeholders pending integration setup
+
+### SMS Integration
+- **Twilio**: Connected for SMS messaging (requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER secrets)
+- **server/twilio.ts**: Twilio API integration for sending SMS and fetching conversation history
+- SMS tab in Conversations page shows all text message threads grouped by phone number
+- Automatically links SMS conversations to jobs when phone number matches customer
+- API endpoints: GET /api/sms/status, GET /api/sms/conversations, GET /api/sms/messages/:phoneNumber, POST /api/sms/send, POST /api/jobs/:id/sms
+
+### Social Integration (Pending)
+- Facebook/Instagram tabs are placeholders pending Meta Business API setup
 
 ### Additional Services (bundled but not actively used)
 - **Stripe**: Payment processing (included in build allowlist)

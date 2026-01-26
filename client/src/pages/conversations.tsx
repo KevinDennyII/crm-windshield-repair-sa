@@ -26,6 +26,27 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { type Job } from "@shared/schema";
 
+interface SmsStatus {
+  configured: boolean;
+}
+
+interface SmsMessage {
+  sid: string;
+  to: string;
+  from: string;
+  body: string;
+  status: string;
+  direction: "inbound" | "outbound-api" | "outbound-call" | "outbound-reply";
+  dateSent: string | null;
+  dateCreated: string;
+}
+
+interface SmsConversation {
+  phoneNumber: string;
+  messages: SmsMessage[];
+  lastMessage: SmsMessage;
+}
+
 interface EmailThread {
   id: string;
   threadId: string;
@@ -64,11 +85,22 @@ export default function Conversations() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string>("all");
   const [selectedConversation, setSelectedConversation] = useState<EmailThread | null>(null);
+  const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsConversation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [replyText, setReplyText] = useState("");
+  const [smsText, setSmsText] = useState("");
 
   const { data: emailThreads, isLoading: loadingEmails, refetch: refetchEmails } = useQuery<EmailThread[]>({
     queryKey: ["/api/emails/inbox"],
+  });
+
+  const { data: smsStatus } = useQuery<SmsStatus>({
+    queryKey: ["/api/sms/status"],
+  });
+
+  const { data: smsConversations, isLoading: loadingSms, refetch: refetchSms } = useQuery<SmsConversation[]>({
+    queryKey: ["/api/sms/conversations"],
+    enabled: smsStatus?.configured === true,
   });
 
   const { data: jobs } = useQuery<Job[]>({
@@ -86,6 +118,20 @@ export default function Conversations() {
     },
     onError: () => {
       toast({ title: "Failed to send reply", variant: "destructive" });
+    },
+  });
+
+  const sendSmsMutation = useMutation({
+    mutationFn: async ({ to, body }: { to: string; body: string }) => {
+      return apiRequest("POST", "/api/sms/send", { to, body });
+    },
+    onSuccess: () => {
+      toast({ title: "SMS sent successfully" });
+      setSmsText("");
+      refetchSms();
+    },
+    onError: () => {
+      toast({ title: "Failed to send SMS", variant: "destructive" });
     },
   });
 
@@ -123,6 +169,48 @@ export default function Conversations() {
     });
   };
 
+  const handleSendSms = () => {
+    if (!selectedSmsConversation || !smsText.trim()) return;
+    
+    sendSmsMutation.mutate({
+      to: selectedSmsConversation.phoneNumber,
+      body: smsText,
+    });
+  };
+
+  const findMatchingJobByPhone = (phone: string): Job | undefined => {
+    if (!jobs) return undefined;
+    const cleanPhone = phone.replace(/\D/g, "");
+    return jobs.find(job => {
+      const jobPhone = job.phone?.replace(/\D/g, "");
+      return jobPhone && (jobPhone === cleanPhone || jobPhone.endsWith(cleanPhone.slice(-10)) || cleanPhone.endsWith(jobPhone.slice(-10)));
+    });
+  };
+
+  const formatPhoneNumber = (phone: string): string => {
+    const cleaned = phone.replace(/\D/g, "");
+    if (cleaned.length === 11 && cleaned.startsWith("1")) {
+      return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+    }
+    if (cleaned.length === 10) {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+    }
+    return phone;
+  };
+
+  const filteredSmsConversations = smsConversations?.filter(conv => {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchingJob = findMatchingJobByPhone(conv.phoneNumber);
+      return (
+        conv.phoneNumber.includes(query) ||
+        conv.lastMessage.body.toLowerCase().includes(query) ||
+        `${matchingJob?.firstName} ${matchingJob?.lastName}`.toLowerCase().includes(query)
+      );
+    }
+    return true;
+  }) || [];
+
   const filteredThreads = emailThreads?.filter(thread => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -147,11 +235,14 @@ export default function Conversations() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => refetchEmails()}
-          disabled={loadingEmails}
+          onClick={() => {
+            refetchEmails();
+            if (smsStatus?.configured) refetchSms();
+          }}
+          disabled={loadingEmails || loadingSms}
           data-testid="button-refresh-conversations"
         >
-          <RefreshCw className={cn("h-4 w-4 mr-2", loadingEmails && "animate-spin")} />
+          <RefreshCw className={cn("h-4 w-4 mr-2", (loadingEmails || loadingSms) && "animate-spin")} />
           Refresh
         </Button>
       </div>
@@ -217,15 +308,32 @@ export default function Conversations() {
               </ScrollArea>
             </TabsContent>
 
-            <TabsContent value="sms" className="flex-1 m-0 p-4">
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <MessageSquare className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                <h3 className="font-medium text-muted-foreground">SMS Not Connected</h3>
-                <p className="text-sm text-muted-foreground/70 mt-1">
-                  Connect Twilio to send and receive text messages
-                </p>
-                <Badge variant="secondary" className="mt-3">Coming Soon</Badge>
-              </div>
+            <TabsContent value="sms" className="flex-1 m-0">
+              {smsStatus?.configured ? (
+                <ScrollArea className="h-full">
+                  <SmsConversationList
+                    conversations={filteredSmsConversations}
+                    selectedPhone={selectedSmsConversation?.phoneNumber}
+                    onSelect={(conv) => {
+                      setSelectedSmsConversation(conv);
+                      setSelectedConversation(null);
+                    }}
+                    formatDate={formatDate}
+                    formatPhoneNumber={formatPhoneNumber}
+                    findMatchingJob={findMatchingJobByPhone}
+                    isLoading={loadingSms}
+                  />
+                </ScrollArea>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                  <MessageSquare className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                  <h3 className="font-medium text-muted-foreground">SMS Not Connected</h3>
+                  <p className="text-sm text-muted-foreground/70 mt-1">
+                    Connect Twilio to send and receive text messages
+                  </p>
+                  <Badge variant="secondary" className="mt-3">Coming Soon</Badge>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="social" className="flex-1 m-0 p-4">
@@ -322,6 +430,97 @@ export default function Conversations() {
                     disabled={!replyText.trim() || sendReplyMutation.isPending}
                     className="self-end"
                     data-testid="button-send-reply"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : selectedSmsConversation ? (
+            <>
+              <div className="p-4 border-b bg-background flex-shrink-0">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10 text-green-600 flex-shrink-0">
+                      <Phone className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h2 className="font-semibold">
+                        {findMatchingJobByPhone(selectedSmsConversation.phoneNumber) 
+                          ? `${findMatchingJobByPhone(selectedSmsConversation.phoneNumber)!.firstName} ${findMatchingJobByPhone(selectedSmsConversation.phoneNumber)!.lastName}` 
+                          : formatPhoneNumber(selectedSmsConversation.phoneNumber)}
+                      </h2>
+                      <p className="text-sm text-muted-foreground">{formatPhoneNumber(selectedSmsConversation.phoneNumber)}</p>
+                    </div>
+                  </div>
+                  {findMatchingJobByPhone(selectedSmsConversation.phoneNumber) && (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      Job #{findMatchingJobByPhone(selectedSmsConversation.phoneNumber)?.jobNumber}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <ScrollArea className="flex-1 p-4">
+                <div className="space-y-4">
+                  {selectedSmsConversation.messages.map((message) => {
+                    const isOutbound = message.direction !== "inbound";
+                    return (
+                      <div
+                        key={message.sid}
+                        className={cn(
+                          "flex",
+                          isOutbound ? "justify-end" : "justify-start"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "max-w-[80%] rounded-lg p-3",
+                            isOutbound
+                              ? "bg-green-600 text-white"
+                              : "bg-muted"
+                          )}
+                        >
+                          <p className="text-sm whitespace-pre-wrap">{message.body}</p>
+                          <div
+                            className={cn(
+                              "text-xs mt-2 flex items-center gap-1",
+                              isOutbound
+                                ? "text-white/70"
+                                : "text-muted-foreground"
+                            )}
+                          >
+                            {formatDate(message.dateCreated)}
+                            {isOutbound && (
+                              <span className="text-xs">
+                                {message.status === "delivered" ? " - Delivered" : 
+                                 message.status === "sent" ? " - Sent" :
+                                 message.status === "failed" ? " - Failed" : ""}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+
+              <div className="p-4 border-t bg-background flex-shrink-0">
+                <div className="flex gap-2">
+                  <Textarea
+                    placeholder="Type your message..."
+                    value={smsText}
+                    onChange={(e) => setSmsText(e.target.value)}
+                    className="resize-none"
+                    rows={3}
+                    data-testid="input-sms-message"
+                  />
+                  <Button
+                    onClick={handleSendSms}
+                    disabled={!smsText.trim() || sendSmsMutation.isPending}
+                    className="self-end bg-green-600 hover:bg-green-700"
+                    data-testid="button-send-sms"
                   >
                     <Send className="h-4 w-4" />
                   </Button>
@@ -434,6 +633,97 @@ function ConversationList({
               {thread.isUnread && (
                 <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-2" />
               )}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface SmsConversationListProps {
+  conversations: SmsConversation[];
+  selectedPhone?: string;
+  onSelect: (conversation: SmsConversation) => void;
+  formatDate: (date: string) => string;
+  formatPhoneNumber: (phone: string) => string;
+  findMatchingJob: (phone: string) => Job | undefined;
+  isLoading: boolean;
+}
+
+function SmsConversationList({
+  conversations,
+  selectedPhone,
+  onSelect,
+  formatDate,
+  formatPhoneNumber,
+  findMatchingJob,
+  isLoading,
+}: SmsConversationListProps) {
+  if (isLoading) {
+    return (
+      <div className="p-4 space-y-3">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex gap-3 animate-pulse">
+            <div className="h-10 w-10 rounded-full bg-muted" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-muted rounded w-3/4" />
+              <div className="h-3 bg-muted rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (conversations.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <MessageSquare className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
+        <p className="text-sm text-muted-foreground">No SMS conversations found</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y">
+      {conversations.map((conv) => {
+        const matchingJob = findMatchingJob(conv.phoneNumber);
+        return (
+          <button
+            key={conv.phoneNumber}
+            onClick={() => onSelect(conv)}
+            className={cn(
+              "w-full p-3 text-left hover-elevate transition-colors",
+              selectedPhone === conv.phoneNumber && "bg-accent"
+            )}
+            data-testid={`sms-conversation-${conv.phoneNumber}`}
+          >
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10 text-green-600 flex-shrink-0">
+                <MessageSquare className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium truncate text-sm">
+                    {matchingJob ? `${matchingJob.firstName} ${matchingJob.lastName}` : formatPhoneNumber(conv.phoneNumber)}
+                  </span>
+                  <span className="text-xs text-muted-foreground flex-shrink-0">
+                    {formatDate(conv.lastMessage.dateCreated)}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground truncate">
+                  {formatPhoneNumber(conv.phoneNumber)}
+                </p>
+                <p className="text-xs text-muted-foreground/70 truncate mt-0.5">
+                  {conv.lastMessage.body}
+                </p>
+                {matchingJob && (
+                  <Badge variant="outline" className="text-xs mt-1">
+                    Job #{matchingJob.jobNumber}
+                  </Badge>
+                )}
+              </div>
             </div>
           </button>
         );

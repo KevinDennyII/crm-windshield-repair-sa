@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertJobSchema, pipelineStages, paymentHistorySchema } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendReply, getInboxThreads } from "./gmail";
+import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured } from "./twilio";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Get all jobs
@@ -189,6 +190,103 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error: any) {
       console.error("Failed to send reply:", error);
       res.status(500).json({ message: error.message || "Failed to send reply" });
+    }
+  });
+
+  // Check if Twilio is configured
+  app.get("/api/sms/status", async (req, res) => {
+    res.json({ configured: isTwilioConfigured() });
+  });
+
+  // Get SMS conversations
+  app.get("/api/sms/conversations", async (req, res) => {
+    try {
+      if (!isTwilioConfigured()) {
+        return res.status(400).json({ message: "Twilio is not configured" });
+      }
+      const conversations = await getSmsConversations(50);
+      res.json(conversations);
+    } catch (error: any) {
+      console.error("Failed to fetch SMS conversations:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch SMS conversations" });
+    }
+  });
+
+  // Get messages with a specific phone number
+  app.get("/api/sms/messages/:phoneNumber", async (req, res) => {
+    try {
+      if (!isTwilioConfigured()) {
+        return res.status(400).json({ message: "Twilio is not configured" });
+      }
+      const messages = await getMessagesWithNumber(req.params.phoneNumber, 50);
+      res.json(messages);
+    } catch (error: any) {
+      console.error("Failed to fetch messages:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch messages" });
+    }
+  });
+
+  // Send SMS
+  app.post("/api/sms/send", async (req, res) => {
+    try {
+      if (!isTwilioConfigured()) {
+        return res.status(400).json({ message: "Twilio is not configured" });
+      }
+      
+      const smsSchema = z.object({
+        to: z.string().min(1, "Phone number is required"),
+        body: z.string().min(1, "Message body is required"),
+      });
+      
+      const parsed = smsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid SMS data", 
+          errors: parsed.error.errors 
+        });
+      }
+
+      const message = await sendSms(parsed.data.to, parsed.data.body);
+      res.json({ message: "SMS sent successfully", data: message });
+    } catch (error: any) {
+      console.error("Failed to send SMS:", error);
+      res.status(500).json({ message: error.message || "Failed to send SMS" });
+    }
+  });
+
+  // Send SMS to job customer
+  app.post("/api/jobs/:id/sms", async (req, res) => {
+    try {
+      if (!isTwilioConfigured()) {
+        return res.status(400).json({ message: "Twilio is not configured" });
+      }
+      
+      const smsSchema = z.object({
+        body: z.string().min(1, "Message body is required"),
+      });
+      
+      const parsed = smsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid SMS data", 
+          errors: parsed.error.errors 
+        });
+      }
+
+      const job = await storage.getJob(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (!job.phone) {
+        return res.status(400).json({ message: "Customer has no phone number" });
+      }
+
+      const message = await sendSms(job.phone, parsed.data.body);
+      res.json({ message: "SMS sent successfully", data: message });
+    } catch (error: any) {
+      console.error("Failed to send SMS:", error);
+      res.status(500).json({ message: error.message || "Failed to send SMS" });
     }
   });
 }
