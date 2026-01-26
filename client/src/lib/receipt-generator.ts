@@ -253,6 +253,15 @@ function addPaymentInfo(doc: jsPDF, job: Job, yPos: number): number {
 }
 
 function addSignatureLine(doc: jsPDF, yPos: number): number {
+  const pageHeight = 270; // Leave 10mm bottom margin
+  const margin = 20;
+  
+  // Signature section needs about 35 units of space, check if we need a new page
+  if (yPos > pageHeight - 35) {
+    doc.addPage();
+    yPos = margin;
+  }
+  
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('CUSTOMER ACKNOWLEDGMENT', 20, yPos);
@@ -274,6 +283,16 @@ function addSignatureLine(doc: jsPDF, yPos: number): number {
 }
 
 function addCalibrationDeclinedDisclaimer(doc: jsPDF, yPos: number): number {
+  const pageHeight = 270; // Leave 10mm bottom margin
+  const lineHeight = 3;
+  const margin = 20;
+  
+  // Check if header fits before rendering
+  if (yPos > pageHeight) {
+    doc.addPage();
+    yPos = margin;
+  }
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(180, 0, 0);
@@ -295,10 +314,17 @@ function addCalibrationDeclinedDisclaimer(doc: jsPDF, yPos: number): number {
 4. By declining calibration, the customer assumes full responsibility for any consequences related to uncalibrated ADAS systems.`;
 
   const splitDisclaimer = doc.splitTextToSize(disclaimer, 170);
-  doc.text(splitDisclaimer, 20, yPos);
-  yPos += splitDisclaimer.length * 3 + 10;
   
-  return yPos;
+  for (let i = 0; i < splitDisclaimer.length; i++) {
+    if (yPos > pageHeight) {
+      doc.addPage();
+      yPos = margin;
+    }
+    doc.text(splitDisclaimer[i], 20, yPos);
+    yPos += lineHeight;
+  }
+  
+  return yPos + 10;
 }
 
 function addDealerWarranty(doc: jsPDF, yPos: number): number {
@@ -306,6 +332,16 @@ function addDealerWarranty(doc: jsPDF, yPos: number): number {
 }
 
 function addFleetWarranty(doc: jsPDF, yPos: number): number {
+  const pageHeight = 270; // Leave 10mm bottom margin
+  const lineHeight = 3;
+  const margin = 20;
+  
+  // Check if header fits before rendering
+  if (yPos > pageHeight) {
+    doc.addPage();
+    yPos = margin;
+  }
+  
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('WARRANTY - REPLACEMENTS', 20, yPos);
@@ -330,12 +366,30 @@ This warranty is non-transferable and expires with the change of ownership of th
 If you experience any warranty issues, please contact us immediately at 210-890-0210 so we may evaluate the issue and take necessary action. These actions may include resealing, reinstalling, or repairing. Mobile fee may apply.`;
 
   const splitWarranty = doc.splitTextToSize(warranty, 170);
-  doc.text(splitWarranty, 20, yPos);
   
-  return yPos + splitWarranty.length * 3 + 5;
+  for (let i = 0; i < splitWarranty.length; i++) {
+    if (yPos > pageHeight) {
+      doc.addPage();
+      yPos = margin;
+    }
+    doc.text(splitWarranty[i], 20, yPos);
+    yPos += lineHeight;
+  }
+  
+  return yPos + 5;
 }
 
 function addRockChipWarranty(doc: jsPDF, yPos: number): number {
+  const pageHeight = 270; // Leave 10mm bottom margin
+  const lineHeight = 3;
+  const margin = 20;
+  
+  // Check if header fits before rendering
+  if (yPos > pageHeight) {
+    doc.addPage();
+    yPos = margin;
+  }
+  
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('WARRANTY', 20, yPos);
@@ -357,12 +411,30 @@ Due to the nature of the glass being pre-damaged, there is a possibility that th
 If you experience any warranty issues, please contact us immediately at 210-890-0210 so we may evaluate the issue and take necessary action. These actions may include repairing spread or quoting for replacement if the spread is too large. Mobile fee may apply if a warranty appointment is scheduled but the chip or crack hasn't actually spread since the first repair.`;
 
   const splitWarranty = doc.splitTextToSize(warranty, 170);
-  doc.text(splitWarranty, 20, yPos);
   
-  return yPos + splitWarranty.length * 3 + 5;
+  for (let i = 0; i < splitWarranty.length; i++) {
+    if (yPos > pageHeight) {
+      doc.addPage();
+      yPos = margin;
+    }
+    doc.text(splitWarranty[i], 20, yPos);
+    yPos += lineHeight;
+  }
+  
+  return yPos + 5;
 }
 
 function addWindshieldReplacementWarranty(doc: jsPDF, yPos: number): number {
+  const pageHeight = 270; // Leave 10mm bottom margin
+  const lineHeight = 3;
+  const margin = 20;
+  
+  // Check if header fits before rendering
+  if (yPos > pageHeight) {
+    doc.addPage();
+    yPos = margin;
+  }
+  
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('ADDITIONAL INFO', 20, yPos);
@@ -376,8 +448,16 @@ The chip must be the size of a quarter or smaller to qualify, and a mobile fee w
 Thank you for your business!`;
 
   const splitBonus = doc.splitTextToSize(bonusInfo, 170);
-  doc.text(splitBonus, 20, yPos);
-  yPos += splitBonus.length * 3 + 5;
+  
+  for (let i = 0; i < splitBonus.length; i++) {
+    if (yPos > pageHeight) {
+      doc.addPage();
+      yPos = margin;
+    }
+    doc.text(splitBonus[i], 20, yPos);
+    yPos += lineHeight;
+  }
+  yPos += 5;
   
   return addFleetWarranty(doc, yPos);
 }
