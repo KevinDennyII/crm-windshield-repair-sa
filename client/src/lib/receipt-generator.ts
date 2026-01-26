@@ -112,15 +112,15 @@ async function addCompanyHeader(doc: jsPDF, yPos: number): Promise<number> {
   return yPos + 24;
 }
 
-function addInvoiceHeader(doc: jsPDF, job: Job, yPos: number): number {
+function addInvoiceHeader(doc: jsPDF, job: Job, yPos: number, receiptType: string): number {
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  doc.text('INVOICE', 150, yPos, { align: 'center' });
+  const title = receiptType === 'dealer' ? 'INVOICE' : 'RECEIPT';
+  doc.text(title, 150, yPos, { align: 'center' });
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  const invoiceNumber = `0126-${job.jobNumber.slice(-4)}`;
-  doc.text(`Invoice#: ${invoiceNumber}`, 190, yPos + 10, { align: 'right' });
+  doc.text(`JOB#: ${job.jobNumber}`, 190, yPos + 10, { align: 'right' });
   doc.text(`Date: ${formatDate(job.installDate || job.createdAt)}`, 190, yPos + 15, { align: 'right' });
   
   return yPos + 25;
@@ -399,7 +399,7 @@ export async function generateReceiptPreview(job: Job): Promise<ReceiptResult> {
   let yPos = 20;
   
   yPos = await addCompanyHeader(doc, yPos);
-  yPos = addInvoiceHeader(doc, job, yPos - 10);
+  yPos = addInvoiceHeader(doc, job, yPos - 10, receiptType);
   yPos = addCustomerInfo(doc, job, yPos + 5);
   
   const { yPos: lineYPos, subtotal } = addLineItems(doc, job, yPos + 5);
