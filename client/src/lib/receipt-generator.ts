@@ -331,20 +331,8 @@ If you experience any warranty issues, please contact us immediately at 210-890-
 
   const splitWarranty = doc.splitTextToSize(warranty, 170);
   doc.text(splitWarranty, 20, yPos);
-  yPos += splitWarranty.length * 3 + 5;
   
-  doc.setFont('helvetica', 'bold');
-  doc.text('IMPORTANT - VEHICLES WITH LKAS & FORWARD COLLISION:', 20, yPos);
-  yPos += 5;
-  doc.setFont('helvetica', 'normal');
-  
-  const adasNotice = `ADAS Driver Safety System Calibration
-The customer acknowledges that certain windshields replaced by Windshield Repair SA may contain sensors for items such as lane departure mitigation, LKAS (lane keep assist), forward collision alert, or any other sensor which controls the vehicle's movement. Windshield Repair SA has provided notice that the vehicle manufacturer may require the windshield sensor to be recalibrated after the new windshield is installed. We always recommend recalibration be performed to ensure these critical sensors work effectively, for your safety. The customer acknowledges that if recalibration is NOT performed, these systems may malfunction at any time after installation, whether or not an indicator light or error code appears on the vehicle dashboard.`;
-
-  const splitAdas = doc.splitTextToSize(adasNotice, 170);
-  doc.text(splitAdas, 20, yPos);
-  
-  return yPos + splitAdas.length * 3 + 5;
+  return yPos + splitWarranty.length * 3 + 5;
 }
 
 function addRockChipWarranty(doc: jsPDF, yPos: number): number {
