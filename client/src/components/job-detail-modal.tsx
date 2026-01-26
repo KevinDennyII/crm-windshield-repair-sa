@@ -46,7 +46,9 @@ import {
   calibrationTypes,
   causesOfLoss,
   paymentSources,
+  customerTypes,
   type PaymentHistoryEntry,
+  type CustomerType,
 } from "@shared/schema";
 import {
   User,
@@ -62,7 +64,9 @@ import {
   ChevronDown,
   ChevronRight,
   Trash2,
+  Download,
 } from "lucide-react";
+import { generateReceipt, determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 
 interface JobDetailModalProps {
   job: Job | null;
@@ -123,6 +127,12 @@ const sourceLabels: Record<string, string> = {
   check: "Check",
   insurance: "Insurance",
   other: "Other",
+};
+
+const customerTypeLabels: Record<string, string> = {
+  retail: "Retail Customer",
+  dealer: "Dealer Account",
+  fleet: "Fleet Account",
 };
 
 const durationOptions = [
@@ -199,6 +209,7 @@ function calculateJobTotal(vehicles: Vehicle[]): number {
 const getDefaultFormData = (): InsertJob => ({
   isBusiness: false,
   businessName: "",
+  customerType: "retail",
   firstName: "",
   lastName: "",
   phone: "",
@@ -474,15 +485,35 @@ export function JobDetailModal({
                     </div>
 
                     {formData.isBusiness && (
-                      <div className="grid gap-2">
-                        <Label htmlFor="businessName">Business Name</Label>
-                        <Input
-                          id="businessName"
-                          value={formData.businessName}
-                          onChange={(e) => handleChange("businessName", e.target.value)}
-                          placeholder="Company Name"
-                          data-testid="input-business-name"
-                        />
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="businessName">Business Name</Label>
+                          <Input
+                            id="businessName"
+                            value={formData.businessName}
+                            onChange={(e) => handleChange("businessName", e.target.value)}
+                            placeholder="Company Name"
+                            data-testid="input-business-name"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>Account Type</Label>
+                          <Select
+                            value={formData.customerType || "retail"}
+                            onValueChange={(value) => handleChange("customerType", value as CustomerType)}
+                          >
+                            <SelectTrigger data-testid="select-customer-type">
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {customerTypes.map((type) => (
+                                <SelectItem key={type} value={type}>
+                                  {customerTypeLabels[type]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     )}
 
@@ -1618,15 +1649,29 @@ export function JobDetailModal({
               )}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {!isNew && (
+              {!isNew && job && (
                 <>
                   <Button type="button" variant="outline" data-testid="button-send-quote">
                     <Send className="h-4 w-4 mr-2" />
                     Send Quote
                   </Button>
-                  <Button type="button" variant="outline" data-testid="button-download-receipt">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Receipt
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => {
+                      const updatedJob: Job = {
+                        ...job,
+                        ...formData,
+                        vehicles,
+                        totalDue: jobTotal,
+                        balanceDue: Math.max(0, jobTotal - (formData.amountPaid || 0)),
+                      };
+                      generateReceipt(updatedJob);
+                    }}
+                    data-testid="button-download-receipt"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Receipt
                   </Button>
                 </>
               )}

@@ -31,6 +31,9 @@ export type PipelineStage = typeof pipelineStages[number];
 export const paymentStatuses = ["pending", "partial", "paid"] as const;
 export type PaymentStatus = typeof paymentStatuses[number];
 
+export const customerTypes = ["retail", "dealer", "fleet"] as const;
+export type CustomerType = typeof customerTypes[number];
+
 export const jobTypes = [
   "windshield_replacement",
   "windshield_repair",
@@ -126,6 +129,7 @@ export const jobSchema = z.object({
   // Customer Info
   isBusiness: z.boolean().default(false),
   businessName: z.string().optional(),
+  customerType: z.enum(customerTypes).default("retail"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   phone: z.string().min(1, "Phone is required"),

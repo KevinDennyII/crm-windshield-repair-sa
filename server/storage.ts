@@ -80,12 +80,13 @@ export class MemStorage implements IStorage {
 
   private seedSampleData() {
     const sampleJobs: Job[] = [
-      // Job 1: Single vehicle, single part (Quote stage)
+      // Job 1: Single vehicle, single part (Quote stage) - Retail windshield replacement
       {
         id: randomUUID(),
         jobNumber: "000032",
         isBusiness: false,
         businessName: "",
+        customerType: "retail",
         firstName: "Michael",
         lastName: "Johnson",
         phone: "(555) 234-5678",
@@ -144,12 +145,13 @@ export class MemStorage implements IStorage {
         installNotes: "Customer prefers morning appointments",
         createdAt: new Date().toISOString(),
       },
-      // Job 2: Single vehicle, single part with insurance (Glass Ordered)
+      // Job 2: Single vehicle, single part with insurance (Glass Ordered) - Retail
       {
         id: randomUUID(),
         jobNumber: "000033",
         isBusiness: false,
         businessName: "",
+        customerType: "retail",
         firstName: "Sarah",
         lastName: "Williams",
         phone: "(555) 345-6789",
@@ -212,12 +214,13 @@ export class MemStorage implements IStorage {
         installNotes: "",
         createdAt: new Date().toISOString(),
       },
-      // Job 3: Fleet - Multiple vehicles (Glass Arrived)
+      // Job 3: Fleet - Multiple vehicles (Glass Arrived) - Fleet customer
       {
         id: randomUUID(),
         jobNumber: "000034",
         isBusiness: true,
         businessName: "Chen Auto Sales",
+        customerType: "fleet",
         firstName: "David",
         lastName: "Chen",
         phone: "(555) 456-7890",
@@ -304,12 +307,13 @@ export class MemStorage implements IStorage {
         installNotes: "Fleet account - 2 trucks, schedule back-to-back",
         createdAt: new Date().toISOString(),
       },
-      // Job 4: Single vehicle, multiple parts (Scheduled)
+      // Job 4: Single vehicle, multiple parts (Scheduled) - Retail
       {
         id: randomUUID(),
         jobNumber: "000035",
         isBusiness: false,
         businessName: "",
+        customerType: "retail",
         firstName: "Emily",
         lastName: "Rodriguez",
         phone: "(555) 567-8901",
@@ -394,12 +398,13 @@ export class MemStorage implements IStorage {
         installNotes: "Windshield + driver door glass replacement",
         createdAt: new Date().toISOString(),
       },
-      // Job 5: Completed single job
+      // Job 5: Completed single job - Retail windshield
       {
         id: randomUUID(),
         jobNumber: "000036",
         isBusiness: false,
         businessName: "",
+        customerType: "retail",
         firstName: "James",
         lastName: "Anderson",
         phone: "(555) 678-9012",
@@ -468,12 +473,13 @@ export class MemStorage implements IStorage {
         installNotes: "Completed successfully",
         createdAt: new Date().toISOString(),
       },
-      // Job 6: Completed with insurance
+      // Job 6: Completed with insurance - Retail back glass
       {
         id: randomUUID(),
         jobNumber: "000037",
         isBusiness: false,
         businessName: "",
+        customerType: "retail",
         firstName: "Lisa",
         lastName: "Thompson",
         phone: "(555) 789-0123",
@@ -548,6 +554,151 @@ export class MemStorage implements IStorage {
           }
         ],
         installNotes: "",
+        createdAt: new Date().toISOString(),
+      },
+      // Job 7: Dealer account - simple invoice
+      {
+        id: randomUUID(),
+        jobNumber: "000038",
+        isBusiness: true,
+        businessName: "A Motors",
+        customerType: "dealer",
+        firstName: "Tony",
+        lastName: "Martinez",
+        phone: "(555) 890-1234",
+        email: "tony@amotors.com",
+        streetAddress: "5630 San Pedro Ave",
+        city: "San Antonio",
+        state: "TX",
+        zipCode: "78212",
+        vehicles: [
+          createDefaultVehicle({
+            vin: "3VWF17AT8HM632517",
+            licensePlate: "AMTR001",
+            mileage: "85000",
+            vehicleYear: "2017",
+            vehicleMake: "Volkswagen",
+            vehicleModel: "Beetle",
+            bodyStyle: "Coupe",
+            vehicleColor: "Red",
+            parts: [
+              createDefaultPart({
+                jobType: "windshield_replacement",
+                glassPartNumber: "FW08901GTY",
+                isAftermarket: true,
+                distributor: "Pilkington",
+                partPrice: 280,
+                laborPrice: 26,
+                urethanePrice: 0,
+                partsSubtotal: 280,
+                partTotal: 317,
+              }),
+            ],
+          }),
+        ],
+        pipelineStage: "paid_completed",
+        repairLocation: "in_shop",
+        installer: "Mike",
+        installDate: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+        installTime: "11:00",
+        jobDuration: "2",
+        claimNumber: "",
+        dispatchNumber: "",
+        policyNumber: "",
+        dateOfLoss: "",
+        causeOfLoss: undefined,
+        insuranceCompany: "",
+        subtotal: 306,
+        taxAmount: 0,
+        totalDue: 317,
+        deductible: 0,
+        rebate: 0,
+        amountPaid: 317,
+        balanceDue: 0,
+        paymentStatus: "paid",
+        paymentHistory: [
+          {
+            id: randomUUID(),
+            date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+            source: "check",
+            amount: 317,
+            notes: "Dealer account payment"
+          }
+        ],
+        installNotes: "Dealer account - net 30 terms",
+        createdAt: new Date().toISOString(),
+      },
+      // Job 8: Rock chip repair - special warranty
+      {
+        id: randomUUID(),
+        jobNumber: "000039",
+        isBusiness: false,
+        businessName: "",
+        customerType: "retail",
+        firstName: "Connor",
+        lastName: "Waldron",
+        phone: "(555) 735-7705",
+        email: "connor.w@email.com",
+        streetAddress: "2842 Redsky Pass",
+        city: "San Antonio",
+        state: "TX",
+        zipCode: "78259",
+        vehicles: [
+          createDefaultVehicle({
+            vin: "4T1B11HK1KU237217",
+            licensePlate: "CWD2019",
+            mileage: "42000",
+            vehicleYear: "2019",
+            vehicleMake: "Toyota",
+            vehicleModel: "Camry",
+            bodyStyle: "Sedan",
+            vehicleColor: "Silver",
+            parts: [
+              createDefaultPart({
+                jobType: "windshield_repair",
+                glassPartNumber: "",
+                isAftermarket: false,
+                distributor: "",
+                partPrice: 85,
+                laborPrice: 0,
+                urethanePrice: 0,
+                mobileFee: 0,
+                partsSubtotal: 85,
+                partTotal: 88,
+              }),
+            ],
+          }),
+        ],
+        pipelineStage: "paid_completed",
+        repairLocation: "mobile",
+        installer: "John",
+        installDate: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+        installTime: "14:00",
+        jobDuration: "0.5",
+        claimNumber: "",
+        dispatchNumber: "",
+        policyNumber: "",
+        dateOfLoss: "",
+        causeOfLoss: "rock_chip",
+        insuranceCompany: "",
+        subtotal: 85,
+        taxAmount: 3,
+        totalDue: 88,
+        deductible: 0,
+        rebate: 0,
+        amountPaid: 88,
+        balanceDue: 0,
+        paymentStatus: "paid",
+        paymentHistory: [
+          {
+            id: randomUUID(),
+            date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+            source: "credit_card",
+            amount: 88,
+            notes: "Rock chip repair"
+          }
+        ],
+        installNotes: "Single rock chip repair",
         createdAt: new Date().toISOString(),
       },
     ];
