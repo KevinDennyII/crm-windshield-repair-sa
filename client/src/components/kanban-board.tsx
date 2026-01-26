@@ -9,6 +9,7 @@ import {
   Car,
   DollarSign,
   GripVertical,
+  MessageSquare,
 } from "lucide-react";
 import { type Job, type PipelineStage, pipelineStages } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -229,6 +230,39 @@ export function KanbanBoard({
                               )}
                             </div>
                           </div>
+
+                          {job.phone && (
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <a
+                                  href={`tel:${job.phone}`}
+                                  data-testid={`button-call-${job.id}`}
+                                >
+                                  <Phone className="h-3 w-3 mr-1" />
+                                  Call
+                                </a>
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <a
+                                  href={`sms:${job.phone}`}
+                                  data-testid={`button-text-${job.id}`}
+                                >
+                                  <MessageSquare className="h-3 w-3 mr-1" />
+                                  Text
+                                </a>
+                              </Button>
+                            </div>
+                          )}
 
                           {job.glassPartNumber && (
                             <div className="mt-2">

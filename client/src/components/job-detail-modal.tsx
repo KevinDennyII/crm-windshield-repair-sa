@@ -65,6 +65,8 @@ import {
   ChevronRight,
   Trash2,
   Download,
+  Phone,
+  MessageSquare,
 } from "lucide-react";
 import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
@@ -558,6 +560,36 @@ export function JobDetailModal({
                           required
                           data-testid="input-phone"
                         />
+                        {formData.phone && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              asChild
+                            >
+                              <a
+                                href={`tel:${formData.phone}`}
+                                data-testid="button-call-customer"
+                              >
+                                <Phone className="h-3 w-3 mr-1" />
+                                Call
+                              </a>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              asChild
+                            >
+                              <a
+                                href={`sms:${formData.phone}`}
+                                data-testid="button-text-customer"
+                              >
+                                <MessageSquare className="h-3 w-3 mr-1" />
+                                Text
+                              </a>
+                            </Button>
+                          </div>
+                        )}
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="email">Email</Label>
