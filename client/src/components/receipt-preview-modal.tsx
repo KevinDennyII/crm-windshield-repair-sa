@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, X, Loader2 } from "lucide-react";
+import { Download, ExternalLink, X, Loader2 } from "lucide-react";
 import type { Job } from "@shared/schema";
 import { generateReceiptPreview, downloadReceipt, getReceiptTypeLabel, determineReceiptType } from "@/lib/receipt-generator";
 
@@ -23,35 +23,68 @@ export function ReceiptPreviewModal({ job, isOpen, onClose }: ReceiptPreviewModa
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen && job) {
-      setIsLoading(true);
-      setError(null);
-      setPdfUrl(null);
+  const generatePdf = async () => {
+    if (!job) return;
+    
+    setIsLoading(true);
+    setError(null);
 
-      generateReceiptPreview(job)
-        .then(({ blobUrl, filename: fn }) => {
-          setPdfUrl(blobUrl);
-          setFilename(fn);
-          setIsLoading(false);
-        })
-        .catch((err) => {
-          console.error("Failed to generate receipt:", err);
-          setError("Failed to generate receipt preview. Please try again.");
-          setIsLoading(false);
-        });
+    try {
+      const { blobUrl, filename: fn } = await generateReceiptPreview(job);
+      setPdfUrl(blobUrl);
+      setFilename(fn);
+    } catch (err) {
+      console.error("Failed to generate receipt:", err);
+      setError("Failed to generate receipt. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    return () => {
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl);
-      }
-    };
-  }, [isOpen, job]);
+  const handleOpenPreview = async () => {
+    if (!pdfUrl) {
+      await generatePdf();
+    }
+    if (pdfUrl) {
+      window.open(pdfUrl, '_blank');
+    }
+  };
 
-  const handleDownload = () => {
+  const handleGenerateAndOpen = async () => {
+    if (!job) return;
+    
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { blobUrl, filename: fn } = await generateReceiptPreview(job);
+      setPdfUrl(blobUrl);
+      setFilename(fn);
+      window.open(blobUrl, '_blank');
+    } catch (err) {
+      console.error("Failed to generate receipt:", err);
+      setError("Failed to generate receipt. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDownload = async () => {
     if (pdfUrl && filename) {
       downloadReceipt(pdfUrl, filename);
+    } else if (job) {
+      setIsLoading(true);
+      try {
+        const { blobUrl, filename: fn } = await generateReceiptPreview(job);
+        setPdfUrl(blobUrl);
+        setFilename(fn);
+        downloadReceipt(blobUrl, fn);
+      } catch (err) {
+        console.error("Failed to generate receipt:", err);
+        setError("Failed to generate receipt. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -60,6 +93,8 @@ export function ReceiptPreviewModal({ job, isOpen, onClose }: ReceiptPreviewModa
       URL.revokeObjectURL(pdfUrl);
       setPdfUrl(null);
     }
+    setFilename("");
+    setError(null);
     onClose();
   };
 
@@ -67,61 +102,71 @@ export function ReceiptPreviewModal({ job, isOpen, onClose }: ReceiptPreviewModa
 
   const receiptType = determineReceiptType(job);
   const receiptLabel = getReceiptTypeLabel(receiptType);
+  const customerName = job.isBusiness && job.businessName 
+    ? job.businessName 
+    : `${job.firstName} ${job.lastName}`;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            Receipt Preview - {receiptLabel}
+            {receiptLabel}
           </DialogTitle>
           <DialogDescription>
-            {job.isBusiness && job.businessName 
-              ? job.businessName 
-              : `${job.firstName} ${job.lastName}`} - Job #{job.jobNumber}
+            {customerName} - Job #{job.jobNumber}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 min-h-[500px] border rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800">
-          {isLoading && (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-2 text-muted-foreground">Generating receipt...</span>
-            </div>
-          )}
+        <div className="py-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Your receipt is ready. You can preview it in a new tab or download it directly.
+          </p>
 
           {error && (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-destructive">{error}</p>
-            </div>
+            <p className="text-sm text-destructive">{error}</p>
           )}
 
-          {pdfUrl && !isLoading && (
-            <iframe
-              src={pdfUrl}
-              className="w-full h-full"
-              title="Receipt Preview"
-              data-testid="iframe-receipt-preview"
-            />
-          )}
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={handleGenerateAndOpen}
+              disabled={isLoading}
+              className="w-full"
+              data-testid="button-open-preview"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <ExternalLink className="h-4 w-4 mr-2" />
+              )}
+              Open Preview in New Tab
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={handleDownload}
+              disabled={isLoading}
+              className="w-full"
+              data-testid="button-download-pdf"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Download PDF
+            </Button>
+          </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-4">
+        <div className="flex justify-end">
           <Button
-            variant="outline"
+            variant="ghost"
             onClick={handleClose}
             data-testid="button-close-preview"
           >
             <X className="h-4 w-4 mr-2" />
             Close
-          </Button>
-          <Button
-            onClick={handleDownload}
-            disabled={!pdfUrl || isLoading}
-            data-testid="button-download-pdf"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Download PDF
           </Button>
         </div>
       </DialogContent>
