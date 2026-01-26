@@ -67,9 +67,11 @@ import {
   Download,
   Phone,
   MessageSquare,
+  Mail,
 } from "lucide-react";
 import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
+import { EmailComposeModal } from "@/components/email-compose-modal";
 
 interface JobDetailModalProps {
   job: Job | null;
@@ -269,6 +271,7 @@ export function JobDetailModal({
 
   const [showInsurance, setShowInsurance] = useState(false);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [receiptPreviewJob, setReceiptPreviewJob] = useState<Job | null>(null);
 
   const jobTotal = calculateJobTotal(vehicles);
@@ -588,6 +591,17 @@ export function JobDetailModal({
                                 Text
                               </a>
                             </Button>
+                            {formData.email && job && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowEmailModal(true)}
+                                data-testid="button-email-customer"
+                              >
+                                <Mail className="h-3 w-3 mr-1" />
+                                Email
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1740,6 +1754,14 @@ export function JobDetailModal({
           setReceiptPreviewJob(null);
         }}
       />
+
+      {job && (
+        <EmailComposeModal
+          job={job}
+          open={showEmailModal}
+          onOpenChange={setShowEmailModal}
+        />
+      )}
     </Dialog>
   );
 }

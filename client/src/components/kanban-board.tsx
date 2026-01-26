@@ -10,9 +10,11 @@ import {
   DollarSign,
   GripVertical,
   MessageSquare,
+  Mail,
 } from "lucide-react";
 import { type Job, type PipelineStage, pipelineStages } from "@shared/schema";
 import { cn } from "@/lib/utils";
+import { EmailComposeModal } from "./email-compose-modal";
 
 const stageConfig: Record<
   PipelineStage,
@@ -67,6 +69,7 @@ export function KanbanBoard({
   const [dragOverStage, setDragOverStage] = useState<PipelineStage | null>(
     null
   );
+  const [emailJob, setEmailJob] = useState<Job | null>(null);
 
   const handleDragStart = (e: React.DragEvent, job: Job) => {
     setDraggedJob(job);
@@ -261,6 +264,20 @@ export function KanbanBoard({
                                   Text
                                 </a>
                               </Button>
+                              {job.email && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEmailJob(job);
+                                  }}
+                                  data-testid={`button-email-${job.id}`}
+                                >
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Email
+                                </Button>
+                              )}
                             </div>
                           )}
 
@@ -292,6 +309,14 @@ export function KanbanBoard({
           })}
         </div>
       </ScrollArea>
+
+      {emailJob && (
+        <EmailComposeModal
+          job={emailJob}
+          open={!!emailJob}
+          onOpenChange={(open) => !open && setEmailJob(null)}
+        />
+      )}
     </div>
   );
 }

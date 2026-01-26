@@ -3,6 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { insertJobSchema, pipelineStages, paymentHistorySchema } from "@shared/schema";
 import { z } from "zod";
+import { sendEmail } from "./gmail";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Get all jobs
@@ -118,6 +119,39 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete job" });
+    }
+  });
+
+  // Send email to customer
+  app.post("/api/jobs/:id/email", async (req, res) => {
+    try {
+      const emailSchema = z.object({
+        subject: z.string().min(1, "Subject is required"),
+        body: z.string().min(1, "Message body is required"),
+      });
+      
+      const parsed = emailSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid email data", 
+          errors: parsed.error.errors 
+        });
+      }
+
+      const job = await storage.getJob(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (!job.email) {
+        return res.status(400).json({ message: "Customer has no email address" });
+      }
+
+      await sendEmail(job.email, parsed.data.subject, parsed.data.body);
+      res.json({ message: "Email sent successfully" });
+    } catch (error: any) {
+      console.error("Failed to send email:", error);
+      res.status(500).json({ message: error.message || "Failed to send email" });
     }
   });
 }
