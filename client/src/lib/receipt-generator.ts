@@ -93,8 +93,8 @@ async function loadImageAsBase64(url: string): Promise<string> {
 async function addCompanyHeader(doc: jsPDF, yPos: number): Promise<number> {
   try {
     const logoData = await loadImageAsBase64(logoImage);
-    doc.addImage(logoData, 'JPEG', 20, yPos - 2, 38, 11);
-    yPos += 12;
+    doc.addImage(logoData, 'JPEG', 20, yPos - 5, 60, 20);
+    yPos += 18;
   } catch (e) {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
