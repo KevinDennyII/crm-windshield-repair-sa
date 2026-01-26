@@ -203,6 +203,9 @@ export function JobDetailModal({
     notes: "",
   });
 
+  // Insurance section toggle state
+  const [showInsurance, setShowInsurance] = useState(false);
+
   // Part Pricing Calculator state
   const [calculator, setCalculator] = useState({
     partPrice: 0,
@@ -273,6 +276,13 @@ export function JobDetailModal({
     }
     setActiveTab("customer");
     setNewPayment({ source: "cash", amount: 0, notes: "" });
+    // Auto-enable insurance toggle if job has insurance data
+    if (job) {
+      const hasInsuranceData = !!(job.insuranceCompany || job.claimNumber || job.policyNumber || job.dispatchNumber || job.dateOfLoss);
+      setShowInsurance(hasInsuranceData);
+    } else {
+      setShowInsurance(false);
+    }
   }, [job, isOpen]);
 
   const handleChange = (field: keyof InsertJob, value: string | number | boolean | undefined) => {
@@ -1006,86 +1016,101 @@ export function JobDetailModal({
                 {/* Insurance Section */}
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Insurance Information</CardTitle>
+                    <div className="flex items-center justify-between gap-4">
+                      <CardTitle className="text-base">Insurance Information</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="insurance-toggle" className="text-sm text-muted-foreground">
+                          {showInsurance ? "Enabled" : "Disabled"}
+                        </Label>
+                        <Switch
+                          id="insurance-toggle"
+                          checked={showInsurance}
+                          onCheckedChange={setShowInsurance}
+                          data-testid="toggle-insurance"
+                        />
+                      </div>
+                    </div>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="insuranceCompany">Insurance Company</Label>
-                        <Input
-                          id="insuranceCompany"
-                          value={formData.insuranceCompany}
-                          onChange={(e) => handleChange("insuranceCompany", e.target.value)}
-                          placeholder="State Farm"
-                          data-testid="input-insurance-company"
-                        />
+                  {showInsurance && (
+                    <CardContent className="space-y-4">
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="insuranceCompany">Insurance Company</Label>
+                          <Input
+                            id="insuranceCompany"
+                            value={formData.insuranceCompany}
+                            onChange={(e) => handleChange("insuranceCompany", e.target.value)}
+                            placeholder="State Farm"
+                            data-testid="input-insurance-company"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="policyNumber">Policy Number</Label>
+                          <Input
+                            id="policyNumber"
+                            value={formData.policyNumber}
+                            onChange={(e) => handleChange("policyNumber", e.target.value)}
+                            placeholder="POL-123456"
+                            data-testid="input-policy-number"
+                          />
+                        </div>
                       </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="policyNumber">Policy Number</Label>
-                        <Input
-                          id="policyNumber"
-                          value={formData.policyNumber}
-                          onChange={(e) => handleChange("policyNumber", e.target.value)}
-                          placeholder="POL-123456"
-                          data-testid="input-policy-number"
-                        />
+                      
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="claimNumber">Claim Number</Label>
+                          <Input
+                            id="claimNumber"
+                            value={formData.claimNumber}
+                            onChange={(e) => handleChange("claimNumber", e.target.value)}
+                            placeholder="CLM-2024-1234"
+                            data-testid="input-claim-number"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="dispatchNumber">Dispatch Number</Label>
+                          <Input
+                            id="dispatchNumber"
+                            value={formData.dispatchNumber}
+                            onChange={(e) => handleChange("dispatchNumber", e.target.value)}
+                            placeholder="DSP-5678"
+                            data-testid="input-dispatch-number"
+                          />
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="claimNumber">Claim Number</Label>
-                        <Input
-                          id="claimNumber"
-                          value={formData.claimNumber}
-                          onChange={(e) => handleChange("claimNumber", e.target.value)}
-                          placeholder="CLM-2024-1234"
-                          data-testid="input-claim-number"
-                        />
+                      
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="dateOfLoss">Date of Loss</Label>
+                          <Input
+                            id="dateOfLoss"
+                            type="date"
+                            value={formData.dateOfLoss}
+                            onChange={(e) => handleChange("dateOfLoss", e.target.value)}
+                            data-testid="input-date-of-loss"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>Cause of Loss</Label>
+                          <Select
+                            value={formData.causeOfLoss || ""}
+                            onValueChange={(value) => handleChange("causeOfLoss", value || undefined)}
+                          >
+                            <SelectTrigger data-testid="select-cause-of-loss">
+                              <SelectValue placeholder="Select cause" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {causesOfLoss.map((cause) => (
+                                <SelectItem key={cause} value={cause}>
+                                  {causeLabels[cause]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="dispatchNumber">Dispatch Number</Label>
-                        <Input
-                          id="dispatchNumber"
-                          value={formData.dispatchNumber}
-                          onChange={(e) => handleChange("dispatchNumber", e.target.value)}
-                          placeholder="DSP-5678"
-                          data-testid="input-dispatch-number"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="dateOfLoss">Date of Loss</Label>
-                        <Input
-                          id="dateOfLoss"
-                          type="date"
-                          value={formData.dateOfLoss}
-                          onChange={(e) => handleChange("dateOfLoss", e.target.value)}
-                          data-testid="input-date-of-loss"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label>Cause of Loss</Label>
-                        <Select
-                          value={formData.causeOfLoss || ""}
-                          onValueChange={(value) => handleChange("causeOfLoss", value || undefined)}
-                        >
-                          <SelectTrigger data-testid="select-cause-of-loss">
-                            <SelectValue placeholder="Select cause" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {causesOfLoss.map((cause) => (
-                              <SelectItem key={cause} value={cause}>
-                                {causeLabels[cause]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </CardContent>
+                    </CardContent>
+                  )}
                 </Card>
 
                 {/* Payment Summary */}
