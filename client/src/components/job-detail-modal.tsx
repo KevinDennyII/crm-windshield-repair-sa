@@ -72,6 +72,8 @@ import {
   MessageSquare,
   Mail,
   Loader2,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
@@ -407,6 +409,34 @@ export function JobDetailModal({
           ? { ...v, parts: v.parts.filter((p) => p.id !== partId) }
           : v
       )
+    );
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: "Copied!",
+        description: `${label} copied to clipboard`,
+      });
+    } catch (err) {
+      toast({
+        title: "Copy failed",
+        description: "Unable to copy to clipboard",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openPartsSearch = () => {
+    const width = 1000;
+    const height = 700;
+    const left = window.screenX + 50;
+    const top = window.screenY + 50;
+    window.open(
+      "https://windshieldrepairsa.autoglasscrm.com/dashboard",
+      "PartsSearch",
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
     );
   };
 
@@ -1094,16 +1124,84 @@ export function JobDetailModal({
                               <div className="border-t pt-4">
                                 <div className="flex items-center justify-between gap-4 mb-4">
                                   <h4 className="font-medium">Parts</h4>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleAddPart(vehicle.id)}
-                                    data-testid={`button-add-part-${vehicle.id}`}
-                                  >
-                                    <Plus className="h-4 w-4 mr-1" />
-                                    Add Part
-                                  </Button>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="default"
+                                      size="sm"
+                                      onClick={openPartsSearch}
+                                      data-testid={`button-search-parts-${vehicle.id}`}
+                                    >
+                                      <ExternalLink className="h-4 w-4 mr-1" />
+                                      Search Parts
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleAddPart(vehicle.id)}
+                                      data-testid={`button-add-part-${vehicle.id}`}
+                                    >
+                                      <Plus className="h-4 w-4 mr-1" />
+                                      Add Part
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {/* Quick Copy Bar for Parts Lookup */}
+                                <div className="bg-muted/50 rounded-md p-3 mb-4 space-y-2">
+                                  <div className="text-xs text-muted-foreground font-medium mb-2">
+                                    Quick Copy for Parts Search:
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {vehicle.vin && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => copyToClipboard(vehicle.vin!, "VIN")}
+                                        className="h-7 text-xs"
+                                        data-testid={`button-copy-vin-${vehicle.id}`}
+                                      >
+                                        <Copy className="h-3 w-3 mr-1" />
+                                        VIN: {vehicle.vin.substring(0, 11)}...
+                                      </Button>
+                                    )}
+                                    {vehicle.licensePlate && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => copyToClipboard(vehicle.licensePlate!, "License Plate")}
+                                        className="h-7 text-xs"
+                                        data-testid={`button-copy-plate-${vehicle.id}`}
+                                      >
+                                        <Copy className="h-3 w-3 mr-1" />
+                                        Plate: {vehicle.licensePlate}
+                                      </Button>
+                                    )}
+                                    {(vehicle.vehicleYear || vehicle.vehicleMake || vehicle.vehicleModel) && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => copyToClipboard(
+                                          `${vehicle.vehicleYear} ${vehicle.vehicleMake} ${vehicle.vehicleModel}`.trim(),
+                                          "Vehicle"
+                                        )}
+                                        className="h-7 text-xs"
+                                        data-testid={`button-copy-vehicle-${vehicle.id}`}
+                                      >
+                                        <Copy className="h-3 w-3 mr-1" />
+                                        {vehicle.vehicleYear} {vehicle.vehicleMake} {vehicle.vehicleModel}
+                                      </Button>
+                                    )}
+                                  </div>
+                                  {!vehicle.vin && !vehicle.licensePlate && !vehicle.vehicleYear && !vehicle.vehicleMake && (
+                                    <div className="text-xs text-muted-foreground italic">
+                                      Fill in vehicle info above to enable quick copy
+                                    </div>
+                                  )}
                                 </div>
 
                                 {vehicle.parts.length === 0 ? (
