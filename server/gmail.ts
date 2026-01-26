@@ -83,9 +83,40 @@ export async function sendEmail(to: string, subject: string, body: string): Prom
 export async function sendReply(threadId: string, to: string, subject: string, body: string): Promise<void> {
   const gmail = await getUncachableGmailClient();
   
+  // Fetch the thread to get the last message's Message-ID for proper threading
+  let inReplyTo = '';
+  let references = '';
+  try {
+    const threadDetail = await gmail.users.threads.get({
+      userId: 'me',
+      id: threadId,
+      format: 'metadata',
+      metadataHeaders: ['Message-ID', 'References'],
+    });
+    
+    const messages = threadDetail.data.messages || [];
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      const headers = lastMessage.payload?.headers || [];
+      const messageIdHeader = headers.find((h: any) => h.name === 'Message-ID');
+      const referencesHeader = headers.find((h: any) => h.name === 'References');
+      
+      if (messageIdHeader?.value) {
+        inReplyTo = messageIdHeader.value;
+        references = referencesHeader?.value 
+          ? `${referencesHeader.value} ${messageIdHeader.value}`
+          : messageIdHeader.value;
+      }
+    }
+  } catch (error) {
+    console.error('Could not fetch thread for reply headers:', error);
+  }
+  
   const emailLines = [
     `To: ${to}`,
     `Subject: ${subject}`,
+    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
+    ...(references ? [`References: ${references}`] : []),
     'Content-Type: text/html; charset=utf-8',
     '',
     body
@@ -185,7 +216,7 @@ export async function getInboxThreads(maxResults: number = 20): Promise<EmailThr
   const threads = threadsResponse.data.threads || [];
   const result: EmailThread[] = [];
   
-  for (const thread of threads.slice(0, 15)) {
+  for (const thread of threads.slice(0, maxResults)) {
     try {
       const threadDetail = await gmail.users.threads.get({
         userId: 'me',
