@@ -10,6 +10,7 @@ import NotFound from "@/pages/not-found";
 import Opportunities from "@/pages/opportunities";
 import Payments from "@/pages/payments";
 import Dashboard from "@/pages/dashboard";
+import Conversations from "@/pages/conversations";
 import { PlaceholderPage } from "@/pages/placeholder-page";
 import {
   Rocket,
@@ -37,13 +38,7 @@ function Router() {
           icon={Rocket}
         />
       </Route>
-      <Route path="/conversations">
-        <PlaceholderPage
-          title="Conversations"
-          description="Manage customer communications"
-          icon={MessageSquare}
-        />
-      </Route>
+      <Route path="/conversations" component={Conversations} />
       <Route path="/calendar">
         <PlaceholderPage
           title="Calendar"

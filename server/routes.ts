@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { insertJobSchema, pipelineStages, paymentHistorySchema } from "@shared/schema";
 import { z } from "zod";
-import { sendEmail } from "./gmail";
+import { sendEmail, sendReply, getInboxThreads } from "./gmail";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Get all jobs
@@ -152,6 +152,43 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error: any) {
       console.error("Failed to send email:", error);
       res.status(500).json({ message: error.message || "Failed to send email" });
+    }
+  });
+
+  // Get email inbox threads
+  app.get("/api/emails/inbox", async (req, res) => {
+    try {
+      const threads = await getInboxThreads(20);
+      res.json(threads);
+    } catch (error: any) {
+      console.error("Failed to fetch emails:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch emails" });
+    }
+  });
+
+  // Reply to email thread
+  app.post("/api/emails/reply", async (req, res) => {
+    try {
+      const replySchema = z.object({
+        threadId: z.string().min(1, "Thread ID is required"),
+        to: z.string().min(1, "Recipient is required"),
+        subject: z.string().min(1, "Subject is required"),
+        body: z.string().min(1, "Message body is required"),
+      });
+      
+      const parsed = replySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid reply data", 
+          errors: parsed.error.errors 
+        });
+      }
+
+      await sendReply(parsed.data.threadId, parsed.data.to, parsed.data.subject, parsed.data.body);
+      res.json({ message: "Reply sent successfully" });
+    } catch (error: any) {
+      console.error("Failed to send reply:", error);
+      res.status(500).json({ message: error.message || "Failed to send reply" });
     }
   });
 }

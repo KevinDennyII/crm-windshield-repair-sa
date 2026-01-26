@@ -216,13 +216,16 @@ export function KanbanBoard({
                               <Phone className="h-3 w-3 flex-shrink-0" />
                               <span className="truncate">{job.phone}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <Car className="h-3 w-3 flex-shrink-0" />
-                              <span className="truncate">
-                                {job.vehicleYear} {job.vehicleMake}{" "}
-                                {job.vehicleModel}
-                              </span>
-                            </div>
+                            {job.vehicles && job.vehicles.length > 0 && (
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Car className="h-3 w-3 flex-shrink-0" />
+                                <span className="truncate">
+                                  {job.vehicles[0].vehicleYear} {job.vehicles[0].vehicleMake}{" "}
+                                  {job.vehicles[0].vehicleModel}
+                                  {job.vehicles.length > 1 && ` (+${job.vehicles.length - 1} more)`}
+                                </span>
+                              </div>
+                            )}
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <DollarSign className="h-3 w-3 flex-shrink-0" />
                               <span>${job.totalDue.toFixed(2)}</span>
@@ -281,10 +284,10 @@ export function KanbanBoard({
                             </div>
                           )}
 
-                          {job.glassPartNumber && (
+                          {job.vehicles && job.vehicles.length > 0 && job.vehicles[0].parts && job.vehicles[0].parts.length > 0 && job.vehicles[0].parts[0].glassPartNumber && (
                             <div className="mt-2">
                               <Badge variant="outline" className="text-xs">
-                                {job.glassPartNumber}
+                                {job.vehicles[0].parts[0].glassPartNumber}
                               </Badge>
                             </div>
                           )}
