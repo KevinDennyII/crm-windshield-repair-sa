@@ -6,6 +6,7 @@ import { z } from "zod";
 import { sendEmail, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured } from "./twilio";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
+import { decodeVIN } from "./vin-decoder";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Get all jobs
@@ -389,6 +390,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error: any) {
       console.error("Failed to delete calendar event:", error);
       res.status(500).json({ message: error.message || "Failed to delete calendar event" });
+    }
+  });
+
+  // VIN Decoder endpoint
+  app.get("/api/vin/decode/:vin", async (req, res) => {
+    try {
+      const vin = req.params.vin;
+      if (!vin || vin.length !== 17) {
+        return res.status(400).json({ message: "VIN must be exactly 17 characters" });
+      }
+      
+      const decoded = await decodeVIN(vin);
+      res.json(decoded);
+    } catch (error: any) {
+      console.error("VIN decode error:", error);
+      res.status(500).json({ message: error.message || "Failed to decode VIN" });
     }
   });
 }

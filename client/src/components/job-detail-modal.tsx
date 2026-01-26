@@ -71,10 +71,12 @@ import {
   Phone,
   MessageSquare,
   Mail,
+  Loader2,
 } from "lucide-react";
 import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 import { EmailComposeModal } from "@/components/email-compose-modal";
+import { useToast } from "@/hooks/use-toast";
 
 interface JobDetailModalProps {
   job: Job | null;
@@ -278,6 +280,8 @@ export function JobDetailModal({
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [receiptPreviewJob, setReceiptPreviewJob] = useState<Job | null>(null);
+  const [decodingVin, setDecodingVin] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const jobTotal = calculateJobTotal(vehicles);
 
@@ -331,6 +335,60 @@ export function JobDetailModal({
     setVehicles((prev) =>
       prev.map((v) => (v.id === vehicleId ? { ...v, [field]: value } : v))
     );
+  };
+
+  const handleDecodeVin = async (vehicleId: string, vin: string) => {
+    if (!vin || vin.length !== 17) {
+      toast({
+        title: "Invalid VIN",
+        description: "VIN must be exactly 17 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDecodingVin(vehicleId);
+    try {
+      const response = await fetch(`/api/vin/decode/${vin}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to decode VIN");
+      }
+      
+      const decoded = await response.json();
+      
+      // Check if we got any valid data
+      if (!decoded.year && !decoded.make && !decoded.model) {
+        throw new Error("No vehicle data found for this VIN");
+      }
+      
+      setVehicles((prev) =>
+        prev.map((v) =>
+          v.id === vehicleId
+            ? {
+                ...v,
+                vehicleYear: decoded.year || v.vehicleYear,
+                vehicleMake: decoded.make || v.vehicleMake,
+                vehicleModel: decoded.model || v.vehicleModel,
+                bodyStyle: decoded.bodyStyle || v.bodyStyle,
+              }
+            : v
+        )
+      );
+      
+      toast({
+        title: "VIN Decoded",
+        description: `${decoded.year} ${decoded.make} ${decoded.model}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "VIN Decode Failed",
+        description: error.message || "Failed to decode VIN",
+        variant: "destructive",
+      });
+    } finally {
+      setDecodingVin(null);
+    }
   };
 
   const handleAddPart = (vehicleId: string) => {
@@ -915,9 +973,15 @@ export function JobDetailModal({
                                         variant="outline"
                                         size="icon"
                                         title="Decode VIN"
+                                        onClick={() => handleDecodeVin(vehicle.id, vehicle.vin || "")}
+                                        disabled={decodingVin === vehicle.id || !vehicle.vin || vehicle.vin.length !== 17}
                                         data-testid={`button-decode-vin-${vehicle.id}`}
                                       >
-                                        <Search className="h-4 w-4" />
+                                        {decodingVin === vehicle.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Search className="h-4 w-4" />
+                                        )}
                                       </Button>
                                     </div>
                                   </div>
