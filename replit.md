@@ -47,8 +47,27 @@ Key server files:
 ### Shared Code
 The `shared/` directory contains code used by both frontend and backend:
 - `schema.ts` - Database schema definitions, TypeScript types, and Zod validation schemas
-- Pipeline stages: quote → glass_ordered → glass_arrived → scheduled → paid_completed
+- Pipeline stages: quote → glass_ordered → glass_arrived → scheduled → in_progress → paid_completed
 - Payment statuses: pending, partial, paid
+
+### Data Model (Multi-Vehicle/Multi-Part Support)
+The application supports fleet companies with multiple vehicles per job, each with multiple parts:
+
+**Job Structure:**
+- Job → vehicles[] → parts[] (hierarchical)
+- Customer info at job level (contact for the service booking)
+- Insurance info at job level (claim covers all vehicles)
+- Payment history at job level
+- Totals calculated from sum of all part totals
+
+**Part Pricing Calculator (per part):**
+- Parts Subtotal = (Part Price + Markup + Accessories + Urethane) × (1 + Tax%)
+- Part Total = ceil((Parts Subtotal + Labor + Calibration + Mobile Fee) × 1.035)
+- Job Total = Sum of all Part Totals across all vehicles
+
+**Sample Data Examples:**
+- Chen Auto Sales: Fleet job with 2 Ford F-150s (multiple vehicles)
+- Emily Rodriguez: Single vehicle with windshield + door glass (multiple parts)
 
 ### Build Process
 - **Development**: `npm run dev` runs tsx to execute TypeScript directly with Vite HMR
