@@ -111,6 +111,15 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - Automatically links SMS conversations to jobs when phone number matches customer
 - API endpoints: GET /api/sms/status, GET /api/sms/conversations, GET /api/sms/messages/:phoneNumber, POST /api/sms/send, POST /api/jobs/:id/sms
 
+### Calendar Integration
+- **Google Calendar API**: Connected via Replit's Google Calendar connector
+- **server/calendar.ts**: Calendar API integration for creating/updating/deleting events
+- Calendar page shows visual monthly view with all scheduled jobs
+- Auto-creates Google Calendar event when job stage changes to "scheduled" (requires installDate + installTime)
+- Event title format: `{JobNumber} {StartTime}-{EndTime} {Year} {Make} {Model}`
+- Event description includes: lead source, customer info, VIN, service details, glass type, part#, cost, supplier, totals, payment notes, booked/installed by
+- API endpoints: GET /api/calendar/status, GET /api/calendar/events, POST /api/jobs/:id/calendar, DELETE /api/jobs/:id/calendar
+
 ### Social Integration (Pending)
 - Facebook/Instagram tabs are placeholders pending Meta Business API setup
 
