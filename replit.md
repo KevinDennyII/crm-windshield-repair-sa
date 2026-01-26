@@ -34,6 +34,7 @@ Key server files:
 - `server/index.ts` - Express app setup and middleware configuration
 - `server/routes.ts` - API route definitions for job CRUD operations
 - `server/storage.ts` - Data access layer with in-memory storage (interface ready for database)
+- `server/gmail.ts` - Gmail API integration for sending emails to customers
 - `server/vite.ts` - Development server with Vite HMR integration
 - `server/static.ts` - Production static file serving
 
@@ -95,6 +96,11 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - **React Hook Form**: Form state management
 - **@hookform/resolvers**: Zod resolver for form validation
 - **Zod**: Schema validation library
+
+### Email Integration
+- **Gmail API**: Connected via Replit's Google Mail connector (windshieldrepairsa@gmail.com)
+- **googleapis**: Google API client library for sending emails
+- Enables direct customer communication from job cards and job detail modal
 
 ### Additional Services (bundled but not actively used)
 - **Stripe**: Payment processing (included in build allowlist)
