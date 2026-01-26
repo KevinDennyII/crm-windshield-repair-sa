@@ -174,6 +174,9 @@ export const jobSchema = z.object({
   // Notes
   installNotes: z.string().optional(),
   
+  // Calibration decline tracking
+  calibrationDeclined: z.boolean().default(false),
+  
   createdAt: z.string().optional(),
 });
 

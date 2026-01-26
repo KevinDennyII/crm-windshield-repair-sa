@@ -273,6 +273,34 @@ function addSignatureLine(doc: jsPDF, yPos: number): number {
   return yPos + 15;
 }
 
+function addCalibrationDeclinedDisclaimer(doc: jsPDF, yPos: number): number {
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(180, 0, 0);
+  doc.text('CALIBRATION DECLINED ACKNOWLEDGMENT', 20, yPos);
+  yPos += 6;
+  
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(9);
+  
+  const disclaimer = `The customer has declined ADAS (Advanced Driver Assistance System) calibration service following windshield replacement. Customer acknowledges and understands that:
+
+1. Modern vehicles equipped with ADAS features (lane departure warning, forward collision warning, automatic emergency braking, etc.) require calibration after windshield replacement.
+
+2. Failure to calibrate these systems may result in improper function of safety features, potentially causing accidents, injuries, or property damage.
+
+3. Windshield Repair SA is not liable for any accidents, injuries, damages, or malfunctions of ADAS systems resulting from the customer's decision to decline calibration service.
+
+4. By declining calibration, the customer assumes full responsibility for any consequences related to uncalibrated ADAS systems.`;
+
+  const splitDisclaimer = doc.splitTextToSize(disclaimer, 170);
+  doc.text(splitDisclaimer, 20, yPos);
+  yPos += splitDisclaimer.length * 3 + 10;
+  
+  return yPos;
+}
+
 function addDealerWarranty(doc: jsPDF, yPos: number): number {
   return yPos;
 }
@@ -398,6 +426,15 @@ export async function generateReceiptPreview(job: Job): Promise<ReceiptResult> {
   }
   
   yPos += 10;
+  
+  // Add calibration declined disclaimer if applicable
+  if (job.calibrationDeclined && receiptType === 'windshield_replacement') {
+    if (yPos > 180) {
+      doc.addPage();
+      yPos = 20;
+    }
+    yPos = addCalibrationDeclinedDisclaimer(doc, yPos);
+  }
   
   switch (receiptType) {
     case 'dealer':
