@@ -150,7 +150,12 @@ export const jobSchema = z.object({
   installer: z.string().optional(),
   installDate: z.string().optional(),
   installTime: z.string().optional(),
+  installEndTime: z.string().optional(),
   jobDuration: z.string().optional(),
+  bookedBy: z.string().optional(),
+  installedBy: z.string().optional(),
+  googleCalendarEventId: z.string().optional(),
+  leadSource: z.string().optional(),
   
   // Insurance (applies to entire job/claim)
   claimNumber: z.string().optional(),

@@ -11,11 +11,11 @@ import Opportunities from "@/pages/opportunities";
 import Payments from "@/pages/payments";
 import Dashboard from "@/pages/dashboard";
 import Conversations from "@/pages/conversations";
+import CalendarPage from "@/pages/calendar";
 import { PlaceholderPage } from "@/pages/placeholder-page";
 import {
   Rocket,
   MessageSquare,
-  Calendar,
   Users,
   Megaphone,
   Zap,
@@ -39,13 +39,7 @@ function Router() {
         />
       </Route>
       <Route path="/conversations" component={Conversations} />
-      <Route path="/calendar">
-        <PlaceholderPage
-          title="Calendar"
-          description="Schedule and manage installations"
-          icon={Calendar}
-        />
-      </Route>
+      <Route path="/calendar" component={CalendarPage} />
       <Route path="/contacts">
         <PlaceholderPage
           title="Contacts"

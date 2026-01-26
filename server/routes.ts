@@ -5,6 +5,7 @@ import { insertJobSchema, pipelineStages, paymentHistorySchema } from "@shared/s
 import { z } from "zod";
 import { sendEmail, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured } from "./twilio";
+import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Get all jobs
@@ -80,10 +81,35 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
           errors: parsed.error.errors 
         });
       }
+      
+      const currentJob = await storage.getJob(req.params.id);
+      if (!currentJob) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
       const job = await storage.updateJobStage(req.params.id, parsed.data.pipelineStage);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
+      
+      // Auto-create Google Calendar event when stage changes to "scheduled"
+      if (parsed.data.pipelineStage === 'scheduled' && 
+          currentJob.pipelineStage !== 'scheduled' &&
+          job.installDate && job.installTime) {
+        try {
+          const configured = await isCalendarConfigured();
+          if (configured) {
+            const eventId = await createCalendarEvent(job);
+            if (eventId) {
+              await storage.updateJob(req.params.id, { googleCalendarEventId: eventId });
+              job.googleCalendarEventId = eventId;
+            }
+          }
+        } catch (calendarError: any) {
+          console.error("Failed to create calendar event:", calendarError.message);
+        }
+      }
+      
       res.json(job);
     } catch (error) {
       res.status(500).json({ message: "Failed to update job stage" });
@@ -287,6 +313,82 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error: any) {
       console.error("Failed to send SMS:", error);
       res.status(500).json({ message: error.message || "Failed to send SMS" });
+    }
+  });
+
+  // Calendar endpoints
+  app.get("/api/calendar/status", async (req, res) => {
+    try {
+      const configured = await isCalendarConfigured();
+      res.json({ configured });
+    } catch (error) {
+      res.json({ configured: false });
+    }
+  });
+
+  app.get("/api/calendar/events", async (req, res) => {
+    try {
+      const { start, end } = req.query;
+      if (!start || !end) {
+        return res.status(400).json({ message: "Start and end dates are required" });
+      }
+      const events = await getCalendarEvents(start as string, end as string);
+      res.json(events);
+    } catch (error: any) {
+      console.error("Failed to fetch calendar events:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch calendar events" });
+    }
+  });
+
+  app.post("/api/jobs/:id/calendar", async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (!job.installDate || !job.installTime) {
+        return res.status(400).json({ message: "Job must have install date and time" });
+      }
+
+      const configured = await isCalendarConfigured();
+      if (!configured) {
+        return res.status(400).json({ message: "Google Calendar is not connected" });
+      }
+
+      if (job.googleCalendarEventId) {
+        await updateCalendarEvent(job.googleCalendarEventId, job);
+        res.json({ message: "Calendar event updated", eventId: job.googleCalendarEventId });
+      } else {
+        const eventId = await createCalendarEvent(job);
+        if (eventId) {
+          await storage.updateJob(req.params.id, { googleCalendarEventId: eventId });
+        }
+        res.json({ message: "Calendar event created", eventId });
+      }
+    } catch (error: any) {
+      console.error("Failed to sync calendar event:", error);
+      res.status(500).json({ message: error.message || "Failed to sync calendar event" });
+    }
+  });
+
+  app.delete("/api/jobs/:id/calendar", async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (!job.googleCalendarEventId) {
+        return res.status(400).json({ message: "Job has no calendar event" });
+      }
+
+      await deleteCalendarEvent(job.googleCalendarEventId);
+      await storage.updateJob(req.params.id, { googleCalendarEventId: undefined });
+      res.json({ message: "Calendar event deleted" });
+    } catch (error: any) {
+      console.error("Failed to delete calendar event:", error);
+      res.status(500).json({ message: error.message || "Failed to delete calendar event" });
     }
   });
 }
