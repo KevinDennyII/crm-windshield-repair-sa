@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import type { Job, Vehicle, Part, JobType, CustomerType } from '@shared/schema';
+import logoImage from '@assets/WhatsApp_Image_2026-01-25_at_7.43.18_PM_1769391868741.jpeg';
 
 export type ReceiptType = 'dealer' | 'fleet' | 'rock_chip_repair' | 'windshield_replacement' | 'other_glass_replacement';
 
@@ -68,19 +69,47 @@ function formatCurrency(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-function addCompanyHeader(doc: jsPDF, yPos: number): number {
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(COMPANY_INFO.name, 20, yPos);
+async function loadImageAsBase64(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/jpeg'));
+      } else {
+        reject(new Error('Could not get canvas context'));
+      }
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = url;
+  });
+}
+
+async function addCompanyHeader(doc: jsPDF, yPos: number): Promise<number> {
+  try {
+    const logoData = await loadImageAsBase64(logoImage);
+    doc.addImage(logoData, 'JPEG', 20, yPos - 5, 60, 20);
+    yPos += 18;
+  } catch (e) {
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(COMPANY_INFO.name, 20, yPos);
+    yPos += 6;
+  }
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(COMPANY_INFO.address, 20, yPos + 6);
-  doc.text(COMPANY_INFO.cityStateZip, 20, yPos + 11);
-  doc.text(COMPANY_INFO.email, 20, yPos + 16);
-  doc.text(COMPANY_INFO.phone, 20, yPos + 21);
+  doc.text(COMPANY_INFO.address, 20, yPos);
+  doc.text(COMPANY_INFO.cityStateZip, 20, yPos + 5);
+  doc.text(COMPANY_INFO.email, 20, yPos + 10);
+  doc.text(COMPANY_INFO.phone, 20, yPos + 15);
   
-  return yPos + 30;
+  return yPos + 24;
 }
 
 function addInvoiceHeader(doc: jsPDF, job: Job, yPos: number): number {
@@ -223,6 +252,27 @@ function addPaymentInfo(doc: jsPDF, job: Job, yPos: number): number {
   return yPos + splitNotice.length * 4 + 5;
 }
 
+function addSignatureLine(doc: jsPDF, yPos: number): number {
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('CUSTOMER ACKNOWLEDGMENT', 20, yPos);
+  yPos += 8;
+  
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('By signing below, I acknowledge that I have read and agree to the warranty terms stated above.', 20, yPos);
+  yPos += 12;
+  
+  doc.setDrawColor(100);
+  doc.line(20, yPos, 100, yPos);
+  doc.text('Customer Signature', 20, yPos + 5);
+  
+  doc.line(120, yPos, 180, yPos);
+  doc.text('Date', 120, yPos + 5);
+  
+  return yPos + 15;
+}
+
 function addDealerWarranty(doc: jsPDF, yPos: number): number {
   return yPos;
 }
@@ -320,13 +370,19 @@ function addOtherGlassWarranty(doc: jsPDF, yPos: number): number {
   return addFleetWarranty(doc, yPos);
 }
 
-export function generateReceipt(job: Job): void {
+export interface ReceiptResult {
+  blobUrl: string;
+  filename: string;
+}
+
+export async function generateReceiptPreview(job: Job): Promise<ReceiptResult> {
   const receiptType = determineReceiptType(job);
   const doc = new jsPDF();
+  const isRetailCustomer = !job.isBusiness;
   
   let yPos = 20;
   
-  yPos = addCompanyHeader(doc, yPos);
+  yPos = await addCompanyHeader(doc, yPos);
   yPos = addInvoiceHeader(doc, job, yPos - 10);
   yPos = addCustomerInfo(doc, job, yPos + 5);
   
@@ -361,6 +417,14 @@ export function generateReceipt(job: Job): void {
       break;
   }
   
+  if (isRetailCustomer && receiptType !== 'dealer') {
+    if (yPos > 250) {
+      doc.addPage();
+      yPos = 20;
+    }
+    yPos = addSignatureLine(doc, yPos + 10);
+  }
+  
   const customerName = job.isBusiness && job.businessName 
     ? job.businessName.replace(/\s+/g, '_')
     : `${job.lastName}_${job.firstName}`;
@@ -368,5 +432,24 @@ export function generateReceipt(job: Job): void {
   const invoiceNum = `0126-${job.jobNumber.slice(-4)}`;
   const filename = `${customerName}_${dateStr}_${invoiceNum}.pdf`;
   
-  doc.save(filename);
+  const blob = doc.output('blob');
+  const blobUrl = URL.createObjectURL(blob);
+  
+  return { blobUrl, filename };
+}
+
+export function downloadReceipt(blobUrl: string, filename: string): void {
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+export function generateReceipt(job: Job): void {
+  generateReceiptPreview(job).then(({ blobUrl, filename }) => {
+    downloadReceipt(blobUrl, filename);
+    URL.revokeObjectURL(blobUrl);
+  });
 }

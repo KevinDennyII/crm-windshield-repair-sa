@@ -66,7 +66,8 @@ import {
   Trash2,
   Download,
 } from "lucide-react";
-import { generateReceipt, determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
+import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
+import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 
 interface JobDetailModalProps {
   job: Job | null;
@@ -263,6 +264,8 @@ export function JobDetailModal({
   });
 
   const [showInsurance, setShowInsurance] = useState(false);
+  const [showReceiptPreview, setShowReceiptPreview] = useState(false);
+  const [receiptPreviewJob, setReceiptPreviewJob] = useState<Job | null>(null);
 
   const jobTotal = calculateJobTotal(vehicles);
 
@@ -1666,12 +1669,13 @@ export function JobDetailModal({
                         totalDue: jobTotal,
                         balanceDue: Math.max(0, jobTotal - (formData.amountPaid || 0)),
                       };
-                      generateReceipt(updatedJob);
+                      setReceiptPreviewJob(updatedJob);
+                      setShowReceiptPreview(true);
                     }}
                     data-testid="button-download-receipt"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Download Receipt
+                    Preview Receipt
                   </Button>
                 </>
               )}
@@ -1692,6 +1696,15 @@ export function JobDetailModal({
           </div>
         </form>
       </DialogContent>
+
+      <ReceiptPreviewModal
+        job={receiptPreviewJob}
+        isOpen={showReceiptPreview}
+        onClose={() => {
+          setShowReceiptPreview(false);
+          setReceiptPreviewJob(null);
+        }}
+      />
     </Dialog>
   );
 }
