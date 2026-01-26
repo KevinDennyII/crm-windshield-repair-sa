@@ -120,6 +120,13 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - Event description includes: lead source, customer info, VIN, service details, glass type, part#, cost, supplier, totals, payment notes, booked/installed by
 - API endpoints: GET /api/calendar/status, GET /api/calendar/events, POST /api/jobs/:id/calendar, DELETE /api/jobs/:id/calendar
 
+### Address Autocomplete
+- **Google Places API**: Address autocomplete for customer address fields (requires GOOGLE_MAPS_API_KEY secret)
+- **server/places.ts**: Places API integration for autocomplete and place details
+- Auto-suggests addresses as user types in the Street Address field
+- Auto-fills city, state, and zip code when an address is selected
+- API endpoints: GET /api/places/status, GET /api/places/autocomplete, GET /api/places/details
+
 ### Social Integration (Pending)
 - Facebook/Instagram tabs are placeholders pending Meta Business API setup
 

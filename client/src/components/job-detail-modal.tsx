@@ -9,6 +9,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -713,11 +714,16 @@ export function JobDetailModal({
 
                     <div className="grid gap-2">
                       <Label htmlFor="streetAddress">Street Address</Label>
-                      <Input
-                        id="streetAddress"
-                        value={formData.streetAddress}
-                        onChange={(e) => handleChange("streetAddress", e.target.value)}
-                        placeholder="123 Main Street"
+                      <AddressAutocomplete
+                        value={formData.streetAddress || ""}
+                        onChange={(value) => handleChange("streetAddress", value)}
+                        onAddressSelect={(address) => {
+                          handleChange("streetAddress", address.street);
+                          handleChange("city", address.city);
+                          handleChange("state", address.state);
+                          handleChange("zipCode", address.zip);
+                        }}
+                        placeholder="Start typing an address..."
                         data-testid="input-street-address"
                       />
                     </div>

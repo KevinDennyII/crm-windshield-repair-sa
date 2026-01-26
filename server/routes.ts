@@ -7,6 +7,7 @@ import { sendEmail, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured } from "./twilio";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
 import { decodeVIN } from "./vin-decoder";
+import { isPlacesConfigured, getAutocomplete, getPlaceDetails } from "./places";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Get all jobs
@@ -406,6 +407,43 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error: any) {
       console.error("VIN decode error:", error);
       res.status(500).json({ message: error.message || "Failed to decode VIN" });
+    }
+  });
+
+  // Google Places API - Status
+  app.get("/api/places/status", (req, res) => {
+    res.json({ configured: isPlacesConfigured() });
+  });
+
+  // Google Places API - Autocomplete
+  app.get("/api/places/autocomplete", async (req, res) => {
+    try {
+      const input = req.query.input as string;
+      if (!input || input.length < 3) {
+        return res.json({ predictions: [] });
+      }
+      
+      const result = await getAutocomplete(input);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Places autocomplete error:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch address predictions" });
+    }
+  });
+
+  // Google Places API - Place Details
+  app.get("/api/places/details", async (req, res) => {
+    try {
+      const placeId = req.query.place_id as string;
+      if (!placeId) {
+        return res.status(400).json({ message: "place_id is required" });
+      }
+      
+      const result = await getPlaceDetails(placeId);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Place details error:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch place details" });
     }
   });
 }
