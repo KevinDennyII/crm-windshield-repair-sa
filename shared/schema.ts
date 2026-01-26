@@ -72,6 +72,53 @@ export const paymentHistorySchema = z.object({
 
 export type PaymentHistoryEntry = z.infer<typeof paymentHistorySchema>;
 
+// Part schema - each part has its own pricing calculator
+export const partSchema = z.object({
+  id: z.string(),
+  jobType: z.enum(jobTypes).default("windshield_replacement"),
+  glassPartNumber: z.string().optional(),
+  isAftermarket: z.boolean().default(true),
+  distributor: z.string().optional(),
+  glassOrderedDate: z.string().optional(),
+  glassArrivalDate: z.string().optional(),
+  calibrationType: z.enum(calibrationTypes).default("none"),
+  calibrationLocation: z.string().optional(),
+  urethaneKit: z.string().optional(),
+  
+  // Part Pricing Calculator fields
+  partPrice: z.number().default(0),
+  markup: z.number().default(0),
+  accessoriesPrice: z.number().default(0),
+  urethanePrice: z.number().default(15),
+  salesTaxPercent: z.number().default(8.25),
+  laborPrice: z.number().default(0),
+  calibrationPrice: z.number().default(0),
+  mobileFee: z.number().default(0),
+  
+  // Calculated totals for this part
+  partsSubtotal: z.number().default(0),
+  partTotal: z.number().default(0),
+});
+
+export type Part = z.infer<typeof partSchema>;
+
+// Vehicle schema - each vehicle has multiple parts
+export const vehicleSchema = z.object({
+  id: z.string(),
+  vin: z.string().optional(),
+  licensePlate: z.string().optional(),
+  mileage: z.string().optional(),
+  vehicleYear: z.string().default(""),
+  vehicleMake: z.string().default(""),
+  vehicleModel: z.string().default(""),
+  bodyStyle: z.string().optional(),
+  nagsCarId: z.string().optional(),
+  vehicleColor: z.string().optional(),
+  parts: z.array(partSchema).default([]),
+});
+
+export type Vehicle = z.infer<typeof vehicleSchema>;
+
 export const jobSchema = z.object({
   id: z.string(),
   jobNumber: z.string(),
@@ -88,19 +135,10 @@ export const jobSchema = z.object({
   state: z.string().optional(),
   zipCode: z.string().optional(),
   
-  // Vehicle Info
-  vin: z.string().optional(),
-  licensePlate: z.string().optional(),
-  mileage: z.string().optional(),
-  vehicleYear: z.string().min(1, "Year is required"),
-  vehicleMake: z.string().min(1, "Make is required"),
-  vehicleModel: z.string().min(1, "Model is required"),
-  bodyStyle: z.string().optional(),
-  nagsCarId: z.string().optional(),
-  vehicleColor: z.string().optional(),
+  // Vehicles array (each vehicle has parts)
+  vehicles: z.array(vehicleSchema).default([]),
   
-  // Job Details
-  jobType: z.enum(jobTypes).default("windshield_replacement"),
+  // Job Details (applies to entire job)
   pipelineStage: z.enum(pipelineStages).default("quote"),
   repairLocation: z.enum(repairLocations).default("in_shop"),
   
@@ -110,24 +148,7 @@ export const jobSchema = z.object({
   installTime: z.string().optional(),
   jobDuration: z.string().optional(),
   
-  // Parts - Glass
-  glassPartNumber: z.string().optional(),
-  isAftermarket: z.boolean().default(true),
-  nagsListPrice: z.number().default(0),
-  laborHours: z.number().default(1),
-  laborRate: z.number().default(50),
-  
-  // Additional Parts
-  calibrationType: z.enum(calibrationTypes).default("none"),
-  calibrationLocation: z.string().optional(),
-  calibrationPrice: z.number().default(0),
-  distributor: z.string().optional(),
-  glassOrderedDate: z.string().optional(),
-  glassArrivalDate: z.string().optional(),
-  urethaneKit: z.string().optional(),
-  urethaneKitPrice: z.number().default(0),
-  
-  // Insurance
+  // Insurance (applies to entire job/claim)
   claimNumber: z.string().optional(),
   dispatchNumber: z.string().optional(),
   policyNumber: z.string().optional(),
@@ -135,11 +156,8 @@ export const jobSchema = z.object({
   causeOfLoss: z.enum(causesOfLoss).optional(),
   insuranceCompany: z.string().optional(),
   
-  // Payments
-  glassPrice: z.number().default(0),
-  laborTotal: z.number().default(0),
+  // Job-level totals (sum of all parts across all vehicles)
   subtotal: z.number().default(0),
-  taxRate: z.number().default(0),
   taxAmount: z.number().default(0),
   totalDue: z.number().min(0, "Total must be positive").default(0),
   deductible: z.number().min(0).default(0),

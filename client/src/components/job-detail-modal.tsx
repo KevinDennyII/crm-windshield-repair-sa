@@ -30,8 +30,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   type Job,
   type InsertJob,
+  type Vehicle,
+  type Part,
   pipelineStages,
   paymentStatuses,
   jobTypes,
@@ -52,6 +59,9 @@ import {
   FileText,
   Search,
   Plus,
+  ChevronDown,
+  ChevronRight,
+  Trash2,
 } from "lucide-react";
 
 interface JobDetailModalProps {
@@ -125,6 +135,67 @@ const durationOptions = [
   { value: "4", label: "4 hours" },
 ];
 
+function createDefaultPart(): Part {
+  return {
+    id: crypto.randomUUID(),
+    jobType: "windshield_replacement",
+    glassPartNumber: "",
+    isAftermarket: true,
+    distributor: "",
+    glassOrderedDate: "",
+    glassArrivalDate: "",
+    calibrationType: "none",
+    calibrationLocation: "",
+    urethaneKit: "",
+    partPrice: 0,
+    markup: 0,
+    accessoriesPrice: 0,
+    urethanePrice: 15,
+    salesTaxPercent: 8.25,
+    laborPrice: 0,
+    calibrationPrice: 0,
+    mobileFee: 0,
+    partsSubtotal: 0,
+    partTotal: 0,
+  };
+}
+
+function createDefaultVehicle(): Vehicle {
+  return {
+    id: crypto.randomUUID(),
+    vin: "",
+    licensePlate: "",
+    mileage: "",
+    vehicleYear: "",
+    vehicleMake: "",
+    vehicleModel: "",
+    bodyStyle: "",
+    nagsCarId: "",
+    vehicleColor: "",
+    parts: [],
+  };
+}
+
+function calculatePartTotals(part: Part): { partsSubtotal: number; partTotal: number } {
+  const partsSubtotal = 
+    (part.partPrice + part.markup + part.accessoriesPrice + part.urethanePrice) * 
+    (1 + part.salesTaxPercent / 100);
+  const subtotalBeforeFee = partsSubtotal + part.laborPrice + part.calibrationPrice + part.mobileFee;
+  const partTotal = Math.ceil(subtotalBeforeFee * 1.035);
+  return { partsSubtotal, partTotal };
+}
+
+function calculateJobTotal(vehicles: Vehicle[]): number {
+  let total = 0;
+  for (const vehicle of vehicles) {
+    for (const part of vehicle.parts) {
+      const { partTotal } = calculatePartTotals(part);
+      total += partTotal;
+    }
+  }
+  return total;
+}
+
 const getDefaultFormData = (): InsertJob => ({
   isBusiness: false,
   businessName: "",
@@ -136,45 +207,20 @@ const getDefaultFormData = (): InsertJob => ({
   city: "",
   state: "",
   zipCode: "",
-  vin: "",
-  licensePlate: "",
-  mileage: "",
-  vehicleYear: "",
-  vehicleMake: "",
-  vehicleModel: "",
-  bodyStyle: "",
-  nagsCarId: "",
-  vehicleColor: "",
-  jobType: "windshield_replacement",
+  vehicles: [],
   pipelineStage: "quote",
   repairLocation: "in_shop",
   installer: "",
   installDate: "",
   installTime: "",
   jobDuration: "2",
-  glassPartNumber: "",
-  isAftermarket: true,
-  nagsListPrice: 0,
-  laborHours: 1.5,
-  laborRate: 50,
-  calibrationType: "none",
-  calibrationLocation: "",
-  calibrationPrice: 0,
-  distributor: "",
-  glassOrderedDate: "",
-  glassArrivalDate: "",
-  urethaneKit: "",
-  urethaneKitPrice: 0,
   claimNumber: "",
   dispatchNumber: "",
   policyNumber: "",
   dateOfLoss: "",
   causeOfLoss: undefined,
   insuranceCompany: "",
-  glassPrice: 0,
-  laborTotal: 0,
   subtotal: 0,
-  taxRate: 0,
   taxAmount: 0,
   totalDue: 0,
   deductible: 0,
@@ -196,6 +242,8 @@ export function JobDetailModal({
   isNew = false,
 }: JobDetailModalProps) {
   const [formData, setFormData] = useState<InsertJob>(getDefaultFormData());
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [expandedVehicles, setExpandedVehicles] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState("customer");
   const [newPayment, setNewPayment] = useState({
     source: "cash" as const,
@@ -203,83 +251,25 @@ export function JobDetailModal({
     notes: "",
   });
 
-  // Insurance section toggle state
   const [showInsurance, setShowInsurance] = useState(false);
 
-  // Part Pricing Calculator state
-  const [calculator, setCalculator] = useState({
-    partPrice: 0,
-    markup: 0,
-    accessoriesPrice: 0,
-    urethanePrice: 15,
-    salesTaxPercent: 8.25,
-    laborPrice: 0,
-    calibrationPrice: 0,
-    mobileFee: 0,
-  });
-
-  // Calculate Parts Subtotal (Part Price + Markup + Accessories + Urethane) * (1 + Sales Tax %)
-  const partsSubtotal = 
-    (calculator.partPrice + calculator.markup + calculator.accessoriesPrice + calculator.urethanePrice) * 
-    (1 + calculator.salesTaxPercent / 100);
-
-  // Calculate Grand Total: Parts Subtotal + Labor + Calibration + Mobile Fee + 3.5% processing fee, rounded up
-  const subtotalBeforeFee = partsSubtotal + calculator.laborPrice + calculator.calibrationPrice + calculator.mobileFee;
-  const processingFee = subtotalBeforeFee * 0.035;
-  const grandTotalRaw = subtotalBeforeFee + processingFee;
-  const grandTotal = Math.ceil(grandTotalRaw);
-
-  const handleCalculatorChange = (field: keyof typeof calculator, value: number) => {
-    setCalculator(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleRecalculate = () => {
-    // Update formData with calculated values
-    setFormData(prev => ({
-      ...prev,
-      glassPrice: calculator.partPrice + calculator.markup,
-      calibrationPrice: calculator.calibrationPrice,
-      laborTotal: calculator.laborPrice,
-      urethaneKitPrice: calculator.urethanePrice,
-      taxRate: calculator.salesTaxPercent,
-      taxAmount: partsSubtotal - (calculator.partPrice + calculator.markup + calculator.accessoriesPrice + calculator.urethanePrice),
-      subtotal: subtotalBeforeFee,
-      totalDue: grandTotal,
-      balanceDue: grandTotal - (prev.amountPaid || 0),
-    }));
-  };
+  const jobTotal = calculateJobTotal(vehicles);
 
   useEffect(() => {
     if (job) {
-      const { id, jobNumber, createdAt, ...jobData } = job;
-      setFormData(jobData);
-      // Initialize calculator from existing job data
-      setCalculator({
-        partPrice: job.glassPrice || 0,
-        markup: 0,
-        accessoriesPrice: 0,
-        urethanePrice: job.urethaneKitPrice || 15,
-        salesTaxPercent: job.taxRate || 8.25,
-        laborPrice: job.laborTotal || 0,
-        calibrationPrice: job.calibrationPrice || 0,
-        mobileFee: 0,
-      });
+      const { id, jobNumber, createdAt, vehicles: jobVehicles, ...jobData } = job;
+      setFormData({ ...jobData, vehicles: jobVehicles || [] });
+      setVehicles(jobVehicles || []);
+      if (jobVehicles && jobVehicles.length > 0) {
+        setExpandedVehicles(new Set([jobVehicles[0].id]));
+      }
     } else {
       setFormData(getDefaultFormData());
-      setCalculator({
-        partPrice: 0,
-        markup: 0,
-        accessoriesPrice: 0,
-        urethanePrice: 15,
-        salesTaxPercent: 8.25,
-        laborPrice: 0,
-        calibrationPrice: 0,
-        mobileFee: 0,
-      });
+      setVehicles([]);
+      setExpandedVehicles(new Set());
     }
     setActiveTab("customer");
     setNewPayment({ source: "cash", amount: 0, notes: "" });
-    // Auto-enable insurance toggle if job has insurance data
     if (job) {
       const hasInsuranceData = !!(job.insuranceCompany || job.claimNumber || job.policyNumber || job.dispatchNumber || job.dateOfLoss);
       setShowInsurance(hasInsuranceData);
@@ -292,20 +282,95 @@ export function JobDetailModal({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleAddVehicle = () => {
+    const newVehicle = createDefaultVehicle();
+    setVehicles((prev) => [...prev, newVehicle]);
+    setExpandedVehicles((prev) => {
+      const next = new Set(prev);
+      next.add(newVehicle.id);
+      return next;
+    });
+  };
+
+  const handleRemoveVehicle = (vehicleId: string) => {
+    setVehicles((prev) => prev.filter((v) => v.id !== vehicleId));
+    setExpandedVehicles((prev) => {
+      const next = new Set(prev);
+      next.delete(vehicleId);
+      return next;
+    });
+  };
+
+  const handleVehicleChange = (vehicleId: string, field: keyof Vehicle, value: string) => {
+    setVehicles((prev) =>
+      prev.map((v) => (v.id === vehicleId ? { ...v, [field]: value } : v))
+    );
+  };
+
+  const handleAddPart = (vehicleId: string) => {
+    const newPart = createDefaultPart();
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.id === vehicleId ? { ...v, parts: [...v.parts, newPart] } : v
+      )
+    );
+  };
+
+  const handleRemovePart = (vehicleId: string, partId: string) => {
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.id === vehicleId
+          ? { ...v, parts: v.parts.filter((p) => p.id !== partId) }
+          : v
+      )
+    );
+  };
+
+  const handlePartChange = (
+    vehicleId: string,
+    partId: string,
+    field: keyof Part,
+    value: string | number | boolean
+  ) => {
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.id === vehicleId
+          ? {
+              ...v,
+              parts: v.parts.map((p) => {
+                if (p.id === partId) {
+                  const updatedPart = { ...p, [field]: value };
+                  const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                  return { ...updatedPart, partsSubtotal, partTotal };
+                }
+                return p;
+              }),
+            }
+          : v
+      )
+    );
+  };
+
+  const toggleVehicleExpanded = (vehicleId: string) => {
+    setExpandedVehicles((prev) => {
+      const next = new Set(prev);
+      if (next.has(vehicleId)) {
+        next.delete(vehicleId);
+      } else {
+        next.add(vehicleId);
+      }
+      return next;
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Apply calculator values to formData before saving
-    const updatedFormData = {
+    const total = calculateJobTotal(vehicles);
+    const updatedFormData: InsertJob = {
       ...formData,
-      glassPrice: calculator.partPrice + calculator.markup,
-      calibrationPrice: calculator.calibrationPrice,
-      laborTotal: calculator.laborPrice,
-      urethaneKitPrice: calculator.urethanePrice,
-      taxRate: calculator.salesTaxPercent,
-      taxAmount: partsSubtotal - (calculator.partPrice + calculator.markup + calculator.accessoriesPrice + calculator.urethanePrice),
-      subtotal: subtotalBeforeFee,
-      totalDue: grandTotal,
-      balanceDue: Math.max(0, grandTotal - (formData.amountPaid || 0)),
+      vehicles,
+      totalDue: total,
+      balanceDue: Math.max(0, total - (formData.amountPaid || 0)),
     };
     onSave(updatedFormData);
   };
@@ -314,7 +379,7 @@ export function JobDetailModal({
     if (job && onAddPayment && newPayment.amount > 0) {
       const payment: PaymentHistoryEntry = {
         id: crypto.randomUUID(),
-        date: new Date().toISOString().split('T')[0],
+        date: new Date().toISOString().split("T")[0],
         source: newPayment.source,
         amount: newPayment.amount,
         notes: newPayment.notes,
@@ -324,17 +389,35 @@ export function JobDetailModal({
     }
   };
 
+  const getVehicleDisplayName = (v: Vehicle, index: number) => {
+    if (v.vehicleYear || v.vehicleMake || v.vehicleModel) {
+      return `${v.vehicleYear} ${v.vehicleMake} ${v.vehicleModel}`.trim();
+    }
+    return `Vehicle ${index + 1}`;
+  };
+
+  const getJobHeaderInfo = () => {
+    if (vehicles.length === 0) return null;
+    if (vehicles.length === 1) {
+      const v = vehicles[0];
+      return `${v.vehicleYear} ${v.vehicleMake} ${v.vehicleModel}`.trim() || null;
+    }
+    return `${vehicles.length} vehicles`;
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            {isNew ? "New Auto Glass Job" : (
+            {isNew ? (
+              "New Auto Glass Job"
+            ) : (
               <>
                 <span>Job #{job?.jobNumber}</span>
-                {job && (
+                {getJobHeaderInfo() && (
                   <span className="text-sm font-normal text-muted-foreground">
-                    {job.vehicleYear} {job.vehicleMake} {job.vehicleModel}
+                    {getJobHeaderInfo()}
                   </span>
                 )}
               </>
@@ -346,17 +429,21 @@ export function JobDetailModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="flex-1 overflow-hidden flex flex-col"
+          >
             <TabsList className="grid w-full grid-cols-3 flex-shrink-0">
               <TabsTrigger value="customer" className="gap-1.5" data-testid="tab-customer">
                 <User className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Customer & Vehicle</span>
+                <span className="hidden sm:inline">Customer</span>
                 <span className="sm:hidden">Customer</span>
               </TabsTrigger>
-              <TabsTrigger value="install" className="gap-1.5" data-testid="tab-install">
-                <Wrench className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Install & Glass</span>
-                <span className="sm:hidden">Install</span>
+              <TabsTrigger value="vehicles" className="gap-1.5" data-testid="tab-vehicles">
+                <Car className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Vehicles & Parts</span>
+                <span className="sm:hidden">Vehicles</span>
               </TabsTrigger>
               <TabsTrigger value="payments" className="gap-1.5" data-testid="tab-payments">
                 <DollarSign className="h-3.5 w-3.5" />
@@ -366,9 +453,8 @@ export function JobDetailModal({
             </TabsList>
 
             <div className="flex-1 overflow-y-auto mt-4 pr-2">
-              {/* Customer & Vehicle Tab */}
+              {/* Customer Tab */}
               <TabsContent value="customer" className="mt-0 space-y-6">
-                {/* Customer Section */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
@@ -386,7 +472,7 @@ export function JobDetailModal({
                       />
                       <Label htmlFor="isBusiness">Business Account</Label>
                     </div>
-                    
+
                     {formData.isBusiness && (
                       <div className="grid gap-2">
                         <Label htmlFor="businessName">Business Name</Label>
@@ -399,7 +485,7 @@ export function JobDetailModal({
                         />
                       </div>
                     )}
-                    
+
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor="firstName">First Name *</Label>
@@ -424,7 +510,7 @@ export function JobDetailModal({
                         />
                       </div>
                     </div>
-                    
+
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor="phone">Phone *</Label>
@@ -449,7 +535,7 @@ export function JobDetailModal({
                         />
                       </div>
                     </div>
-                    
+
                     <div className="grid gap-2">
                       <Label htmlFor="streetAddress">Street Address</Label>
                       <Input
@@ -460,7 +546,7 @@ export function JobDetailModal({
                         data-testid="input-street-address"
                       />
                     </div>
-                    
+
                     <div className="grid sm:grid-cols-3 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor="city">City</Label>
@@ -496,155 +582,18 @@ export function JobDetailModal({
                   </CardContent>
                 </Card>
 
-                {/* Vehicle Section */}
+                {/* Job Scheduling Section */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Car className="h-4 w-4" />
-                      Vehicle Information
+                      <Wrench className="h-4 w-4" />
+                      Scheduling & Location
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="grid gap-2">
-                        <Label htmlFor="vin">VIN</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="vin"
-                            value={formData.vin}
-                            onChange={(e) => handleChange("vin", e.target.value.toUpperCase())}
-                            placeholder="1HGCV1F34NA012345"
-                            className="flex-1"
-                            data-testid="input-vin"
-                          />
-                          <Button type="button" variant="outline" size="icon" title="Decode VIN" data-testid="button-decode-vin">
-                            <Search className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="licensePlate">License Plate</Label>
-                        <Input
-                          id="licensePlate"
-                          value={formData.licensePlate}
-                          onChange={(e) => handleChange("licensePlate", e.target.value.toUpperCase())}
-                          placeholder="ABC1234"
-                          data-testid="input-license-plate"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="grid sm:grid-cols-4 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="vehicleYear">Year *</Label>
-                        <Input
-                          id="vehicleYear"
-                          value={formData.vehicleYear}
-                          onChange={(e) => handleChange("vehicleYear", e.target.value)}
-                          placeholder="2024"
-                          required
-                          data-testid="input-vehicle-year"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="vehicleMake">Make *</Label>
-                        <Input
-                          id="vehicleMake"
-                          value={formData.vehicleMake}
-                          onChange={(e) => handleChange("vehicleMake", e.target.value)}
-                          placeholder="Honda"
-                          required
-                          data-testid="input-vehicle-make"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="vehicleModel">Model *</Label>
-                        <Input
-                          id="vehicleModel"
-                          value={formData.vehicleModel}
-                          onChange={(e) => handleChange("vehicleModel", e.target.value)}
-                          placeholder="Accord"
-                          required
-                          data-testid="input-vehicle-model"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="mileage">Mileage</Label>
-                        <Input
-                          id="mileage"
-                          value={formData.mileage}
-                          onChange={(e) => handleChange("mileage", e.target.value)}
-                          placeholder="45000"
-                          data-testid="input-mileage"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="grid sm:grid-cols-3 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="bodyStyle">Body Style</Label>
-                        <Input
-                          id="bodyStyle"
-                          value={formData.bodyStyle}
-                          onChange={(e) => handleChange("bodyStyle", e.target.value)}
-                          placeholder="Sedan"
-                          data-testid="input-body-style"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="vehicleColor">Color</Label>
-                        <Input
-                          id="vehicleColor"
-                          value={formData.vehicleColor}
-                          onChange={(e) => handleChange("vehicleColor", e.target.value)}
-                          placeholder="White"
-                          data-testid="input-vehicle-color"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="nagsCarId">NAGS Car ID</Label>
-                        <Input
-                          id="nagsCarId"
-                          value={formData.nagsCarId}
-                          onChange={(e) => handleChange("nagsCarId", e.target.value.toUpperCase())}
-                          placeholder="HON24ACC"
-                          data-testid="input-nags-car-id"
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Install & Glass Tab */}
-              <TabsContent value="install" className="mt-0 space-y-6">
-                {/* Job Details */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Job Details</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid sm:grid-cols-3 gap-4">
-                      <div className="grid gap-2">
-                        <Label>Job Type</Label>
-                        <Select
-                          value={formData.jobType}
-                          onValueChange={(value) => handleChange("jobType", value)}
-                        >
-                          <SelectTrigger data-testid="select-job-type">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {jobTypes.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {jobTypeLabels[type]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label>Job Stage</Label>
+                        <Label>Pipeline Stage</Label>
                         <Select
                           value={formData.pipelineStage}
                           onValueChange={(value) => handleChange("pipelineStage", value)}
@@ -680,15 +629,7 @@ export function JobDetailModal({
                         </Select>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
 
-                {/* Scheduling */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Scheduling</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
                     <div className="grid sm:grid-cols-4 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor="installer">Installer</Label>
@@ -696,7 +637,7 @@ export function JobDetailModal({
                           id="installer"
                           value={formData.installer}
                           onChange={(e) => handleChange("installer", e.target.value)}
-                          placeholder="Technician name"
+                          placeholder="John"
                           data-testid="input-installer"
                         />
                       </div>
@@ -723,7 +664,7 @@ export function JobDetailModal({
                       <div className="grid gap-2">
                         <Label>Duration</Label>
                         <Select
-                          value={formData.jobDuration}
+                          value={formData.jobDuration || "2"}
                           onValueChange={(value) => handleChange("jobDuration", value)}
                         >
                           <SelectTrigger data-testid="select-job-duration">
@@ -739,104 +680,6 @@ export function JobDetailModal({
                         </Select>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Glass Parts */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Glass & Parts</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="glassPartNumber">Part Number</Label>
-                        <Input
-                          id="glassPartNumber"
-                          value={formData.glassPartNumber}
-                          onChange={(e) => handleChange("glassPartNumber", e.target.value.toUpperCase())}
-                          placeholder="DW02002GTY"
-                          data-testid="input-glass-part-number"
-                        />
-                      </div>
-                      <div className="flex items-end gap-4">
-                        <div className="flex items-center gap-3">
-                          <Switch
-                            id="isAftermarket"
-                            checked={formData.isAftermarket}
-                            onCheckedChange={(checked) => handleChange("isAftermarket", checked)}
-                            data-testid="switch-is-aftermarket"
-                          />
-                          <Label htmlFor="isAftermarket">
-                            {formData.isAftermarket ? "Aftermarket" : "OEM/Dealer"}
-                          </Label>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label>Calibration Type</Label>
-                        <Select
-                          value={formData.calibrationType}
-                          onValueChange={(value) => handleChange("calibrationType", value)}
-                        >
-                          <SelectTrigger data-testid="select-calibration-type">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {calibrationTypes.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {calibrationLabels[type]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="distributor">Distributor</Label>
-                        <Input
-                          id="distributor"
-                          value={formData.distributor}
-                          onChange={(e) => handleChange("distributor", e.target.value)}
-                          placeholder="Pilkington"
-                          data-testid="input-distributor"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-3 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="glassOrderedDate">Glass Ordered</Label>
-                        <Input
-                          id="glassOrderedDate"
-                          type="date"
-                          value={formData.glassOrderedDate}
-                          onChange={(e) => handleChange("glassOrderedDate", e.target.value)}
-                          data-testid="input-glass-ordered-date"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="glassArrivalDate">Glass Arrival</Label>
-                        <Input
-                          id="glassArrivalDate"
-                          type="date"
-                          value={formData.glassArrivalDate}
-                          onChange={(e) => handleChange("glassArrivalDate", e.target.value)}
-                          data-testid="input-glass-arrival-date"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="urethaneKit">Urethane Kit</Label>
-                        <Input
-                          id="urethaneKit"
-                          value={formData.urethaneKit}
-                          onChange={(e) => handleChange("urethaneKit", e.target.value)}
-                          placeholder="Standard / Premium"
-                          data-testid="input-urethane-kit"
-                        />
-                      </div>
-                    </div>
 
                     <div className="grid gap-2">
                       <Label htmlFor="installNotes">Notes</Label>
@@ -845,188 +688,600 @@ export function JobDetailModal({
                         value={formData.installNotes}
                         onChange={(e) => handleChange("installNotes", e.target.value)}
                         placeholder="Special instructions, access codes, etc."
-                        rows={2}
-                        data-testid="input-install-notes"
+                        rows={3}
+                        data-testid="textarea-install-notes"
                       />
                     </div>
                   </CardContent>
                 </Card>
+              </TabsContent>
 
-                {/* Part Pricing Calculator */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Part Pricing Calculator</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {/* Part Price */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calculator.partPrice}
-                        onChange={(e) => handleCalculatorChange("partPrice", parseFloat(e.target.value) || 0)}
-                        className="max-w-[200px]"
-                        data-testid="input-calc-part-price"
-                      />
-                      <Label className="text-muted-foreground">Part Price</Label>
-                    </div>
+              {/* Vehicles & Parts Tab */}
+              <TabsContent value="vehicles" className="mt-0 space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <h3 className="text-lg font-semibold">Vehicles</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddVehicle}
+                    data-testid="button-add-vehicle"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Vehicle
+                  </Button>
+                </div>
 
-                    {/* Markup */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calculator.markup}
-                        onChange={(e) => handleCalculatorChange("markup", parseFloat(e.target.value) || 0)}
-                        className="max-w-[200px]"
-                        data-testid="input-calc-markup"
-                      />
-                      <Label className="text-muted-foreground">Markup</Label>
-                    </div>
+                {vehicles.length === 0 ? (
+                  <Card>
+                    <CardContent className="py-8 text-center text-muted-foreground">
+                      No vehicles added yet. Click "Add Vehicle" to get started.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-4">
+                    {vehicles.map((vehicle, vIndex) => (
+                      <Card key={vehicle.id} data-testid={`card-vehicle-${vehicle.id}`}>
+                        <Collapsible
+                          open={expandedVehicles.has(vehicle.id)}
+                          onOpenChange={() => toggleVehicleExpanded(vehicle.id)}
+                        >
+                          <CollapsibleTrigger asChild>
+                            <CardHeader className="pb-3 cursor-pointer">
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                  {expandedVehicles.has(vehicle.id) ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4" />
+                                  )}
+                                  <Car className="h-4 w-4" />
+                                  <CardTitle className="text-base">
+                                    {getVehicleDisplayName(vehicle, vIndex)}
+                                  </CardTitle>
+                                  <Badge variant="secondary">
+                                    {vehicle.parts.length} part{vehicle.parts.length !== 1 ? "s" : ""}
+                                  </Badge>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveVehicle(vehicle.id);
+                                  }}
+                                  data-testid={`button-remove-vehicle-${vehicle.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </CardHeader>
+                          </CollapsibleTrigger>
 
-                    {/* Accessories Price */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calculator.accessoriesPrice}
-                        onChange={(e) => handleCalculatorChange("accessoriesPrice", parseFloat(e.target.value) || 0)}
-                        className="max-w-[200px]"
-                        placeholder="Total accessories price in $"
-                        data-testid="input-calc-accessories"
-                      />
-                      <Label className="text-muted-foreground">+ Accessories Price</Label>
-                    </div>
+                          <CollapsibleContent>
+                            <CardContent className="space-y-6">
+                              {/* Vehicle Details */}
+                              <div className="space-y-4">
+                                <div className="grid sm:grid-cols-2 gap-4">
+                                  <div className="grid gap-2">
+                                    <Label>VIN</Label>
+                                    <div className="flex gap-2">
+                                      <Input
+                                        value={vehicle.vin}
+                                        onChange={(e) =>
+                                          handleVehicleChange(
+                                            vehicle.id,
+                                            "vin",
+                                            e.target.value.toUpperCase()
+                                          )
+                                        }
+                                        placeholder="1HGCV1F34NA012345"
+                                        className="flex-1"
+                                        data-testid={`input-vehicle-vin-${vehicle.id}`}
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        title="Decode VIN"
+                                        data-testid={`button-decode-vin-${vehicle.id}`}
+                                      >
+                                        <Search className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>License Plate</Label>
+                                    <Input
+                                      value={vehicle.licensePlate}
+                                      onChange={(e) =>
+                                        handleVehicleChange(
+                                          vehicle.id,
+                                          "licensePlate",
+                                          e.target.value.toUpperCase()
+                                        )
+                                      }
+                                      placeholder="ABC1234"
+                                      data-testid={`input-vehicle-plate-${vehicle.id}`}
+                                    />
+                                  </div>
+                                </div>
 
-                    {/* Urethane Price */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calculator.urethanePrice}
-                        onChange={(e) => handleCalculatorChange("urethanePrice", parseFloat(e.target.value) || 0)}
-                        className="max-w-[200px]"
-                        data-testid="input-calc-urethane"
-                      />
-                      <Label className="text-muted-foreground">+ Urethane Price</Label>
-                    </div>
+                                <div className="grid sm:grid-cols-4 gap-4">
+                                  <div className="grid gap-2">
+                                    <Label>Year</Label>
+                                    <Input
+                                      value={vehicle.vehicleYear}
+                                      onChange={(e) =>
+                                        handleVehicleChange(vehicle.id, "vehicleYear", e.target.value)
+                                      }
+                                      placeholder="2024"
+                                      data-testid={`input-vehicle-year-${vehicle.id}`}
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Make</Label>
+                                    <Input
+                                      value={vehicle.vehicleMake}
+                                      onChange={(e) =>
+                                        handleVehicleChange(vehicle.id, "vehicleMake", e.target.value)
+                                      }
+                                      placeholder="Honda"
+                                      data-testid={`input-vehicle-make-${vehicle.id}`}
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Model</Label>
+                                    <Input
+                                      value={vehicle.vehicleModel}
+                                      onChange={(e) =>
+                                        handleVehicleChange(vehicle.id, "vehicleModel", e.target.value)
+                                      }
+                                      placeholder="Accord"
+                                      data-testid={`input-vehicle-model-${vehicle.id}`}
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Mileage</Label>
+                                    <Input
+                                      value={vehicle.mileage}
+                                      onChange={(e) =>
+                                        handleVehicleChange(vehicle.id, "mileage", e.target.value)
+                                      }
+                                      placeholder="45000"
+                                      data-testid={`input-vehicle-mileage-${vehicle.id}`}
+                                    />
+                                  </div>
+                                </div>
 
-                    {/* Sales Tax % */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.0001"
-                        value={calculator.salesTaxPercent}
-                        onChange={(e) => handleCalculatorChange("salesTaxPercent", parseFloat(e.target.value) || 0)}
-                        className="max-w-[200px]"
-                        data-testid="input-calc-sales-tax"
-                      />
-                      <Label className="text-muted-foreground">% Sales Tax</Label>
-                    </div>
+                                <div className="grid sm:grid-cols-3 gap-4">
+                                  <div className="grid gap-2">
+                                    <Label>Body Style</Label>
+                                    <Input
+                                      value={vehicle.bodyStyle}
+                                      onChange={(e) =>
+                                        handleVehicleChange(vehicle.id, "bodyStyle", e.target.value)
+                                      }
+                                      placeholder="Sedan"
+                                      data-testid={`input-vehicle-body-${vehicle.id}`}
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Color</Label>
+                                    <Input
+                                      value={vehicle.vehicleColor}
+                                      onChange={(e) =>
+                                        handleVehicleChange(vehicle.id, "vehicleColor", e.target.value)
+                                      }
+                                      placeholder="White"
+                                      data-testid={`input-vehicle-color-${vehicle.id}`}
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>NAGS Car ID</Label>
+                                    <Input
+                                      value={vehicle.nagsCarId}
+                                      onChange={(e) =>
+                                        handleVehicleChange(
+                                          vehicle.id,
+                                          "nagsCarId",
+                                          e.target.value.toUpperCase()
+                                        )
+                                      }
+                                      placeholder="HON24ACC"
+                                      data-testid={`input-vehicle-nags-${vehicle.id}`}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
 
-                    {/* Parts Subtotal (calculated) */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="text"
-                        value={partsSubtotal.toFixed(2)}
-                        readOnly
-                        className="max-w-[200px] bg-muted"
-                        data-testid="display-parts-subtotal"
-                      />
-                      <Label className="font-medium">Parts Subtotal</Label>
-                    </div>
+                              {/* Parts Section */}
+                              <div className="border-t pt-4">
+                                <div className="flex items-center justify-between gap-4 mb-4">
+                                  <h4 className="font-medium">Parts</h4>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleAddPart(vehicle.id)}
+                                    data-testid={`button-add-part-${vehicle.id}`}
+                                  >
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Add Part
+                                  </Button>
+                                </div>
 
-                    <div className="border-t my-2" />
+                                {vehicle.parts.length === 0 ? (
+                                  <div className="text-sm text-muted-foreground text-center py-4 border rounded-md">
+                                    No parts added. Click "Add Part" to add glass or service.
+                                  </div>
+                                ) : (
+                                  <div className="space-y-4">
+                                    {vehicle.parts.map((part, pIndex) => {
+                                      const { partsSubtotal, partTotal } = calculatePartTotals(part);
+                                      return (
+                                        <Card
+                                          key={part.id}
+                                          className="bg-muted/30"
+                                          data-testid={`card-part-${part.id}`}
+                                        >
+                                          <CardHeader className="pb-2">
+                                            <div className="flex items-center justify-between gap-4">
+                                              <CardTitle className="text-sm">
+                                                Part {pIndex + 1}: {jobTypeLabels[part.jobType]}
+                                              </CardTitle>
+                                              <div className="flex items-center gap-2">
+                                                <span className="font-semibold text-sm">
+                                                  ${partTotal.toFixed(2)}
+                                                </span>
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  onClick={() =>
+                                                    handleRemovePart(vehicle.id, part.id)
+                                                  }
+                                                  data-testid={`button-remove-part-${part.id}`}
+                                                >
+                                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </CardHeader>
+                                          <CardContent className="space-y-4">
+                                            {/* Part Type & Glass Info */}
+                                            <div className="grid sm:grid-cols-3 gap-4">
+                                              <div className="grid gap-2">
+                                                <Label>Job Type</Label>
+                                                <Select
+                                                  value={part.jobType}
+                                                  onValueChange={(value) =>
+                                                    handlePartChange(
+                                                      vehicle.id,
+                                                      part.id,
+                                                      "jobType",
+                                                      value
+                                                    )
+                                                  }
+                                                >
+                                                  <SelectTrigger
+                                                    data-testid={`select-part-type-${part.id}`}
+                                                  >
+                                                    <SelectValue />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    {jobTypes.map((type) => (
+                                                      <SelectItem key={type} value={type}>
+                                                        {jobTypeLabels[type]}
+                                                      </SelectItem>
+                                                    ))}
+                                                  </SelectContent>
+                                                </Select>
+                                              </div>
+                                              <div className="grid gap-2">
+                                                <Label>Glass Part #</Label>
+                                                <Input
+                                                  value={part.glassPartNumber}
+                                                  onChange={(e) =>
+                                                    handlePartChange(
+                                                      vehicle.id,
+                                                      part.id,
+                                                      "glassPartNumber",
+                                                      e.target.value.toUpperCase()
+                                                    )
+                                                  }
+                                                  placeholder="FW02345GTY"
+                                                  data-testid={`input-part-number-${part.id}`}
+                                                />
+                                              </div>
+                                              <div className="grid gap-2">
+                                                <Label>Distributor</Label>
+                                                <Input
+                                                  value={part.distributor}
+                                                  onChange={(e) =>
+                                                    handlePartChange(
+                                                      vehicle.id,
+                                                      part.id,
+                                                      "distributor",
+                                                      e.target.value
+                                                    )
+                                                  }
+                                                  placeholder="Pilkington"
+                                                  data-testid={`input-part-distributor-${part.id}`}
+                                                />
+                                              </div>
+                                            </div>
 
-                    {/* Labor Price */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calculator.laborPrice}
-                        onChange={(e) => handleCalculatorChange("laborPrice", parseFloat(e.target.value) || 0)}
-                        className="max-w-[200px]"
-                        placeholder="Labor price in $"
-                        data-testid="input-calc-labor"
-                      />
-                      <Label className="text-muted-foreground">+ Labor Price</Label>
-                    </div>
+                                            <div className="grid sm:grid-cols-4 gap-4">
+                                              <div className="flex items-center gap-2">
+                                                <Switch
+                                                  checked={part.isAftermarket}
+                                                  onCheckedChange={(checked) =>
+                                                    handlePartChange(
+                                                      vehicle.id,
+                                                      part.id,
+                                                      "isAftermarket",
+                                                      checked
+                                                    )
+                                                  }
+                                                  data-testid={`switch-aftermarket-${part.id}`}
+                                                />
+                                                <Label className="text-sm">Aftermarket</Label>
+                                              </div>
+                                              <div className="grid gap-2">
+                                                <Label>Calibration</Label>
+                                                <Select
+                                                  value={part.calibrationType}
+                                                  onValueChange={(value) =>
+                                                    handlePartChange(
+                                                      vehicle.id,
+                                                      part.id,
+                                                      "calibrationType",
+                                                      value
+                                                    )
+                                                  }
+                                                >
+                                                  <SelectTrigger
+                                                    data-testid={`select-calibration-${part.id}`}
+                                                  >
+                                                    <SelectValue />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    {calibrationTypes.map((type) => (
+                                                      <SelectItem key={type} value={type}>
+                                                        {calibrationLabels[type]}
+                                                      </SelectItem>
+                                                    ))}
+                                                  </SelectContent>
+                                                </Select>
+                                              </div>
+                                              <div className="grid gap-2">
+                                                <Label>Order Date</Label>
+                                                <Input
+                                                  type="date"
+                                                  value={part.glassOrderedDate}
+                                                  onChange={(e) =>
+                                                    handlePartChange(
+                                                      vehicle.id,
+                                                      part.id,
+                                                      "glassOrderedDate",
+                                                      e.target.value
+                                                    )
+                                                  }
+                                                  data-testid={`input-order-date-${part.id}`}
+                                                />
+                                              </div>
+                                              <div className="grid gap-2">
+                                                <Label>Arrival Date</Label>
+                                                <Input
+                                                  type="date"
+                                                  value={part.glassArrivalDate}
+                                                  onChange={(e) =>
+                                                    handlePartChange(
+                                                      vehicle.id,
+                                                      part.id,
+                                                      "glassArrivalDate",
+                                                      e.target.value
+                                                    )
+                                                  }
+                                                  data-testid={`input-arrival-date-${part.id}`}
+                                                />
+                                              </div>
+                                            </div>
 
-                    {/* Calibration Price */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calculator.calibrationPrice}
-                        onChange={(e) => handleCalculatorChange("calibrationPrice", parseFloat(e.target.value) || 0)}
-                        className="max-w-[200px]"
-                        placeholder="Calibration price in $"
-                        data-testid="input-calc-calibration"
-                      />
-                      <Label className="text-muted-foreground">+ Calibration Price</Label>
-                    </div>
+                                            {/* Part Pricing Calculator */}
+                                            <div className="border-t pt-4">
+                                              <h5 className="text-sm font-medium mb-3">
+                                                Part Pricing
+                                              </h5>
+                                              <div className="grid sm:grid-cols-4 gap-3">
+                                                <div className="grid gap-1">
+                                                  <Label className="text-xs">Part Price</Label>
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={part.partPrice || ""}
+                                                    onChange={(e) =>
+                                                      handlePartChange(
+                                                        vehicle.id,
+                                                        part.id,
+                                                        "partPrice",
+                                                        parseFloat(e.target.value) || 0
+                                                      )
+                                                    }
+                                                    data-testid={`input-part-price-${part.id}`}
+                                                  />
+                                                </div>
+                                                <div className="grid gap-1">
+                                                  <Label className="text-xs">Markup</Label>
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={part.markup || ""}
+                                                    onChange={(e) =>
+                                                      handlePartChange(
+                                                        vehicle.id,
+                                                        part.id,
+                                                        "markup",
+                                                        parseFloat(e.target.value) || 0
+                                                      )
+                                                    }
+                                                    data-testid={`input-markup-${part.id}`}
+                                                  />
+                                                </div>
+                                                <div className="grid gap-1">
+                                                  <Label className="text-xs">Accessories</Label>
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={part.accessoriesPrice || ""}
+                                                    onChange={(e) =>
+                                                      handlePartChange(
+                                                        vehicle.id,
+                                                        part.id,
+                                                        "accessoriesPrice",
+                                                        parseFloat(e.target.value) || 0
+                                                      )
+                                                    }
+                                                    data-testid={`input-accessories-${part.id}`}
+                                                  />
+                                                </div>
+                                                <div className="grid gap-1">
+                                                  <Label className="text-xs">Urethane</Label>
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={part.urethanePrice || ""}
+                                                    onChange={(e) =>
+                                                      handlePartChange(
+                                                        vehicle.id,
+                                                        part.id,
+                                                        "urethanePrice",
+                                                        parseFloat(e.target.value) || 0
+                                                      )
+                                                    }
+                                                    data-testid={`input-urethane-${part.id}`}
+                                                  />
+                                                </div>
+                                              </div>
+                                              <div className="grid sm:grid-cols-4 gap-3 mt-3">
+                                                <div className="grid gap-1">
+                                                  <Label className="text-xs">Sales Tax %</Label>
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={part.salesTaxPercent || ""}
+                                                    onChange={(e) =>
+                                                      handlePartChange(
+                                                        vehicle.id,
+                                                        part.id,
+                                                        "salesTaxPercent",
+                                                        parseFloat(e.target.value) || 0
+                                                      )
+                                                    }
+                                                    data-testid={`input-tax-${part.id}`}
+                                                  />
+                                                </div>
+                                                <div className="grid gap-1">
+                                                  <Label className="text-xs">Labor</Label>
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={part.laborPrice || ""}
+                                                    onChange={(e) =>
+                                                      handlePartChange(
+                                                        vehicle.id,
+                                                        part.id,
+                                                        "laborPrice",
+                                                        parseFloat(e.target.value) || 0
+                                                      )
+                                                    }
+                                                    data-testid={`input-labor-${part.id}`}
+                                                  />
+                                                </div>
+                                                <div className="grid gap-1">
+                                                  <Label className="text-xs">Calibration</Label>
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={part.calibrationPrice || ""}
+                                                    onChange={(e) =>
+                                                      handlePartChange(
+                                                        vehicle.id,
+                                                        part.id,
+                                                        "calibrationPrice",
+                                                        parseFloat(e.target.value) || 0
+                                                      )
+                                                    }
+                                                    data-testid={`input-calibration-price-${part.id}`}
+                                                  />
+                                                </div>
+                                                <div className="grid gap-1">
+                                                  <Label className="text-xs">Mobile Fee</Label>
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={part.mobileFee || ""}
+                                                    onChange={(e) =>
+                                                      handlePartChange(
+                                                        vehicle.id,
+                                                        part.id,
+                                                        "mobileFee",
+                                                        parseFloat(e.target.value) || 0
+                                                      )
+                                                    }
+                                                    data-testid={`input-mobile-fee-${part.id}`}
+                                                  />
+                                                </div>
+                                              </div>
 
-                    {/* Mobile Fee */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calculator.mobileFee}
-                        onChange={(e) => handleCalculatorChange("mobileFee", parseFloat(e.target.value) || 0)}
-                        className="max-w-[200px]"
-                        placeholder="Mobile fee in $"
-                        data-testid="input-calc-mobile-fee"
-                      />
-                      <Label className="text-muted-foreground">+ Mobile Fee</Label>
-                    </div>
+                                              {/* Calculated Totals */}
+                                              <div className="flex items-center justify-end gap-4 mt-3 pt-3 border-t text-sm">
+                                                <span className="text-muted-foreground">
+                                                  Parts Subtotal: ${partsSubtotal.toFixed(2)}
+                                                </span>
+                                                <span className="font-semibold">
+                                                  Part Total: ${partTotal.toFixed(2)}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </CardContent>
+                                        </Card>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </Card>
+                    ))}
+                  </div>
+                )}
 
-                    <div className="border-t my-2" />
-
-                    {/* Grand Total (rounded up) */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="text"
-                        value={`$${grandTotal.toFixed(2)}`}
-                        readOnly
-                        className="max-w-[200px] bg-muted font-semibold text-lg"
-                        data-testid="display-grand-total"
-                      />
-                      <Label className="font-semibold text-lg">Total</Label>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground">
-                      Includes 3.5% processing fee. Total rounded up to next whole dollar.
-                    </p>
-
-                    {/* Buttons */}
-                    <div className="flex gap-3 pt-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleRecalculate}
-                        data-testid="button-recalculate"
-                      >
-                        Recalculate
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setActiveTab("customer")}
-                        data-testid="button-calculator-close"
-                      >
-                        Close
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                {/* Job Total Summary */}
+                {vehicles.length > 0 && (
+                  <Card className="bg-primary/5 border-primary/20">
+                    <CardContent className="py-4">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Job Total (all parts):</span>
+                        <span className="text-2xl font-bold">${jobTotal.toFixed(2)}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Includes 3.5% processing fee. Totals rounded up.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
               {/* Insurance & Payments Tab */}
@@ -1037,7 +1292,10 @@ export function JobDetailModal({
                     <div className="flex items-center justify-between gap-4">
                       <CardTitle className="text-base">Insurance Information</CardTitle>
                       <div className="flex items-center gap-2">
-                        <Label htmlFor="insurance-toggle" className="text-sm text-muted-foreground">
+                        <Label
+                          htmlFor="insurance-toggle"
+                          className="text-sm text-muted-foreground"
+                        >
                           {showInsurance ? "Enabled" : "Disabled"}
                         </Label>
                         <Switch
@@ -1073,7 +1331,7 @@ export function JobDetailModal({
                           />
                         </div>
                       </div>
-                      
+
                       <div className="grid sm:grid-cols-2 gap-4">
                         <div className="grid gap-2">
                           <Label htmlFor="claimNumber">Claim Number</Label>
@@ -1096,7 +1354,7 @@ export function JobDetailModal({
                           />
                         </div>
                       </div>
-                      
+
                       <div className="grid sm:grid-cols-2 gap-4">
                         <div className="grid gap-2">
                           <Label htmlFor="dateOfLoss">Date of Loss</Label>
@@ -1112,7 +1370,9 @@ export function JobDetailModal({
                           <Label>Cause of Loss</Label>
                           <Select
                             value={formData.causeOfLoss || ""}
-                            onValueChange={(value) => handleChange("causeOfLoss", value || undefined)}
+                            onValueChange={(value) =>
+                              handleChange("causeOfLoss", value || undefined)
+                            }
                           >
                             <SelectTrigger data-testid="select-cause-of-loss">
                               <SelectValue placeholder="Select cause" />
@@ -1139,32 +1399,29 @@ export function JobDetailModal({
                   <CardContent className="space-y-4">
                     <div className="grid sm:grid-cols-2 gap-6">
                       <div className="space-y-3">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Glass Price:</span>
-                          <span>${(formData.glassPrice || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Labor ({formData.laborHours}hrs @ ${formData.laborRate}/hr):</span>
-                          <span>${(formData.laborTotal || 0).toFixed(2)}</span>
-                        </div>
-                        {(formData.calibrationPrice || 0) > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Calibration:</span>
-                            <span>${(formData.calibrationPrice || 0).toFixed(2)}</span>
-                          </div>
-                        )}
-                        {(formData.urethaneKitPrice || 0) > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Urethane Kit:</span>
-                            <span>${(formData.urethaneKitPrice || 0).toFixed(2)}</span>
-                          </div>
+                        {vehicles.map((v, vi) =>
+                          v.parts.map((p, pi) => {
+                            const { partTotal } = calculatePartTotals(p);
+                            return (
+                              <div
+                                key={p.id}
+                                className="flex justify-between text-sm"
+                                data-testid={`summary-part-${p.id}`}
+                              >
+                                <span className="text-muted-foreground">
+                                  {v.vehicleYear} {v.vehicleMake} - {jobTypeLabels[p.jobType]}:
+                                </span>
+                                <span>${partTotal.toFixed(2)}</span>
+                              </div>
+                            );
+                          })
                         )}
                         <div className="border-t pt-2 flex justify-between font-medium">
                           <span>Total Due:</span>
-                          <span className="text-lg">${(formData.totalDue || 0).toFixed(2)}</span>
+                          <span className="text-lg">${jobTotal.toFixed(2)}</span>
                         </div>
                       </div>
-                      
+
                       <div className="space-y-4">
                         <div className="grid gap-2">
                           <Label htmlFor="deductible">Deductible ($)</Label>
@@ -1174,7 +1431,9 @@ export function JobDetailModal({
                             min="0"
                             step="0.01"
                             value={formData.deductible}
-                            onChange={(e) => handleChange("deductible", parseFloat(e.target.value) || 0)}
+                            onChange={(e) =>
+                              handleChange("deductible", parseFloat(e.target.value) || 0)
+                            }
                             data-testid="input-deductible"
                           />
                         </div>
@@ -1186,13 +1445,15 @@ export function JobDetailModal({
                             min="0"
                             step="0.01"
                             value={formData.rebate}
-                            onChange={(e) => handleChange("rebate", parseFloat(e.target.value) || 0)}
+                            onChange={(e) =>
+                              handleChange("rebate", parseFloat(e.target.value) || 0)
+                            }
                             data-testid="input-rebate"
                           />
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="grid sm:grid-cols-3 gap-4 pt-4 border-t">
                       <div className="text-center p-3 rounded-lg bg-muted/50">
                         <div className="text-2xl font-bold text-green-600 dark:text-green-400">
@@ -1202,7 +1463,7 @@ export function JobDetailModal({
                       </div>
                       <div className="text-center p-3 rounded-lg bg-muted/50">
                         <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                          ${(formData.balanceDue || 0).toFixed(2)}
+                          ${Math.max(0, jobTotal - (formData.amountPaid || 0)).toFixed(2)}
                         </div>
                         <div className="text-xs text-muted-foreground">Balance Due</div>
                       </div>
@@ -1212,15 +1473,15 @@ export function JobDetailModal({
                             formData.paymentStatus === "paid"
                               ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
                               : formData.paymentStatus === "partial"
-                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                              : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                                : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
                           }
                         >
                           {formData.paymentStatus === "paid"
                             ? "Paid"
                             : formData.paymentStatus === "partial"
-                            ? "Partial"
-                            : "Pending"}
+                              ? "Partial"
+                              : "Pending"}
                         </Badge>
                         <div className="text-xs text-muted-foreground mt-1">Status</div>
                       </div>
@@ -1245,7 +1506,10 @@ export function JobDetailModal({
                               setNewPayment((p) => ({ ...p, source: value }))
                             }
                           >
-                            <SelectTrigger className="w-[140px]" data-testid="select-payment-source">
+                            <SelectTrigger
+                              className="w-[140px]"
+                              data-testid="select-payment-source"
+                            >
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
