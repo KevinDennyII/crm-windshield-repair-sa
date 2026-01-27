@@ -105,10 +105,100 @@ const jobTypeLabels: Record<string, string> = {
   windshield_repair: "Windshield Repair",
   door_glass: "Door Glass",
   back_glass: "Back Glass",
+  back_glass_powerslide: "Back Glass (Powerslide)",
   quarter_glass: "Quarter Glass",
   sunroof: "Sunroof",
   side_mirror: "Side Mirror",
 };
+
+const bodyStyleOptions = [
+  "Sedan",
+  "Coupe",
+  "Mini SUV",
+  "SUV",
+  "Pickup",
+  "Van",
+  "Minivan",
+  "Hatchback",
+  "Wagon",
+  "Convertible",
+  "18 Wheeler",
+  "Utility Vehicle",
+] as const;
+
+function calculateLaborPrice(
+  jobType: string,
+  bodyStyle: string,
+  vehicleYear: string,
+  partCost: number
+): number {
+  const year = parseInt(vehicleYear) || new Date().getFullYear();
+  const upperBodyStyle = bodyStyle.toUpperCase();
+  
+  const is18Wheeler = upperBodyStyle.includes("18 WHEELER") || upperBodyStyle.includes("SEMI");
+  const isUtilityVehicle = upperBodyStyle.includes("UTILITY");
+  const isSedan = upperBodyStyle.includes("SEDAN") || upperBodyStyle.includes("COUPE") || 
+                  upperBodyStyle.includes("HATCHBACK") || upperBodyStyle.includes("CONVERTIBLE");
+  const isMiniSUV = upperBodyStyle.includes("MINI SUV") || upperBodyStyle.includes("CROSSOVER");
+  const isSUVOrPickup = upperBodyStyle.includes("SUV") || upperBodyStyle.includes("PICKUP") || 
+                        upperBodyStyle.includes("TRUCK") || upperBodyStyle.includes("VAN") || 
+                        upperBodyStyle.includes("WAGON");
+  
+  // Rule: For ANY glass where our cost is $250 or more, charge 75% of cost as labor
+  if (partCost >= 250) {
+    return Math.round(partCost * 0.75);
+  }
+  
+  // Door glass replacement rules
+  if (jobType === "door_glass" || jobType === "quarter_glass" || jobType === "side_mirror") {
+    if (is18Wheeler) {
+      return 150; // 18 wheelers $150 any year for door glass
+    }
+    return 145; // All other vehicles $145 labor for door glass
+  }
+  
+  // Windshield and Back Glass replacement rules
+  if (jobType === "windshield_replacement" || jobType === "back_glass" || 
+      jobType === "back_glass_powerslide" || jobType === "sunroof") {
+    
+    // 18 wheeler rule
+    if (is18Wheeler) {
+      return 250;
+    }
+    
+    // Powerslide back glass
+    if (jobType === "back_glass_powerslide") {
+      return 185;
+    }
+    
+    // $140 labor for ANY GLASS on any vehicle 2016 and under (except 18 wheelers or utility vehicles)
+    if (year <= 2016 && !is18Wheeler && !isUtilityVehicle) {
+      return 140;
+    }
+    
+    // Standard pricing by body style for 2017+
+    if (isSedan) {
+      return 150;
+    }
+    if (isMiniSUV) {
+      return 165;
+    }
+    if (isSUVOrPickup || isUtilityVehicle) {
+      return 175;
+    }
+    
+    // Default to SUV/Pickup pricing if body style not recognized
+    return 175;
+  }
+  
+  // Windshield repair - typically lower labor
+  if (jobType === "windshield_repair") {
+    return 50; // Standard repair labor
+  }
+  
+  // Default fallback
+  return 150;
+}
 
 const locationLabels: Record<string, string> = {
   in_shop: "In-Shop",
@@ -398,13 +488,30 @@ export function JobDetailModal({
 
   const handleAddPart = (vehicleId: string) => {
     const newPart = createDefaultPart();
+    
+    // Find the vehicle to get its info for labor calculation
+    const vehicle = vehicles.find(v => v.id === vehicleId);
+    
+    // Calculate labor price based on vehicle info
+    if (vehicle) {
+      newPart.laborPrice = calculateLaborPrice(
+        newPart.jobType,
+        vehicle.bodyStyle || "",
+        vehicle.vehicleYear || "",
+        newPart.partPrice
+      );
+    }
+    
     // Apply the calculated mobile fee from address selection (including $0 for local addresses)
     if (calculatedMobileFee !== null) {
       newPart.mobileFee = calculatedMobileFee;
-      const { partsSubtotal, partTotal } = calculatePartTotals(newPart);
-      newPart.partsSubtotal = partsSubtotal;
-      newPart.partTotal = partTotal;
     }
+    
+    // Calculate totals
+    const { partsSubtotal, partTotal } = calculatePartTotals(newPart);
+    newPart.partsSubtotal = partsSubtotal;
+    newPart.partTotal = partTotal;
+    
     setVehicles((prev) =>
       prev.map((v) =>
         v.id === vehicleId ? { ...v, parts: [...v.parts, newPart] } : v
@@ -1075,9 +1182,27 @@ export function JobDetailModal({
                                     <Label>Year</Label>
                                     <Input
                                       value={vehicle.vehicleYear}
-                                      onChange={(e) =>
-                                        handleVehicleChange(vehicle.id, "vehicleYear", e.target.value)
-                                      }
+                                      onChange={(e) => {
+                                        const newYear = e.target.value;
+                                        handleVehicleChange(vehicle.id, "vehicleYear", newYear);
+                                        // Recalculate labor for all parts when year changes
+                                        if (vehicle.parts.length > 0) {
+                                          const updatedParts = vehicle.parts.map(part => {
+                                            const newLaborPrice = calculateLaborPrice(
+                                              part.jobType,
+                                              vehicle.bodyStyle || "",
+                                              newYear,
+                                              part.partPrice
+                                            );
+                                            const updatedPart = { ...part, laborPrice: newLaborPrice };
+                                            const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                            return { ...updatedPart, partsSubtotal, partTotal };
+                                          });
+                                          setVehicles(prev => prev.map(v => 
+                                            v.id === vehicle.id ? { ...v, vehicleYear: newYear, parts: updatedParts } : v
+                                          ));
+                                        }
+                                      }}
                                       placeholder="2024"
                                       data-testid={`input-vehicle-year-${vehicle.id}`}
                                     />
@@ -1120,14 +1245,38 @@ export function JobDetailModal({
                                 <div className="grid sm:grid-cols-3 gap-4">
                                   <div className="grid gap-2">
                                     <Label>Body Style</Label>
-                                    <Input
+                                    <Select
                                       value={vehicle.bodyStyle}
-                                      onChange={(e) =>
-                                        handleVehicleChange(vehicle.id, "bodyStyle", e.target.value)
-                                      }
-                                      placeholder="Sedan"
-                                      data-testid={`input-vehicle-body-${vehicle.id}`}
-                                    />
+                                      onValueChange={(value) => {
+                                        handleVehicleChange(vehicle.id, "bodyStyle", value);
+                                        // Recalculate labor for all parts when body style changes
+                                        const updatedParts = vehicle.parts.map(part => {
+                                          const newLaborPrice = calculateLaborPrice(
+                                            part.jobType,
+                                            value,
+                                            vehicle.vehicleYear,
+                                            part.partPrice
+                                          );
+                                          const updatedPart = { ...part, laborPrice: newLaborPrice };
+                                          const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                          return { ...updatedPart, partsSubtotal, partTotal };
+                                        });
+                                        setVehicles(prev => prev.map(v => 
+                                          v.id === vehicle.id ? { ...v, bodyStyle: value, parts: updatedParts } : v
+                                        ));
+                                      }}
+                                    >
+                                      <SelectTrigger data-testid={`select-vehicle-body-${vehicle.id}`}>
+                                        <SelectValue placeholder="Select body style" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {bodyStyleOptions.map((style) => (
+                                          <SelectItem key={style} value={style}>
+                                            {style}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                   <div className="grid gap-2">
                                     <Label>Color</Label>
@@ -1286,14 +1435,26 @@ export function JobDetailModal({
                                                 <Label>Job Type</Label>
                                                 <Select
                                                   value={part.jobType}
-                                                  onValueChange={(value) =>
-                                                    handlePartChange(
-                                                      vehicle.id,
-                                                      part.id,
-                                                      "jobType",
-                                                      value
-                                                    )
-                                                  }
+                                                  onValueChange={(value: typeof jobTypes[number]) => {
+                                                    // Calculate new labor price based on job type
+                                                    const newLaborPrice = calculateLaborPrice(
+                                                      value,
+                                                      vehicle.bodyStyle || "",
+                                                      vehicle.vehicleYear || "",
+                                                      part.partPrice
+                                                    );
+                                                    const updatedPart = { ...part, jobType: value, laborPrice: newLaborPrice };
+                                                    const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                                    setVehicles(prev => prev.map(v => 
+                                                      v.id === vehicle.id 
+                                                        ? { ...v, parts: v.parts.map(p => 
+                                                            p.id === part.id 
+                                                              ? { ...updatedPart, partsSubtotal, partTotal }
+                                                              : p
+                                                          )}
+                                                        : v
+                                                    ));
+                                                  }}
                                                 >
                                                   <SelectTrigger
                                                     data-testid={`select-part-type-${part.id}`}
@@ -1433,14 +1594,27 @@ export function JobDetailModal({
                                                     min="0"
                                                     step="0.01"
                                                     value={part.partPrice || ""}
-                                                    onChange={(e) =>
-                                                      handlePartChange(
-                                                        vehicle.id,
-                                                        part.id,
-                                                        "partPrice",
-                                                        parseFloat(e.target.value) || 0
-                                                      )
-                                                    }
+                                                    onChange={(e) => {
+                                                      const newPartPrice = parseFloat(e.target.value) || 0;
+                                                      // Recalculate labor if part price crosses $250 threshold
+                                                      const newLaborPrice = calculateLaborPrice(
+                                                        part.jobType,
+                                                        vehicle.bodyStyle || "",
+                                                        vehicle.vehicleYear || "",
+                                                        newPartPrice
+                                                      );
+                                                      const updatedPart = { ...part, partPrice: newPartPrice, laborPrice: newLaborPrice };
+                                                      const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                                      setVehicles(prev => prev.map(v => 
+                                                        v.id === vehicle.id 
+                                                          ? { ...v, parts: v.parts.map(p => 
+                                                              p.id === part.id 
+                                                                ? { ...updatedPart, partsSubtotal, partTotal }
+                                                                : p
+                                                            )}
+                                                          : v
+                                                      ));
+                                                    }}
                                                     data-testid={`input-part-price-${part.id}`}
                                                   />
                                                 </div>

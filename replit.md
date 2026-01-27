@@ -66,6 +66,21 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - Part Total = ceil((Parts Subtotal + Labor + Calibration + Mobile Fee) × 1.035)
 - Job Total = Sum of all Part Totals across all vehicles
 
+**Automatic Labor Pricing (auto-calculated based on vehicle/part info):**
+- Parts costing $250+: Labor = 75% of part cost (highest priority rule)
+- Windshield/Back Glass (2017+):
+  - Sedan/Coupe/Hatchback/Convertible: $150
+  - Mini SUV/Crossover: $165
+  - SUV/Pickup/Van/Wagon: $175
+  - Back Glass Powerslide: $185
+  - 18 Wheeler: $250
+- Windshield/Back Glass (2016 and under, except 18 wheelers/utility vehicles): $140
+- Door Glass/Quarter Glass/Side Mirror:
+  - All vehicles: $145
+  - 18 wheelers: $150
+- Windshield Repair: $50
+- Labor recalculates when: job type, body style, year, or part price changes
+
 **Sample Data Examples:**
 - Chen Auto Sales: Fleet job with 2 Ford F-150s (multiple vehicles)
 - Emily Rodriguez: Single vehicle with windshield + door glass (multiple parts)

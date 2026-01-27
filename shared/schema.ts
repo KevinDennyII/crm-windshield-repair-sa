@@ -39,6 +39,7 @@ export const jobTypes = [
   "windshield_repair",
   "door_glass",
   "back_glass",
+  "back_glass_powerslide",
   "quarter_glass",
   "sunroof",
   "side_mirror"
