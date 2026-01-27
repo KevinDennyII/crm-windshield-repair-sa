@@ -131,8 +131,14 @@ function calculateLaborPrice(
   jobType: string,
   bodyStyle: string,
   vehicleYear: string,
-  partCost: number
+  partCost: number,
+  customerType?: string
 ): number {
+  // Dealer customers always get $90 labor
+  if (customerType === "dealer") {
+    return 90;
+  }
+  
   const year = parseInt(vehicleYear) || new Date().getFullYear();
   const upperBodyStyle = bodyStyle.toUpperCase();
   
@@ -504,7 +510,8 @@ export function JobDetailModal({
         newPart.jobType,
         vehicle.bodyStyle || "",
         vehicle.vehicleYear || "",
-        newPart.partPrice
+        newPart.partPrice,
+        formData.customerType
       );
     }
     
@@ -726,7 +733,26 @@ export function JobDetailModal({
                           <Label>Account Type</Label>
                           <Select
                             value={formData.customerType || "retail"}
-                            onValueChange={(value) => handleChange("customerType", value as CustomerType)}
+                            onValueChange={(value) => {
+                              handleChange("customerType", value as CustomerType);
+                              // Recalculate labor for all parts when customer type changes (dealer = $90)
+                              const updatedVehicles = vehicles.map(vehicle => ({
+                                ...vehicle,
+                                parts: vehicle.parts.map(part => {
+                                  const newLaborPrice = calculateLaborPrice(
+                                    part.jobType,
+                                    vehicle.bodyStyle || "",
+                                    vehicle.vehicleYear || "",
+                                    part.partPrice,
+                                    value
+                                  );
+                                  const updatedPart = { ...part, laborPrice: newLaborPrice };
+                                  const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                  return { ...updatedPart, partsSubtotal, partTotal };
+                                })
+                              }));
+                              setVehicles(updatedVehicles);
+                            }}
                           >
                             <SelectTrigger data-testid="select-customer-type">
                               <SelectValue placeholder="Select type" />
@@ -1198,7 +1224,8 @@ export function JobDetailModal({
                                               part.jobType,
                                               vehicle.bodyStyle || "",
                                               newYear,
-                                              part.partPrice
+                                              part.partPrice,
+                                              formData.customerType
                                             );
                                             const updatedPart = { ...part, laborPrice: newLaborPrice };
                                             const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
@@ -1261,7 +1288,8 @@ export function JobDetailModal({
                                             part.jobType,
                                             value,
                                             vehicle.vehicleYear,
-                                            part.partPrice
+                                            part.partPrice,
+                                            formData.customerType
                                           );
                                           const updatedPart = { ...part, laborPrice: newLaborPrice };
                                           const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
@@ -1447,7 +1475,8 @@ export function JobDetailModal({
                                                       value,
                                                       vehicle.bodyStyle || "",
                                                       vehicle.vehicleYear || "",
-                                                      part.partPrice
+                                                      part.partPrice,
+                                                      formData.customerType
                                                     );
                                                     const updatedPart = { ...part, jobType: value, laborPrice: newLaborPrice };
                                                     const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
@@ -1607,7 +1636,8 @@ export function JobDetailModal({
                                                         part.jobType,
                                                         vehicle.bodyStyle || "",
                                                         vehicle.vehicleYear || "",
-                                                        newPartPrice
+                                                        newPartPrice,
+                                                        formData.customerType
                                                       );
                                                       const updatedPart = { ...part, partPrice: newPartPrice, laborPrice: newLaborPrice };
                                                       const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
