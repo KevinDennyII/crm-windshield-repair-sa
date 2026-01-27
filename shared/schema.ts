@@ -6,6 +6,76 @@ import { z } from "zod";
 // Export auth models (users table with roles)
 export * from "./models/auth";
 
+// Jobs table for persistent storage
+export const jobs = pgTable("jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobNumber: varchar("job_number").notNull(),
+  
+  // Customer Info
+  isBusiness: boolean("is_business").default(false),
+  businessName: varchar("business_name"),
+  customerType: varchar("customer_type").default("retail"),
+  firstName: varchar("first_name").notNull(),
+  lastName: varchar("last_name").notNull(),
+  phone: varchar("phone").notNull(),
+  email: varchar("email"),
+  streetAddress: varchar("street_address"),
+  city: varchar("city"),
+  state: varchar("state"),
+  zipCode: varchar("zip_code"),
+  
+  // Vehicles array stored as JSONB
+  vehicles: jsonb("vehicles").default([]),
+  
+  // Job Details
+  pipelineStage: varchar("pipeline_stage").default("quote"),
+  repairLocation: varchar("repair_location").default("in_shop"),
+  
+  // Scheduling
+  installer: varchar("installer"),
+  installDate: varchar("install_date"),
+  timeFrame: varchar("time_frame"),
+  installTime: varchar("install_time"),
+  installEndTime: varchar("install_end_time"),
+  jobDuration: varchar("job_duration"),
+  bookedBy: varchar("booked_by"),
+  installedBy: varchar("installed_by"),
+  googleCalendarEventId: varchar("google_calendar_event_id"),
+  leadSource: varchar("lead_source"),
+  
+  // Insurance
+  claimNumber: varchar("claim_number"),
+  dispatchNumber: varchar("dispatch_number"),
+  policyNumber: varchar("policy_number"),
+  dateOfLoss: varchar("date_of_loss"),
+  causeOfLoss: varchar("cause_of_loss"),
+  insuranceCompany: varchar("insurance_company"),
+  
+  // Job-level totals
+  subtotal: numeric("subtotal").default("0"),
+  taxAmount: numeric("tax_amount").default("0"),
+  totalDue: numeric("total_due").default("0"),
+  deductible: numeric("deductible").default("0"),
+  rebate: numeric("rebate").default("0"),
+  amountPaid: numeric("amount_paid").default("0"),
+  balanceDue: numeric("balance_due").default("0"),
+  paymentStatus: varchar("payment_status").default("pending"),
+  paymentMethod: jsonb("payment_method").default([]),
+  paymentHistory: jsonb("payment_history").default([]),
+  
+  // Notes
+  installNotes: text("install_notes"),
+  
+  // Calibration decline tracking
+  calibrationDeclined: boolean("calibration_declined").default(false),
+  
+  // Signature capture
+  signatureImage: text("signature_image"),
+  receiptSentAt: varchar("receipt_sent_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const pipelineStages = [
   "quote",
   "scheduled",
