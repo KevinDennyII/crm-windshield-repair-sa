@@ -1,0 +1,25 @@
+ Multi-Role CRM with Tech Mobile Interface
+"Create a CRM system with three distinct user roles and specialized interfaces for each.
+1. Role-Based Access Control (RBAC):
+ * Administrator: Full access to the Dashboard, Pipeline, Financials (Materials/Profit), and User Management.
+ * CSR (Customer Service Representative): Access to the 'Opportunities' pipeline to manage quotes and scheduling.
+ * Technician: A mobile-optimized view restricted to assigned jobs, task lists, and job completion workflows.
+2. Technician Interface Requirements (Based on Attachments):
+ * Dashboard: A simplified list view showing 'Current Week', 'Last Week', and 'Yearly' job summaries.
+ * Job Detail View: Must include:
+   * Vehicle Info: Year, Make, Model, and Style.
+   * Service Details: Service Type (e.g., Replacement), Glass Type (e.g., Windshield), Part#, Warehouse Name/Order#, and Moldings status.
+   * Media Gallery: A section for 'Required Media' with 4 upload slots (Pre-Inspection, VIN Number, Part Installed, After Installation).
+ * My Tasks List: A checklist for the technician to follow during the install.
+ * Payment & Completion: * Add a 'Payment' option within the 'My Tasks' or at the bottom of the job view.
+   * Include a Signature Pad for customer sign-off.
+   * A prominent green 'Completed' button that triggers the job status update to 'Paid/Completed' in the main pipeline.
+3. Integration & Logic:
+ * When a Technician completes a job and records payment, the main Administrator dashboard must automatically update the 'Weekly Profit' and 'Materials Spend' metrics.
+ * The Technician view should support 'Online/Offline' status toggling as seen in the reference images.
+4. Visual Style:
+ * Desktop (Admin/CSR): Clean, card-based kanban layout.
+ * Mobile (Tech): Use the blue header theme (#29ABE2) with high-contrast white text, large buttons for field use, and clear 'Call' action icons next to customer phone numbers."
+Key Features to Check in Your Build
+ * Payment Options: For the "Payment" section you requested, ensure the prompt includes fields for Payment Type (Cash, Credit Card, Check) and a field to confirm the Amount Collected.
+ * Dynamic Materials: Since your Dashboard tracks "Materials Spend," ensure the Technician (or CSR) can input the cost of the specific Part# used so the math stays accurate.
