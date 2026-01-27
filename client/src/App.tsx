@@ -7,12 +7,17 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar, MobileHeader } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import NotFound from "@/pages/not-found";
+import Landing from "@/pages/landing";
 import Opportunities from "@/pages/opportunities";
 import Payments from "@/pages/payments";
 import Dashboard from "@/pages/dashboard";
 import Conversations from "@/pages/conversations";
 import CalendarPage from "@/pages/calendar";
+import TechDashboard from "@/pages/tech-dashboard";
+import UserManagement from "@/pages/user-management";
 import { PlaceholderPage } from "@/pages/placeholder-page";
+import { useAuth } from "@/hooks/use-auth";
+import { Loader2 } from "lucide-react";
 import {
   Rocket,
   MessageSquare,
@@ -24,7 +29,7 @@ import {
   BarChart3,
 } from "lucide-react";
 
-function Router() {
+function AdminCsrRouter() {
   return (
     <Switch>
       <Route path="/" component={Opportunities} />
@@ -82,35 +87,78 @@ function Router() {
           icon={BarChart3}
         />
       </Route>
+      <Route path="/users" component={UserManagement} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-function App() {
+function TechRouter() {
+  return (
+    <Switch>
+      <Route path="/" component={TechDashboard} />
+      <Route path="/job/:id" component={TechDashboard} />
+      <Route component={TechDashboard} />
+    </Switch>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+function AuthenticatedApp() {
+  const { user, isLoading, isTechnician } = useAuth();
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3.5rem",
   };
 
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (!user) {
+    return <Landing />;
+  }
+
+  // Technicians get the mobile-optimized view
+  if (isTechnician) {
+    return <TechRouter />;
+  }
+
+  // Admins and CSRs get the full desktop interface
+  return (
+    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+      <div className="flex h-screen w-full overflow-hidden">
+        <AppSidebar />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <MobileHeader />
+          <header className="hidden md:flex items-center justify-between gap-4 h-12 px-4 border-b bg-background flex-shrink-0">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <ThemeToggle />
+          </header>
+          <main className="flex-1 overflow-auto bg-background">
+            <AdminCsrRouter />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-          <div className="flex h-screen w-full overflow-hidden">
-            <AppSidebar />
-            <div className="flex flex-col flex-1 overflow-hidden">
-              <MobileHeader />
-              <header className="hidden md:flex items-center justify-between gap-4 h-12 px-4 border-b bg-background flex-shrink-0">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <ThemeToggle />
-              </header>
-              <main className="flex-1 overflow-auto bg-background">
-                <Router />
-              </main>
-            </div>
-          </div>
-        </SidebarProvider>
+        <AuthenticatedApp />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

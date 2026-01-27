@@ -14,7 +14,11 @@ import {
   BarChart3,
   Car,
   Menu,
+  LogOut,
+  UserCog,
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sidebar,
   SidebarContent,
@@ -50,6 +54,13 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const { user, isAdmin, logout } = useAuth();
+
+  const getInitials = (firstName?: string | null, lastName?: string | null) => {
+    const first = firstName?.charAt(0) || "";
+    const last = lastName?.charAt(0) || "";
+    return (first + last).toUpperCase() || "U";
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -98,17 +109,58 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === "/users"}
+                    tooltip="User Management"
+                    className={cn(
+                      "transition-colors",
+                      location === "/users" &&
+                        "bg-sidebar-accent text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <Link href="/users" data-testid="nav-users">
+                      <UserCog className="h-4 w-4" />
+                      <span>User Management</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="p-3 border-t border-sidebar-border">
-        {!isCollapsed && (
-          <div className="text-xs text-sidebar-foreground/50 text-center">
-            AutoGlass Pro v1.0
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={user?.profileImageUrl || undefined} />
+            <AvatarFallback className="bg-sidebar-primary/20 text-sidebar-foreground text-xs">
+              {getInitials(user?.firstName, user?.lastName)}
+            </AvatarFallback>
+          </Avatar>
+          {!isCollapsed && (
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-sidebar-foreground truncate">
+                {user?.firstName} {user?.lastName}
+              </div>
+              <div className="text-xs text-sidebar-foreground/60 truncate">
+                {user?.email}
+              </div>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => logout()}
+            className="text-sidebar-foreground/60 hover:text-sidebar-foreground shrink-0"
+            data-testid="button-logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

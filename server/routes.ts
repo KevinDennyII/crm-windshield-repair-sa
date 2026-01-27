@@ -8,8 +8,75 @@ import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
 import { decodeVIN } from "./vin-decoder";
 import { isPlacesConfigured, getAutocomplete, getPlaceDetails } from "./places";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { db } from "./db";
+import { users } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
+  // Setup authentication BEFORE other routes
+  await setupAuth(app);
+  registerAuthRoutes(app);
+
+  // Get current user with role
+  app.get("/api/auth/user-with-role", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user with role:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Update user role (admin only)
+  app.patch("/api/users/:id/role", isAuthenticated, async (req: any, res) => {
+    try {
+      const adminId = req.user.claims.sub;
+      const [admin] = await db.select().from(users).where(eq(users.id, adminId));
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can change user roles" });
+      }
+
+      const { role } = req.body;
+      if (!["admin", "csr", "technician"].includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
+
+      const [updated] = await db
+        .update(users)
+        .set({ role, updatedAt: new Date() })
+        .where(eq(users.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+
+  // Get all users (admin only)
+  app.get("/api/users", isAuthenticated, async (req: any, res) => {
+    try {
+      const adminId = req.user.claims.sub;
+      const [admin] = await db.select().from(users).where(eq(users.id, adminId));
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can view all users" });
+      }
+
+      const allUsers = await db.select().from(users);
+      res.json(allUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
   // Get all jobs
   app.get("/api/jobs", async (req, res) => {
     try {
