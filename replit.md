@@ -67,7 +67,9 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - Job Total = Sum of all Part Totals across all vehicles
 
 **Automatic Labor Pricing (auto-calculated based on vehicle/part info):**
-- Parts costing $250+: Labor = 75% of part cost (highest priority rule)
+- **Dealer customers**: Always $90 labor (overrides all other rules)
+- **Subcontractor customers**: Manual selection of $100, $110, or $125 labor rate (they provide their own parts)
+- Parts costing $250+: Labor = 75% of part cost (highest priority rule for non-dealer/subcontractor)
 - Windshield/Back Glass (2017+):
   - Sedan/Coupe/Hatchback/Convertible: $150
   - Mini SUV/Crossover: $165
@@ -80,7 +82,15 @@ The application supports fleet companies with multiple vehicles per job, each wi
   - All vehicles: $145
   - 18 wheelers: $150
 - Windshield Repair: $50
-- Labor recalculates when: job type, body style, year, or part price changes
+- Labor recalculates when: job type, body style, year, part price, or customer type changes
+
+**Subcontractor Pricing (special account type):**
+- Subcontractors provide their own parts and accessories
+- Part Total = Labor Rate + Mobile Fee + Additional Cost (no parts/markup/tax calculations)
+- Labor rate dropdown: $100, $110, or $125 (manually selected)
+- Mobile fee still applies based on address distance
+- Additional Cost field available for manual cost entry
+- Parts pricing fields (part price, markup, accessories, urethane, tax, calibration) are hidden for subcontractors
 
 **Sample Data Examples:**
 - Chen Auto Sales: Fleet job with 2 Ford F-150s (multiple vehicles)

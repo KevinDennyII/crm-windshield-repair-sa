@@ -139,6 +139,11 @@ function calculateLaborPrice(
     return 90;
   }
   
+  // Subcontractor customers get default $100 labor (can be changed to 100/110/125 via dropdown)
+  if (customerType === "subcontractor") {
+    return 100;
+  }
+  
   const year = parseInt(vehicleYear) || new Date().getFullYear();
   const upperBodyStyle = bodyStyle.toUpperCase();
   
@@ -247,7 +252,11 @@ const customerTypeLabels: Record<string, string> = {
   retail: "Retail Customer",
   dealer: "Dealer Account",
   fleet: "Fleet Account",
+  subcontractor: "Subcontractor",
 };
+
+// Subcontractor labor rate options
+const subcontractorLaborRates = [100, 110, 125] as const;
 
 const durationOptions = [
   { value: "0.5", label: "30 minutes" },
@@ -280,6 +289,7 @@ function createDefaultPart(): Part {
     calibrationPrice: 0,
     mobileFee: 0,
     materialCost: 0,
+    subcontractorCost: 0,
     partsSubtotal: 0,
     partTotal: 0,
   };
@@ -301,7 +311,14 @@ function createDefaultVehicle(): Vehicle {
   };
 }
 
-function calculatePartTotals(part: Part): { partsSubtotal: number; partTotal: number } {
+function calculatePartTotals(part: Part, customerType?: string): { partsSubtotal: number; partTotal: number } {
+  // For subcontractors: they buy their own parts, so only charge labor + mobile fee + manual cost
+  if (customerType === "subcontractor") {
+    const partTotal = part.laborPrice + part.mobileFee + (part.subcontractorCost || 0);
+    return { partsSubtotal: 0, partTotal };
+  }
+  
+  // Standard calculation for other customer types
   const partsSubtotal = 
     (part.partPrice + part.markup + part.accessoriesPrice + part.urethanePrice) * 
     (1 + part.salesTaxPercent / 100);
@@ -310,11 +327,11 @@ function calculatePartTotals(part: Part): { partsSubtotal: number; partTotal: nu
   return { partsSubtotal, partTotal };
 }
 
-function calculateJobTotal(vehicles: Vehicle[]): number {
+function calculateJobTotal(vehicles: Vehicle[], customerType?: string): number {
   let total = 0;
   for (const vehicle of vehicles) {
     for (const part of vehicle.parts) {
-      const { partTotal } = calculatePartTotals(part);
+      const { partTotal } = calculatePartTotals(part, customerType);
       total += partTotal;
     }
   }
@@ -389,7 +406,7 @@ export function JobDetailModal({
   const [decodingVin, setDecodingVin] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const jobTotal = calculateJobTotal(vehicles);
+  const jobTotal = calculateJobTotal(vehicles, formData.customerType);
 
   useEffect(() => {
     if (job) {
@@ -515,13 +532,23 @@ export function JobDetailModal({
       );
     }
     
+    // For subcontractors, reset parts pricing fields since they provide their own materials
+    if (formData.customerType === "subcontractor") {
+      newPart.partPrice = 0;
+      newPart.markup = 0;
+      newPart.accessoriesPrice = 0;
+      newPart.urethanePrice = 0;
+      newPart.salesTaxPercent = 0;
+      newPart.calibrationPrice = 0;
+    }
+    
     // Apply the calculated mobile fee from address selection (including $0 for local addresses)
     if (calculatedMobileFee !== null) {
       newPart.mobileFee = calculatedMobileFee;
     }
     
     // Calculate totals
-    const { partsSubtotal, partTotal } = calculatePartTotals(newPart);
+    const { partsSubtotal, partTotal } = calculatePartTotals(newPart, formData.customerType);
     newPart.partsSubtotal = partsSubtotal;
     newPart.partTotal = partTotal;
     
@@ -584,7 +611,7 @@ export function JobDetailModal({
               parts: v.parts.map((p) => {
                 if (p.id === partId) {
                   const updatedPart = { ...p, [field]: value };
-                  const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                  const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
                   return { ...updatedPart, partsSubtotal, partTotal };
                 }
                 return p;
@@ -609,7 +636,7 @@ export function JobDetailModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const total = calculateJobTotal(vehicles);
+    const total = calculateJobTotal(vehicles, formData.customerType);
     const updatedFormData: InsertJob = {
       ...formData,
       vehicles,
@@ -735,7 +762,7 @@ export function JobDetailModal({
                             value={formData.customerType || "retail"}
                             onValueChange={(value) => {
                               handleChange("customerType", value as CustomerType);
-                              // Recalculate labor for all parts when customer type changes (dealer = $90)
+                              // Recalculate labor for all parts when customer type changes
                               const updatedVehicles = vehicles.map(vehicle => ({
                                 ...vehicle,
                                 parts: vehicle.parts.map(part => {
@@ -746,8 +773,20 @@ export function JobDetailModal({
                                     part.partPrice,
                                     value
                                   );
-                                  const updatedPart = { ...part, laborPrice: newLaborPrice };
-                                  const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                  // For subcontractors, reset parts pricing fields since they provide their own
+                                  const updatedPart = value === "subcontractor" 
+                                    ? { 
+                                        ...part, 
+                                        laborPrice: newLaborPrice,
+                                        partPrice: 0,
+                                        markup: 0,
+                                        accessoriesPrice: 0,
+                                        urethanePrice: 0,
+                                        salesTaxPercent: 0,
+                                        calibrationPrice: 0
+                                      }
+                                    : { ...part, laborPrice: newLaborPrice };
+                                  const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, value);
                                   return { ...updatedPart, partsSubtotal, partTotal };
                                 })
                               }));
@@ -886,7 +925,7 @@ export function JobDetailModal({
                                 ...vehicle,
                                 parts: vehicle.parts.map(part => {
                                   const updatedPart = { ...part, mobileFee: address.mobileFee as number };
-                                  const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                  const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
                                   return { ...updatedPart, partsSubtotal, partTotal };
                                 })
                               }));
@@ -1228,7 +1267,7 @@ export function JobDetailModal({
                                               formData.customerType
                                             );
                                             const updatedPart = { ...part, laborPrice: newLaborPrice };
-                                            const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                            const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
                                             return { ...updatedPart, partsSubtotal, partTotal };
                                           });
                                           setVehicles(prev => prev.map(v => 
@@ -1292,7 +1331,7 @@ export function JobDetailModal({
                                             formData.customerType
                                           );
                                           const updatedPart = { ...part, laborPrice: newLaborPrice };
-                                          const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                          const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
                                           return { ...updatedPart, partsSubtotal, partTotal };
                                         });
                                         setVehicles(prev => prev.map(v => 
@@ -1432,7 +1471,7 @@ export function JobDetailModal({
                                 ) : (
                                   <div className="space-y-4">
                                     {vehicle.parts.map((part, pIndex) => {
-                                      const { partsSubtotal, partTotal } = calculatePartTotals(part);
+                                      const { partsSubtotal, partTotal } = calculatePartTotals(part, formData.customerType);
                                       return (
                                         <Card
                                           key={part.id}
@@ -1479,7 +1518,7 @@ export function JobDetailModal({
                                                       formData.customerType
                                                     );
                                                     const updatedPart = { ...part, jobType: value, laborPrice: newLaborPrice };
-                                                    const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                                    const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
                                                     setVehicles(prev => prev.map(v => 
                                                       v.id === vehicle.id 
                                                         ? { ...v, parts: v.parts.map(p => 
@@ -1619,8 +1658,84 @@ export function JobDetailModal({
                                             {/* Part Pricing Calculator */}
                                             <div className="border-t pt-4">
                                               <h5 className="text-sm font-medium mb-3">
-                                                Part Pricing
+                                                Part Pricing {formData.customerType === "subcontractor" && <span className="text-muted-foreground font-normal">(Subcontractor - Labor + Mobile Fee Only)</span>}
                                               </h5>
+                                              
+                                              {formData.customerType === "subcontractor" ? (
+                                                /* Subcontractor pricing: Labor dropdown, Mobile Fee, and Additional Cost only */
+                                                <div className="grid sm:grid-cols-3 gap-3">
+                                                  <div className="grid gap-1">
+                                                    <Label className="text-xs">Labor Rate</Label>
+                                                    <Select
+                                                      value={part.laborPrice?.toString() || "100"}
+                                                      onValueChange={(value) => {
+                                                        const newLaborPrice = parseInt(value);
+                                                        const updatedPart = { ...part, laborPrice: newLaborPrice };
+                                                        const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
+                                                        setVehicles(prev => prev.map(v => 
+                                                          v.id === vehicle.id 
+                                                            ? { ...v, parts: v.parts.map(p => 
+                                                                p.id === part.id 
+                                                                  ? { ...updatedPart, partsSubtotal, partTotal }
+                                                                  : p
+                                                              )}
+                                                            : v
+                                                        ));
+                                                      }}
+                                                    >
+                                                      <SelectTrigger data-testid={`select-labor-rate-${part.id}`}>
+                                                        <SelectValue placeholder="Select rate" />
+                                                      </SelectTrigger>
+                                                      <SelectContent>
+                                                        {subcontractorLaborRates.map((rate) => (
+                                                          <SelectItem key={rate} value={rate.toString()}>
+                                                            ${rate}
+                                                          </SelectItem>
+                                                        ))}
+                                                      </SelectContent>
+                                                    </Select>
+                                                  </div>
+                                                  <div className="grid gap-1">
+                                                    <Label className="text-xs">Mobile Fee</Label>
+                                                    <Input
+                                                      type="number"
+                                                      min="0"
+                                                      step="0.01"
+                                                      value={part.mobileFee ?? ""}
+                                                      onChange={(e) =>
+                                                        handlePartChange(
+                                                          vehicle.id,
+                                                          part.id,
+                                                          "mobileFee",
+                                                          parseFloat(e.target.value) || 0
+                                                        )
+                                                      }
+                                                      data-testid={`input-mobile-fee-${part.id}`}
+                                                    />
+                                                  </div>
+                                                  <div className="grid gap-1">
+                                                    <Label className="text-xs">Additional Cost</Label>
+                                                    <Input
+                                                      type="number"
+                                                      min="0"
+                                                      step="0.01"
+                                                      value={part.subcontractorCost ?? ""}
+                                                      onChange={(e) =>
+                                                        handlePartChange(
+                                                          vehicle.id,
+                                                          part.id,
+                                                          "subcontractorCost",
+                                                          parseFloat(e.target.value) || 0
+                                                        )
+                                                      }
+                                                      placeholder="Manual cost"
+                                                      data-testid={`input-subcontractor-cost-${part.id}`}
+                                                    />
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                /* Standard pricing for non-subcontractor customers */
+                                                <>
                                               <div className="grid sm:grid-cols-4 gap-3">
                                                 <div className="grid gap-1">
                                                   <Label className="text-xs">Part Price</Label>
@@ -1640,7 +1755,7 @@ export function JobDetailModal({
                                                         formData.customerType
                                                       );
                                                       const updatedPart = { ...part, partPrice: newPartPrice, laborPrice: newLaborPrice };
-                                                      const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                                      const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
                                                       setVehicles(prev => prev.map(v => 
                                                         v.id === vehicle.id 
                                                           ? { ...v, parts: v.parts.map(p => 
@@ -1783,12 +1898,16 @@ export function JobDetailModal({
                                                   />
                                                 </div>
                                                 </div>
+                                                </>
+                                              )}
 
                                               {/* Calculated Totals */}
                                               <div className="flex items-center justify-end gap-4 mt-3 pt-3 border-t text-sm">
-                                                <span className="text-muted-foreground">
-                                                  Parts Subtotal: ${partsSubtotal.toFixed(2)}
-                                                </span>
+                                                {formData.customerType !== "subcontractor" && (
+                                                  <span className="text-muted-foreground">
+                                                    Parts Subtotal: ${partsSubtotal.toFixed(2)}
+                                                  </span>
+                                                )}
                                                 <span className="font-semibold">
                                                   Part Total: ${partTotal.toFixed(2)}
                                                 </span>
@@ -2001,7 +2120,7 @@ export function JobDetailModal({
                       <div className="space-y-3">
                         {vehicles.map((v, vi) =>
                           v.parts.map((p, pi) => {
-                            const { partTotal } = calculatePartTotals(p);
+                            const { partTotal } = calculatePartTotals(p, formData.customerType);
                             return (
                               <div
                                 key={p.id}

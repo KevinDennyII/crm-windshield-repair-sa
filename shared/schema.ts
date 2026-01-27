@@ -32,7 +32,7 @@ export type PaymentStatus = typeof paymentStatuses[number];
 export const paymentMethods = ["cash", "card", "check", "zelle", "bank_deposit"] as const;
 export type PaymentMethod = typeof paymentMethods[number];
 
-export const customerTypes = ["retail", "dealer", "fleet"] as const;
+export const customerTypes = ["retail", "dealer", "fleet", "subcontractor"] as const;
 export type CustomerType = typeof customerTypes[number];
 
 export const jobTypes = [
@@ -120,6 +120,7 @@ export const partSchema = z.object({
   calibrationPrice: z.number().default(0),
   mobileFee: z.number().default(0),
   materialCost: z.number().default(0),
+  subcontractorCost: z.number().default(0), // Manual additional cost for subcontractor jobs
   
   // Calculated totals for this part
   partsSubtotal: z.number().default(0),
