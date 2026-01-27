@@ -1,160 +1,157 @@
+import { useState } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Wrench, Users, Calendar, BarChart3, Shield, Smartphone } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Wrench, Loader2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Landing() {
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [userType, setUserType] = useState<string>("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  const loginMutation = useMutation({
+    mutationFn: async (credentials: { username: string; password: string }) => {
+      const response = await apiRequest("POST", "/api/auth/login", credentials);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user-with-role"] });
+      // Force a full reload to refresh auth state
+      window.location.reload();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Login Failed",
+        description: error.message || "Invalid username or password",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username || !password) {
+      toast({
+        title: "Missing Credentials",
+        description: "Please enter username and password",
+        variant: "destructive",
+      });
+      return;
+    }
+    loginMutation.mutate({ username, password });
+  };
+
+  // Pre-fill credentials when user type is selected
+  const handleUserTypeChange = (value: string) => {
+    setUserType(value);
+    switch (value) {
+      case "admin":
+        setUsername("admin");
+        setPassword("admin123");
+        break;
+      case "csr":
+        setUsername("csr");
+        setPassword("csr123");
+        break;
+      case "technician":
+        setUsername("tech");
+        setPassword("tech123");
+        break;
+      default:
+        setUsername("");
+        setPassword("");
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-slate-900/80 border-b border-slate-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-                <Wrench className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-white">AutoGlass Pro</span>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-slate-800/80 border-slate-700">
+        <CardHeader className="text-center pb-2">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+              <Wrench className="w-7 h-7 text-white" />
             </div>
-            <a href="/api/login">
-              <Button data-testid="button-login" className="bg-cyan-600 hover:bg-cyan-700">
-                Sign In
-              </Button>
-            </a>
+            <span className="text-2xl font-bold text-white">AutoGlass Pro</span>
           </div>
-        </div>
-      </nav>
-
-      <main className="pt-24 pb-16 px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              Manage Your Auto Glass
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
-                Business Like a Pro
-              </span>
-            </h1>
-            <p className="text-lg sm:text-xl text-slate-300 max-w-2xl mx-auto mb-8">
-              The complete CRM for auto glass professionals. Track jobs, manage technicians, 
-              and grow your business with our powerful pipeline management system.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a href="/api/login">
-                <Button 
-                  data-testid="button-get-started"
-                  size="lg" 
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-lg px-8"
+          <CardTitle className="text-white text-xl">Sign In</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="userType" className="text-slate-300">Select User Type</Label>
+              <Select value={userType} onValueChange={handleUserTypeChange}>
+                <SelectTrigger 
+                  className="bg-slate-700 border-slate-600 text-white"
+                  data-testid="select-user-type"
                 >
-                  Get Started
-                </Button>
-              </a>
+                  <SelectValue placeholder="Choose who you are..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrator</SelectItem>
+                  <SelectItem value="csr">Customer Service (CSR)</SelectItem>
+                  <SelectItem value="technician">Technician</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-cyan-500/20 flex items-center justify-center mb-4">
-                  <BarChart3 className="w-6 h-6 text-cyan-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Visual Pipeline</h3>
-                <p className="text-slate-400">
-                  Kanban-style board to track jobs from quote to completion. 
-                  See your entire workflow at a glance.
-                </p>
-              </CardContent>
-            </Card>
+            <div className="space-y-2">
+              <Label htmlFor="username" className="text-slate-300">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username"
+                className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                data-testid="input-username"
+              />
+            </div>
 
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center mb-4">
-                  <Users className="w-6 h-6 text-blue-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Team Management</h3>
-                <p className="text-slate-400">
-                  Role-based access for admins, CSRs, and technicians. 
-                  Everyone sees exactly what they need.
-                </p>
-              </CardContent>
-            </Card>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-slate-300">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                data-testid="input-password"
+              />
+            </div>
 
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-emerald-500/20 flex items-center justify-center mb-4">
-                  <Smartphone className="w-6 h-6 text-emerald-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Mobile-First Tech View</h3>
-                <p className="text-slate-400">
-                  Technicians get a dedicated mobile interface for field work. 
-                  Photo uploads, signatures, and payments on the go.
-                </p>
-              </CardContent>
-            </Card>
+            <Button
+              type="submit"
+              disabled={loginMutation.isPending}
+              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
+              data-testid="button-login"
+            >
+              {loginMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Signing In...
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </Button>
+          </form>
 
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-amber-500/20 flex items-center justify-center mb-4">
-                  <Calendar className="w-6 h-6 text-amber-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Calendar Sync</h3>
-                <p className="text-slate-400">
-                  Automatic Google Calendar integration. 
-                  Schedule jobs and keep your team in sync.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center mb-4">
-                  <Shield className="w-6 h-6 text-purple-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Insurance Ready</h3>
-                <p className="text-slate-400">
-                  Track claims, deductibles, and insurance payments. 
-                  All the data you need for quick processing.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-rose-500/20 flex items-center justify-center mb-4">
-                  <Wrench className="w-6 h-6 text-rose-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Parts & Pricing</h3>
-                <p className="text-slate-400">
-                  Automatic labor pricing, VIN decoding, and parts lookup. 
-                  Quote jobs faster and more accurately.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="text-center">
-            <p className="text-slate-400 mb-4">
-              Trusted by auto glass professionals
+          <div className="mt-6 pt-4 border-t border-slate-700">
+            <p className="text-xs text-slate-500 text-center">
+              Default credentials are pre-filled when you select a user type
             </p>
-            <a href="/api/login">
-              <Button 
-                variant="outline" 
-                size="lg"
-                className="border-slate-600 text-slate-300 hover:bg-slate-800"
-                data-testid="button-sign-in-bottom"
-              >
-                Sign In to Get Started
-              </Button>
-            </a>
           </div>
-        </div>
-      </main>
-
-      <footer className="border-t border-slate-700 py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-slate-500">
-            AutoGlass Pro CRM
-          </p>
-        </div>
-      </footer>
+        </CardContent>
+      </Card>
     </div>
   );
 }

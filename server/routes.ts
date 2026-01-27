@@ -18,9 +18,88 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   await setupAuth(app);
   registerAuthRoutes(app);
 
-  // Get current user with role
-  app.get("/api/auth/user-with-role", isAuthenticated, async (req: any, res) => {
+  // Simple username/password login
+  app.post("/api/auth/login", async (req, res) => {
     try {
+      const loginSchema = z.object({
+        username: z.string().min(1, "Username is required"),
+        password: z.string().min(1, "Password is required"),
+      });
+
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid credentials" });
+      }
+
+      const { username, password } = parsed.data;
+
+      // Find user by username
+      const [user] = await db.select().from(users).where(eq(users.username, username));
+      
+      if (!user) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      // Check password (simple comparison for now)
+      if (user.password !== password) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      // Store user in session
+      (req.session as any).userId = user.id;
+      (req.session as any).user = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      };
+
+      res.json({ 
+        message: "Login successful",
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+        }
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Logout endpoint
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  // Get current user with role (supports both session and OIDC auth)
+  app.get("/api/auth/user-with-role", async (req: any, res) => {
+    try {
+      // First check session-based auth
+      if ((req.session as any)?.userId) {
+        const userId = (req.session as any).userId;
+        const [user] = await db.select().from(users).where(eq(users.id, userId));
+        if (user) {
+          return res.json(user);
+        }
+      }
+
+      // Fall back to OIDC auth
+      if (!req.user?.claims?.sub) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const userId = req.user.claims.sub;
       const [user] = await db.select().from(users).where(eq(users.id, userId));
       if (!user) {
