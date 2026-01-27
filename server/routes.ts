@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { insertJobSchema, pipelineStages, paymentHistorySchema } from "@shared/schema";
 import { z } from "zod";
-import { sendEmail, sendReply, getInboxThreads } from "./gmail";
+import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured } from "./twilio";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
 import { decodeVIN } from "./vin-decoder";
@@ -331,9 +331,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
-  // Send receipt email with signature
+  // Send receipt email with PDF attachment
   app.post("/api/jobs/:id/send-receipt", async (req, res) => {
     try {
+      const receiptSchema = z.object({
+        pdfBase64: z.string().min(1, "PDF data is required"),
+        pdfFilename: z.string().min(1, "Filename is required"),
+      });
+      
+      const parsed = receiptSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid receipt data", 
+          errors: parsed.error.errors 
+        });
+      }
+
       const job = await storage.getJob(req.params.id);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
@@ -343,12 +356,11 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         return res.status(400).json({ message: "Customer has no email address" });
       }
 
-      // Get vehicle and part info
-      const vehicle = job.vehicles?.[0];
-      const part = vehicle?.parts?.[0];
+      const customerName = job.isBusiness && job.businessName 
+        ? job.businessName 
+        : `${job.firstName} ${job.lastName}`;
 
-      // Build receipt HTML
-      const receiptHtml = `
+      const emailBody = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -356,83 +368,39 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   <style>
     body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
     .header { text-align: center; border-bottom: 2px solid #29ABE2; padding-bottom: 20px; margin-bottom: 20px; }
-    .header h1 { color: #29ABE2; margin: 0; }
-    .section { margin-bottom: 20px; }
-    .section-title { font-weight: bold; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 10px; }
-    .row { display: flex; justify-content: space-between; padding: 5px 0; }
-    .label { color: #666; }
-    .value { font-weight: bold; color: #333; }
-    .total-row { font-size: 1.2em; border-top: 2px solid #333; padding-top: 10px; margin-top: 10px; }
-    .signature-section { margin-top: 30px; text-align: center; }
-    .signature-section img { max-width: 300px; border: 1px solid #ddd; padding: 10px; background: #fff; }
+    .content { padding: 20px 0; }
     .footer { text-align: center; color: #666; font-size: 12px; margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px; }
   </style>
 </head>
 <body>
   <div class="header">
     <img src="${COMPANY_LOGO_BASE64}" alt="Windshield Repair SA" style="max-width: 280px; height: auto; margin-bottom: 10px;" />
-    <p>Service Receipt</p>
   </div>
 
-  <div class="section">
-    <div class="section-title">Job Details</div>
-    <div class="row"><span class="label">Job Number:</span><span class="value">${job.jobNumber}</span></div>
-    <div class="row"><span class="label">Date:</span><span class="value">${job.installDate || new Date().toLocaleDateString()}</span></div>
+  <div class="content">
+    <p>Dear ${customerName},</p>
+    <p>Thank you for choosing Windshield Repair SA for your auto glass service!</p>
+    <p>Please find your signed receipt attached to this email. This document includes your complete service details, payment summary, warranty information, and your signature.</p>
+    <p>If you have any questions about your service or warranty, please don't hesitate to contact us.</p>
   </div>
-
-  <div class="section">
-    <div class="section-title">Customer Information</div>
-    <div class="row"><span class="label">Name:</span><span class="value">${job.firstName} ${job.lastName}</span></div>
-    <div class="row"><span class="label">Phone:</span><span class="value">${job.phone}</span></div>
-    <div class="row"><span class="label">Email:</span><span class="value">${job.email}</span></div>
-    ${job.streetAddress ? `<div class="row"><span class="label">Address:</span><span class="value">${job.streetAddress}, ${job.city}, ${job.state} ${job.zipCode}</span></div>` : ''}
-  </div>
-
-  ${vehicle ? `
-  <div class="section">
-    <div class="section-title">Vehicle Information</div>
-    <div class="row"><span class="label">Vehicle:</span><span class="value">${vehicle.vehicleYear} ${vehicle.vehicleMake} ${vehicle.vehicleModel}</span></div>
-    ${vehicle.vin ? `<div class="row"><span class="label">VIN:</span><span class="value">${vehicle.vin}</span></div>` : ''}
-    ${vehicle.bodyStyle ? `<div class="row"><span class="label">Body Style:</span><span class="value">${vehicle.bodyStyle}</span></div>` : ''}
-  </div>
-  ` : ''}
-
-  ${part ? `
-  <div class="section">
-    <div class="section-title">Service Details</div>
-    <div class="row"><span class="label">Job Type:</span><span class="value">${(part.serviceType || 'replace').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</span></div>
-    <div class="row"><span class="label">Glass Type:</span><span class="value">${(part.glassType || 'windshield').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</span></div>
-  </div>
-  ` : ''}
-
-  <div class="section">
-    <div class="section-title">Payment Summary</div>
-    <div class="row"><span class="label">Subtotal:</span><span class="value">$${(job.subtotal || 0).toFixed(2)}</span></div>
-    <div class="row"><span class="label">Tax:</span><span class="value">$${(job.taxAmount || 0).toFixed(2)}</span></div>
-    <div class="row total-row"><span class="label">Total:</span><span class="value">$${(job.totalDue || 0).toFixed(2)}</span></div>
-    <div class="row"><span class="label">Amount Paid:</span><span class="value">$${(job.amountPaid || 0).toFixed(2)}</span></div>
-    ${job.paymentMethod && job.paymentMethod.length > 0 ? `<div class="row"><span class="label">Payment Method:</span><span class="value">${job.paymentMethod.join(', ').replace(/_/g, ' ')}</span></div>` : ''}
-  </div>
-
-  ${job.signatureImage ? `
-  <div class="signature-section">
-    <div class="section-title">Customer Signature</div>
-    <img src="${job.signatureImage}" alt="Customer Signature" />
-    <p style="font-size: 12px; color: #666; margin-top: 5px;">Signed on ${new Date().toLocaleDateString()}</p>
-  </div>
-  ` : ''}
 
   <div class="footer">
-    <p>Thank you for choosing Windshield Repair SA!</p>
-    <p>Questions? Contact us at windshieldrepairsa@gmail.com</p>
+    <p><strong>Windshield Repair SA</strong></p>
+    <p>901 SE Military Hwy #C051, San Antonio, TX 78214</p>
+    <p>Email: windshieldrepairsa@gmail.com | Phone: (210) 890-0210</p>
   </div>
 </body>
 </html>`;
 
-      await sendEmail(
+      await sendEmailWithAttachment(
         job.email,
-        `Windshield Repair SA Receipt - Job #${job.jobNumber}`,
-        receiptHtml
+        `Your Service Receipt - Windshield Repair SA - Job #${job.jobNumber}`,
+        emailBody,
+        {
+          filename: parsed.data.pdfFilename,
+          base64: parsed.data.pdfBase64,
+          mimeType: 'application/pdf'
+        }
       );
 
       // Update job with receipt sent timestamp

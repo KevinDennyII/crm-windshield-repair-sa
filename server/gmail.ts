@@ -80,6 +80,54 @@ export async function sendEmail(to: string, subject: string, body: string): Prom
   });
 }
 
+export async function sendEmailWithAttachment(
+  to: string, 
+  subject: string, 
+  body: string, 
+  attachment: { filename: string; base64: string; mimeType: string }
+): Promise<void> {
+  const gmail = await getUncachableGmailClient();
+  
+  const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substr(2)}`;
+  
+  // Create multipart MIME message with attachment
+  const messageParts = [
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    '',
+    body,
+    '',
+    `--${boundary}`,
+    `Content-Type: ${attachment.mimeType}; name="${attachment.filename}"`,
+    'Content-Transfer-Encoding: base64',
+    `Content-Disposition: attachment; filename="${attachment.filename}"`,
+    '',
+    attachment.base64,
+    '',
+    `--${boundary}--`
+  ];
+  
+  const email = messageParts.join('\r\n');
+  
+  const encodedEmail = Buffer.from(email)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  
+  await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw: encodedEmail
+    }
+  });
+}
+
 export async function sendReply(threadId: string, to: string, subject: string, body: string): Promise<void> {
   const gmail = await getUncachableGmailClient();
   

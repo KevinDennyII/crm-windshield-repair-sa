@@ -304,12 +304,13 @@ function addPaymentInfo(doc: jsPDF, job: Job, yPos: number): number {
   return yPos + splitNotice.length * 4 + 5;
 }
 
-function addSignatureLine(doc: jsPDF, yPos: number): number {
+function addSignatureLine(doc: jsPDF, yPos: number, signatureImage?: string): number {
   const pageHeight = 270; // Leave 10mm bottom margin
   const margin = 20;
   
-  // Signature section needs about 35 units of space, check if we need a new page
-  if (yPos > pageHeight - 35) {
+  // Signature section needs about 45 units of space if we have an image, check if we need a new page
+  const spaceNeeded = signatureImage ? 55 : 35;
+  if (yPos > pageHeight - spaceNeeded) {
     doc.addPage();
     yPos = margin;
   }
@@ -324,6 +325,29 @@ function addSignatureLine(doc: jsPDF, yPos: number): number {
   doc.text('By signing below, I acknowledge that I have read and agree to the warranty terms stated above.', 20, yPos);
   yPos += 12;
   
+  // If we have a signature image, display it instead of the blank line
+  if (signatureImage) {
+    try {
+      // Add signature image with background box
+      doc.setFillColor(30, 58, 95); // Navy background matching signature canvas
+      doc.rect(20, yPos - 5, 80, 25, 'F');
+      doc.addImage(signatureImage, 'PNG', 22, yPos - 3, 76, 21);
+      doc.setFontSize(8);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Customer Signature', 20, yPos + 25);
+      
+      // Date field next to signature
+      const signedDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      doc.text(`Date: ${signedDate}`, 120, yPos + 10);
+      
+      return yPos + 35;
+    } catch (error) {
+      console.error('Failed to add signature image to PDF:', error);
+      // Fall through to blank signature line
+    }
+  }
+  
+  // Blank signature line (for printing)
   doc.setDrawColor(100);
   doc.line(20, yPos, 100, yPos);
   doc.text('Customer Signature', 20, yPos + 5);
@@ -523,7 +547,11 @@ export interface ReceiptResult {
   filename: string;
 }
 
-export async function generateReceiptPreview(job: Job): Promise<ReceiptResult> {
+export interface ReceiptOptions {
+  signatureImage?: string;
+}
+
+export async function generateReceiptPreview(job: Job, options?: ReceiptOptions): Promise<ReceiptResult> {
   const receiptType = determineReceiptType(job);
   const doc = new jsPDF();
   const isRetailCustomer = !job.isBusiness;
@@ -582,7 +610,7 @@ export async function generateReceiptPreview(job: Job): Promise<ReceiptResult> {
       doc.addPage();
       yPos = 20;
     }
-    yPos = addSignatureLine(doc, yPos + 10);
+    yPos = addSignatureLine(doc, yPos + 10, options?.signatureImage);
   }
   
   const customerName = job.isBusiness && job.businessName 
@@ -612,4 +640,77 @@ export function generateReceipt(job: Job): void {
     downloadReceipt(blobUrl, filename);
     URL.revokeObjectURL(blobUrl);
   });
+}
+
+export async function generateReceiptBase64(job: Job, options?: ReceiptOptions): Promise<{ base64: string; filename: string }> {
+  const receiptType = determineReceiptType(job);
+  const doc = new jsPDF();
+  const isRetailCustomer = !job.isBusiness;
+  
+  let yPos = 20;
+  
+  yPos = await addCompanyHeader(doc, yPos);
+  yPos = addInvoiceHeader(doc, job, yPos - 10, receiptType);
+  yPos = addCustomerInfo(doc, job, yPos + 5);
+  
+  const { yPos: lineYPos, subtotal } = addLineItems(doc, job, yPos + 5);
+  yPos = lineYPos;
+  
+  yPos = addTotals(doc, job, yPos, subtotal);
+  yPos = addPaymentInfo(doc, job, yPos + 5);
+  
+  if (yPos > 220) {
+    doc.addPage();
+    yPos = 20;
+  }
+  
+  yPos += 10;
+  
+  const hasDeclinedCalibration = job.vehicles.some(v => 
+    v.parts.some(p => p.calibrationType === 'declined')
+  );
+  if (hasDeclinedCalibration && receiptType === 'windshield_replacement') {
+    if (yPos > 180) {
+      doc.addPage();
+      yPos = 20;
+    }
+    yPos = addCalibrationDeclinedDisclaimer(doc, yPos);
+  }
+  
+  switch (receiptType) {
+    case 'dealer':
+      yPos = addDealerWarranty(doc, yPos);
+      break;
+    case 'fleet':
+      yPos = addFleetWarranty(doc, yPos);
+      break;
+    case 'rock_chip_repair':
+      yPos = addRockChipWarranty(doc, yPos);
+      break;
+    case 'windshield_replacement':
+      yPos = addWindshieldReplacementWarranty(doc, yPos);
+      break;
+    case 'other_glass_replacement':
+      yPos = addOtherGlassWarranty(doc, yPos);
+      break;
+  }
+  
+  if (isRetailCustomer && receiptType !== 'dealer') {
+    if (yPos > 250) {
+      doc.addPage();
+      yPos = 20;
+    }
+    yPos = addSignatureLine(doc, yPos + 10, options?.signatureImage);
+  }
+  
+  const customerName = job.isBusiness && job.businessName 
+    ? job.businessName.replace(/\s+/g, '_')
+    : `${job.lastName}_${job.firstName}`;
+  const dateStr = formatDate(job.installDate || job.createdAt).replace(/\s+/g, '_').replace(/,/g, '');
+  const invoiceNum = `0126-${job.jobNumber.slice(-4)}`;
+  const filename = `${customerName}_${dateStr}_${invoiceNum}.pdf`;
+  
+  const base64 = doc.output('datauristring').split(',')[1];
+  
+  return { base64, filename };
 }

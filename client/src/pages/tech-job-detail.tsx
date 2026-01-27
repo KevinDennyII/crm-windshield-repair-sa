@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { generateReceiptBase64 } from "@/lib/receipt-generator";
 import { 
   ArrowLeft, 
   Phone, 
@@ -40,14 +41,25 @@ export default function TechJobDetail() {
 
   const sendReceiptMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/jobs/${jobId}/send-receipt`);
+      if (!job) throw new Error("Job not found");
+      
+      // Generate PDF with signature
+      const { base64, filename } = await generateReceiptBase64(job, {
+        signatureImage: job.signatureImage || undefined
+      });
+      
+      // Send PDF to server for email
+      const response = await apiRequest("POST", `/api/jobs/${jobId}/send-receipt`, {
+        pdfBase64: base64,
+        pdfFilename: filename
+      });
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       toast({
         title: "Receipt Sent",
-        description: "The receipt has been emailed to the customer.",
+        description: "The PDF receipt has been emailed to the customer.",
       });
     },
     onError: (error: Error) => {
