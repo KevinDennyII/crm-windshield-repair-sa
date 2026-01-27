@@ -29,6 +29,12 @@ export default function TechSignature() {
       const rect = canvas.getBoundingClientRect();
       canvas.width = rect.width;
       canvas.height = rect.height;
+      // Fill with dark background so signature is visible in dark mode emails
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#1E3A5F";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
     };
     
     resizeCanvas();
@@ -100,7 +106,7 @@ export default function TechSignature() {
     }
     
     ctx.lineTo(x, y);
-    ctx.strokeStyle = "#000";
+    ctx.strokeStyle = "#fff";
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.stroke();
@@ -116,7 +122,9 @@ export default function TechSignature() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Clear and refill with dark background
+    ctx.fillStyle = "#1E3A5F";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     setHasSignature(false);
   };
 
@@ -161,8 +169,8 @@ export default function TechSignature() {
       <main className="flex-1 flex items-center justify-center p-4">
         <canvas
           ref={canvasRef}
-          className="w-full h-full border border-gray-200 touch-none bg-white"
-          style={{ minHeight: "400px" }}
+          className="w-full h-full border border-gray-200 touch-none"
+          style={{ minHeight: "400px", backgroundColor: "#1E3A5F" }}
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
