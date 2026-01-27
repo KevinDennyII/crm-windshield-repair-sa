@@ -183,7 +183,10 @@ function calculateLaborPrice(
     if (isMiniSUV) {
       return 165;
     }
-    if (isSUVOrPickup || isUtilityVehicle) {
+    if (isUtilityVehicle) {
+      return 225;
+    }
+    if (isSUVOrPickup) {
       return 175;
     }
     

@@ -72,6 +72,7 @@ The application supports fleet companies with multiple vehicles per job, each wi
   - Sedan/Coupe/Hatchback/Convertible: $150
   - Mini SUV/Crossover: $165
   - SUV/Pickup/Van/Wagon: $175
+  - Utility Vehicle: $225
   - Back Glass Powerslide: $185
   - 18 Wheeler: $250
 - Windshield/Back Glass (2016 and under, except 18 wheelers/utility vehicles): $140
