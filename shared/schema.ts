@@ -119,6 +119,7 @@ export const partSchema = z.object({
   laborPrice: z.number().default(0),
   calibrationPrice: z.number().default(0),
   mobileFee: z.number().default(0),
+  materialCost: z.number().default(0),
   
   // Calculated totals for this part
   partsSubtotal: z.number().default(0),

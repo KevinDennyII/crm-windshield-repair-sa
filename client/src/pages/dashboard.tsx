@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Calendar,
+  ShoppingCart,
+  Banknote,
 } from "lucide-react";
 import { type Job } from "@shared/schema";
 
@@ -19,6 +21,45 @@ const stageLabels: Record<string, string> = {
   paid_completed: "Paid/Completed",
   lost_opportunity: "Lost Opportunity",
 };
+
+// Get Monday-Saturday week boundaries (resets every Monday at midnight)
+function getWeekBounds(): { start: Date; end: Date } {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  
+  // Calculate days since last Monday
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  
+  // Start of week (Monday at 00:00:00)
+  const start = new Date(now);
+  start.setDate(now.getDate() - daysSinceMonday);
+  start.setHours(0, 0, 0, 0);
+  
+  // End of week (Saturday at 23:59:59)
+  const end = new Date(start);
+  end.setDate(start.getDate() + 5);
+  end.setHours(23, 59, 59, 999);
+  
+  return { start, end };
+}
+
+// Check if a date falls within Mon-Sat of current week
+function isInCurrentWeek(dateStr: string | undefined): boolean {
+  if (!dateStr) return false;
+  const date = new Date(dateStr);
+  const { start, end } = getWeekBounds();
+  return date >= start && date <= end;
+}
+
+// Format currency as USD
+function formatUSD(amount: number): string {
+  return amount.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
 export default function Dashboard() {
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
@@ -31,6 +72,25 @@ export default function Dashboard() {
   const pendingJobs = jobs.filter((job) => job.paymentStatus === "pending").length;
   const scheduledJobs = jobs.filter((job) => job.pipelineStage === "scheduled").length;
   const totalCollected = jobs.reduce((sum, job) => sum + job.amountPaid, 0);
+
+  // Weekly metrics (Mon-Sat) - only count Paid/Completed jobs
+  const weeklyCompletedJobs = jobs.filter(
+    (job) => job.pipelineStage === "paid_completed" && isInCurrentWeek(job.installDate)
+  );
+  
+  // Materials Cost: sum of all materialCost from parts in completed jobs this week
+  const weeklyMaterialsCost = weeklyCompletedJobs.reduce((sum, job) => {
+    const jobMaterialsCost = job.vehicles.reduce((vSum, vehicle) => {
+      return vSum + vehicle.parts.reduce((pSum, part) => pSum + (part.materialCost || 0), 0);
+    }, 0);
+    return sum + jobMaterialsCost;
+  }, 0);
+  
+  // Weekly Revenue: sum of totalDue from completed jobs this week
+  const weeklyRevenue = weeklyCompletedJobs.reduce((sum, job) => sum + job.totalDue, 0);
+  
+  // Weekly Profit: revenue minus materials
+  const weeklyProfit = weeklyRevenue - weeklyMaterialsCost;
 
   const jobsByStage = jobs.reduce((acc, job) => {
     acc[job.pipelineStage] = (acc[job.pipelineStage] || 0) + 1;
@@ -59,8 +119,8 @@ export default function Dashboard() {
           <Skeleton className="h-7 w-32 mb-1" />
           <Skeleton className="h-4 w-64" />
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <Skeleton className="h-4 w-24" />
@@ -85,7 +145,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Jobs</CardTitle>
@@ -133,6 +193,32 @@ export default function Dashboard() {
               {paidJobs}
             </div>
             <p className="text-xs text-muted-foreground">Paid & completed</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Materials Cost</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-materials-cost">
+              {formatUSD(weeklyMaterialsCost)}
+            </div>
+            <p className="text-xs text-muted-foreground">This week (Mon-Sat)</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Weekly Profit</CardTitle>
+            <Banknote className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${weeklyProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} data-testid="text-weekly-profit">
+              {formatUSD(weeklyProfit)}
+            </div>
+            <p className="text-xs text-muted-foreground">This week (Mon-Sat)</p>
           </CardContent>
         </Card>
       </div>
@@ -250,7 +336,9 @@ export default function Dashboard() {
                         <p className="text-sm font-medium">{getCustomerName(job)}</p>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {job.vehicleYear} {job.vehicleMake} {job.vehicleModel}
+                        {job.vehicles.length > 0 
+                          ? `${job.vehicles[0].vehicleYear} ${job.vehicles[0].vehicleMake} ${job.vehicles[0].vehicleModel}${job.vehicles.length > 1 ? ` +${job.vehicles.length - 1} more` : ''}`
+                          : 'No vehicle info'}
                       </p>
                     </div>
                   </div>
