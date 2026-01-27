@@ -1,24 +1,39 @@
-import { Link } from "wouter";
+import { useState } from "react";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery } from "@tanstack/react-query";
-import { LogOut, Wrench, Phone, Calendar, CheckCircle2, Clock, Loader2, ChevronRight } from "lucide-react";
+import { 
+  Menu, 
+  X, 
+  MapPin, 
+  User, 
+  Wifi, 
+  Settings, 
+  LogOut,
+  Loader2,
+  ChevronRight
+} from "lucide-react";
 import type { Job } from "@shared/schema";
+
+type TabType = "current" | "last" | "yearly";
 
 export default function TechDashboard() {
   const { user, logout } = useAuth();
+  const [, navigate] = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabType>("current");
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
 
-  // Filter jobs assigned to this technician (for now, show scheduled jobs)
   const scheduledJobs = jobs.filter(job => job.pipelineStage === "scheduled");
   const completedJobs = jobs.filter(job => job.pipelineStage === "paid_completed");
 
-  // Get current week's jobs
   const now = new Date();
   const startOfWeek = new Date(now);
   startOfWeek.setDate(now.getDate() - now.getDay());
@@ -27,34 +42,63 @@ export default function TechDashboard() {
   const endOfWeek = new Date(startOfWeek);
   endOfWeek.setDate(startOfWeek.getDate() + 7);
 
-  const thisWeekJobs = completedJobs.filter(job => {
-    if (!job.installDate) return false;
-    const installDate = new Date(job.installDate);
-    return installDate >= startOfWeek && installDate < endOfWeek;
-  });
-
-  // Last week's jobs
   const startOfLastWeek = new Date(startOfWeek);
   startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
 
-  const lastWeekJobs = completedJobs.filter(job => {
-    if (!job.installDate) return false;
-    const installDate = new Date(job.installDate);
-    return installDate >= startOfLastWeek && installDate < startOfWeek;
-  });
-
-  // Yearly stats
   const startOfYear = new Date(now.getFullYear(), 0, 1);
-  const yearlyJobs = completedJobs.filter(job => {
-    if (!job.installDate) return false;
-    const installDate = new Date(job.installDate);
-    return installDate >= startOfYear;
-  });
+
+  const getFilteredJobs = () => {
+    const allJobs = [...scheduledJobs, ...completedJobs];
+    
+    switch (activeTab) {
+      case "current":
+        return allJobs.filter(job => {
+          if (!job.installDate) return false;
+          const installDate = new Date(job.installDate);
+          return installDate >= startOfWeek && installDate < endOfWeek;
+        });
+      case "last":
+        return allJobs.filter(job => {
+          if (!job.installDate) return false;
+          const installDate = new Date(job.installDate);
+          return installDate >= startOfLastWeek && installDate < startOfWeek;
+        });
+      case "yearly":
+        return allJobs.filter(job => {
+          if (!job.installDate) return false;
+          const installDate = new Date(job.installDate);
+          return installDate >= startOfYear;
+        });
+      default:
+        return scheduledJobs;
+    }
+  };
+
+  const filteredJobs = getFilteredJobs();
+
+  const getTabLabel = () => {
+    switch (activeTab) {
+      case "current": return "Current Week";
+      case "last": return "Last Week";
+      case "yearly": return "Yearly";
+    }
+  };
 
   const getInitials = (firstName?: string | null, lastName?: string | null) => {
     const first = firstName?.charAt(0) || "";
     const last = lastName?.charAt(0) || "";
     return (first + last).toUpperCase() || "T";
+  };
+
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+  };
+
+  const handleLogout = () => {
+    logout();
+    setSidebarOpen(false);
   };
 
   if (isLoading) {
@@ -66,148 +110,223 @@ export default function TechDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="sticky top-0 z-50 px-4 py-3 flex items-center justify-between" style={{ backgroundColor: "#29ABE2" }}>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
-            <Wrench className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-white">AutoGlass Pro</h1>
-            <p className="text-xs text-white/80">Technician Portal</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Avatar className="w-10 h-10 border-2 border-white/30">
-            <AvatarImage src={user?.profileImageUrl || undefined} />
-            <AvatarFallback className="bg-white/20 text-white">
-              {getInitials(user?.firstName, user?.lastName)}
-            </AvatarFallback>
-          </Avatar>
+    <div className="min-h-screen bg-white flex flex-col">
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <div 
+        className={`fixed top-0 left-0 h-full w-72 z-50 transform transition-transform duration-300 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        style={{ backgroundColor: "#29ABE2" }}
+      >
+        <div className="p-4">
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => logout()}
-            className="text-white hover:bg-white/20"
-            data-testid="button-logout"
+            onClick={() => setSidebarOpen(false)}
+            className="text-white hover:bg-white/20 mb-4"
+            data-testid="button-close-sidebar"
           >
-            <LogOut className="w-5 h-5" />
+            <X className="w-5 h-5" />
           </Button>
+
+          <div className="flex flex-col items-center py-6">
+            <div 
+              className="w-24 h-24 rounded-full flex items-center justify-center mb-4"
+              style={{ backgroundColor: "rgba(255,255,255,0.2)" }}
+            >
+              <div className="relative">
+                <User className="w-12 h-12 text-white" />
+                <MapPin 
+                  className="w-5 h-5 text-white absolute -top-1 -right-1" 
+                  style={{ backgroundColor: "#29ABE2", borderRadius: "50%" }}
+                />
+              </div>
+            </div>
+            <p className="text-white/80 text-sm">Technician Area</p>
+            <h2 className="text-white text-xl font-bold">
+              {user?.firstName} {user?.lastName}
+            </h2>
+          </div>
+
+          <nav className="space-y-2 mt-4">
+            <button
+              onClick={() => { setActiveTab("current"); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeTab === "current" ? "bg-white/20" : "hover:bg-white/10"
+              }`}
+              data-testid="nav-current-week"
+            >
+              <Wifi className="w-5 h-5 text-white" />
+              <span className="text-white font-medium">Current Week</span>
+              <span className="text-white/70 text-sm">(online)</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab("last"); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeTab === "last" ? "bg-white/20" : "hover:bg-white/10"
+              }`}
+              data-testid="nav-last-week"
+            >
+              <Wifi className="w-5 h-5 text-white" />
+              <span className="text-white font-medium">Last Week</span>
+              <span className="text-white/70 text-sm">(online)</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab("yearly"); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeTab === "yearly" ? "bg-white/20" : "hover:bg-white/10"
+              }`}
+              data-testid="nav-yearly"
+            >
+              <Wifi className="w-5 h-5 text-white" />
+              <span className="text-white font-medium">Yearly</span>
+              <span className="text-white/70 text-sm">(online)</span>
+            </button>
+
+            <button
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left hover:bg-white/10 transition-colors"
+              data-testid="nav-settings"
+            >
+              <Settings className="w-5 h-5 text-white" />
+              <span className="text-white font-medium">Settings</span>
+            </button>
+          </nav>
+
+          <div className="absolute bottom-8 left-4 right-4">
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-white hover:bg-white/20"
+              onClick={handleLogout}
+              data-testid="button-logout"
+            >
+              <LogOut className="w-5 h-5 mr-2" />
+              Logout
+            </Button>
+          </div>
         </div>
+      </div>
+
+      <header 
+        className="sticky top-0 z-30 px-4 py-3 flex items-center justify-between"
+        style={{ backgroundColor: "#29ABE2" }}
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setSidebarOpen(true)}
+          className="text-white hover:bg-white/20"
+          data-testid="button-open-sidebar"
+        >
+          <Menu className="w-6 h-6" />
+        </Button>
+
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-bold text-white">Dashboard</h1>
+          {isOnline && (
+            <div 
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: "#4ADE80" }}
+            />
+          )}
+        </div>
+
+        <div className="w-10" />
       </header>
 
-      <main className="p-4 space-y-4">
-        <div className="text-center py-2">
-          <h2 className="text-xl font-semibold text-slate-800">
-            Welcome, {user?.firstName || "Technician"}!
-          </h2>
-          <p className="text-slate-500 text-sm">Here's your job summary</p>
+      <div 
+        className="px-4 py-3 flex items-center justify-between"
+        style={{ backgroundColor: "#1B8EB8" }}
+      >
+        <h2 className="text-white text-lg font-semibold">{getTabLabel()}</h2>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={isOnline}
+            onCheckedChange={setIsOnline}
+            className="data-[state=checked]:bg-green-500"
+            data-testid="switch-online"
+          />
+          <span 
+            className="text-xs font-medium px-2 py-1 rounded"
+            style={{ 
+              backgroundColor: isOnline ? "#4ADE80" : "#94A3B8", 
+              color: "white" 
+            }}
+          >
+            {isOnline ? "Online" : "Offline"}
+          </span>
         </div>
+      </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-cyan-600">{thisWeekJobs.length}</div>
-              <div className="text-xs text-slate-500">This Week</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-slate-600">{lastWeekJobs.length}</div>
-              <div className="text-xs text-slate-500">Last Week</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-emerald-600">{yearlyJobs.length}</div>
-              <div className="text-xs text-slate-500">This Year</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="bg-white shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-cyan-600" />
-              Scheduled Jobs
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {scheduledJobs.length === 0 ? (
-              <p className="text-center text-slate-500 py-4">No scheduled jobs</p>
-            ) : (
-              scheduledJobs.map(job => (
-                <Link key={job.id} href={`/tech/job/${job.id}`}>
-                  <div
-                    className="p-3 rounded-lg bg-slate-50 border border-slate-200 hover-elevate cursor-pointer"
-                    data-testid={`job-card-${job.id}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <div className="font-semibold text-slate-800">
-                          {job.jobNumber}
-                        </div>
-                        <div className="text-sm text-slate-600">
-                          {job.firstName} {job.lastName}
-                        </div>
-                        {job.vehicles?.[0] && (
-                          <div className="text-xs text-slate-500">
-                            {job.vehicles[0].vehicleYear} {job.vehicles[0].vehicleMake} {job.vehicles[0].vehicleModel}
-                          </div>
-                        )}
-                        {job.installDate && (
-                          <div className="text-xs text-cyan-600 mt-1 flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {job.installDate} {job.installTime && `@ ${job.installTime}`}
-                          </div>
-                        )}
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
-                    </div>
-                  </div>
-                </Link>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-              Recent Completions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {completedJobs.slice(0, 5).length === 0 ? (
-              <p className="text-center text-slate-500 py-4">No completed jobs yet</p>
-            ) : (
-              completedJobs.slice(0, 5).map(job => (
-                <div
-                  key={job.id}
-                  className="p-3 rounded-lg bg-emerald-50 border border-emerald-200"
-                  data-testid={`completed-job-${job.id}`}
+      <main className="flex-1 overflow-auto">
+        {filteredJobs.length === 0 ? (
+          <div className="flex items-center justify-center h-64 text-gray-500">
+            No jobs for this period
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-200">
+            {filteredJobs.map(job => (
+              <Link key={job.id} href={`/tech/job/${job.id}`}>
+                <div 
+                  className="px-4 py-4 hover:bg-gray-50 cursor-pointer"
+                  data-testid={`job-card-${job.id}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-slate-800">{job.jobNumber}</div>
-                      <div className="text-sm text-slate-600">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-gray-900">
                         {job.firstName} {job.lastName}
+                      </h3>
+                      <div className="mt-1 space-y-0.5">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm text-gray-600">Schedule Date</span>
+                          <span className="text-sm font-medium text-gray-900 ml-auto">
+                            {formatDate(job.installDate)}
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm text-gray-600">Schedule Time</span>
+                          <span className="text-sm font-medium text-gray-900 ml-auto">
+                            {job.installTime || "N/A"}
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm text-gray-600">Payment Type</span>
+                          <span className="text-sm font-medium text-gray-900 ml-auto capitalize">
+                            {job.paymentMethod?.join(", ")?.replace(/_/g, " ") || "N/A"}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold text-emerald-600">
-                        ${job.totalDue?.toFixed(2)}
-                      </div>
-                      <div className="text-xs text-slate-500">{job.installDate}</div>
+                    <div className="text-right ml-4">
+                      <span 
+                        className="text-sm font-semibold"
+                        style={{ color: "#1B8EB8" }}
+                      >
+                        #{job.jobNumber}
+                      </span>
                     </div>
                   </div>
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+              </Link>
+            ))}
+          </div>
+        )}
       </main>
+
+      <footer 
+        className="sticky bottom-0 px-4 py-3 flex items-center justify-center gap-2 border-t"
+        style={{ backgroundColor: "#F8F9FA" }}
+      >
+        <Wifi className="w-5 h-5" style={{ color: "#29ABE2" }} />
+        <span className="font-semibold text-gray-800">Orders</span>
+      </footer>
     </div>
   );
 }

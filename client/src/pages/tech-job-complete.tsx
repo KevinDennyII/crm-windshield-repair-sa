@@ -1,46 +1,19 @@
-import { useState, useRef } from "react";
-import { useRoute, Link, useLocation } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useState } from "react";
+import { useRoute, Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
 import { 
   ArrowLeft, 
-  Camera, 
-  CreditCard, 
-  CheckCircle2,
+  X,
   Loader2,
-  Pen,
-  DollarSign,
-  Image,
-  X
+  Upload
 } from "lucide-react";
 import type { Job } from "@shared/schema";
 
-type PaymentHistory = {
-  id: string;
-  date: string;
-  source: "cash" | "credit_card" | "check" | "insurance";
-  amount: number;
-  notes: string;
-};
-
 export default function TechJobComplete() {
   const [, params] = useRoute("/tech/job/:id/complete");
-  const [, navigate] = useLocation();
-  const { toast } = useToast();
   const jobId = params?.id;
-  const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSignature, setHasSignature] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<string>("");
-  const [paymentAmount, setPaymentAmount] = useState<string>("");
-  const [paymentNotes, setPaymentNotes] = useState<string>("");
+  
   const [photos, setPhotos] = useState<{ [key: string]: string }>({
     preInspection: "",
     vin: "",
@@ -53,28 +26,6 @@ export default function TechJobComplete() {
   });
 
   const job = jobs.find(j => j.id === jobId);
-
-  const completeJobMutation = useMutation({
-    mutationFn: async (data: Partial<Job>) => {
-      const response = await apiRequest("PATCH", `/api/jobs/${jobId}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
-      toast({
-        title: "Job Completed",
-        description: "The job has been marked as completed.",
-      });
-      navigate("/tech");
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to complete job",
-        variant: "destructive",
-      });
-    },
-  });
 
   const handlePhotoCapture = (slot: string) => {
     const input = document.createElement("input");
@@ -104,96 +55,6 @@ export default function TechJobComplete() {
     }));
   };
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    setIsDrawing(true);
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    let x, y;
-    
-    if ("touches" in e) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
-    
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    let x, y;
-    
-    if ("touches" in e) {
-      e.preventDefault();
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
-    
-    ctx.lineTo(x, y);
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.stroke();
-    setHasSignature(true);
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-  };
-
-  const clearSignature = () => {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
-  };
-
-  const handleCompleteJob = () => {
-    if (!job) return;
-
-    const newPayment: PaymentHistory = {
-      id: crypto.randomUUID(),
-      date: new Date().toISOString().split("T")[0],
-      source: paymentMethod as "cash" | "credit_card" | "check" | "insurance",
-      amount: parseFloat(paymentAmount) || 0,
-      notes: paymentNotes,
-    };
-
-    const updatedPaymentHistory = [
-      ...(job.paymentHistory || []),
-      ...(paymentAmount && parseFloat(paymentAmount) > 0 ? [newPayment] : [])
-    ];
-
-    const totalPaid = updatedPaymentHistory.reduce((sum, p) => sum + (p.amount || 0), 0);
-    const newBalanceDue = (job.totalDue || 0) - totalPaid;
-
-    completeJobMutation.mutate({
-      pipelineStage: "paid_completed",
-      paymentHistory: updatedPaymentHistory,
-      amountPaid: totalPaid,
-      balanceDue: newBalanceDue,
-      paymentStatus: newBalanceDue <= 0 ? "paid" : "partial",
-    });
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#29ABE2" }}>
@@ -204,8 +65,11 @@ export default function TechJobComplete() {
 
   if (!job) {
     return (
-      <div className="min-h-screen bg-slate-100">
-        <header className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3" style={{ backgroundColor: "#29ABE2" }}>
+      <div className="min-h-screen bg-white">
+        <header 
+          className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3"
+          style={{ backgroundColor: "#29ABE2" }}
+        >
           <Link href="/tech">
             <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" data-testid="button-back">
               <ArrowLeft className="w-5 h-5" />
@@ -217,191 +81,106 @@ export default function TechJobComplete() {
     );
   }
 
-  const photoSlots = [
-    { key: "preInspection", label: "Pre-Inspection" },
-    { key: "vin", label: "VIN" },
-    { key: "partInstalled", label: "Part Installed" },
-    { key: "after", label: "After" },
+  const requiredPhotos = [
+    { key: "preInspection", label: "Pre-Inspection\n(Image)" },
+    { key: "vin", label: "VIN Number\n(Image)" },
+    { key: "partInstalled", label: "Part Installed\n(Image)" },
+    { key: "after", label: "After Installation\n(Image)" },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-24">
-      <header className="sticky top-0 z-50 px-4 py-3" style={{ backgroundColor: "#29ABE2" }}>
-        <div className="flex items-center gap-3">
-          <Link href={`/tech/job/${job.id}`}>
-            <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" data-testid="button-back">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-lg font-bold text-white">Complete Job</h1>
-            <p className="text-xs text-white/80">{job.jobNumber}</p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-white flex flex-col">
+      <header 
+        className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3"
+        style={{ backgroundColor: "#29ABE2" }}
+      >
+        <Link href={`/tech/job/${job.id}`}>
+          <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" data-testid="button-back">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+        </Link>
+        <h1 className="text-lg font-bold text-white flex-1 text-center pr-8">
+          Attachments
+        </h1>
       </header>
 
-      <main className="p-4 space-y-4">
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Camera className="w-4 h-4 text-cyan-600" />
-              Photo Documentation
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              {photoSlots.map(slot => (
-                <div key={slot.key} className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">{slot.label}</Label>
-                  {photos[slot.key] ? (
-                    <div className="relative aspect-square bg-slate-100 rounded-lg overflow-hidden">
-                      <img 
-                        src={photos[slot.key]} 
-                        alt={slot.label}
-                        className="w-full h-full object-cover"
-                      />
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-1 right-1 h-6 w-6"
-                        onClick={() => clearPhoto(slot.key)}
-                        data-testid={`button-clear-photo-${slot.key}`}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      className="w-full aspect-square flex flex-col items-center justify-center gap-1"
-                      onClick={() => handlePhotoCapture(slot.key)}
-                      data-testid={`button-capture-${slot.key}`}
-                    >
-                      <Image className="w-6 h-6 text-muted-foreground" />
-                      <span className="text-xs">Tap to capture</span>
-                    </Button>
-                  )}
+      <main className="flex-1 overflow-auto p-4">
+        <div className="flex justify-center mb-4">
+          <span 
+            className="px-6 py-2 rounded-full text-white font-semibold"
+            style={{ backgroundColor: "#DC2626" }}
+          >
+            Required Media
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          {requiredPhotos.map(slot => (
+            <div key={slot.key} className="relative">
+              {photos[slot.key] ? (
+                <div className="relative aspect-[4/3] rounded-lg overflow-hidden">
+                  <img 
+                    src={photos[slot.key]} 
+                    alt={slot.label}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 py-2 px-3">
+                    <span className="text-white text-sm whitespace-pre-line">{slot.label}</span>
+                  </div>
+                  <button
+                    onClick={() => clearPhoto(slot.key)}
+                    className="absolute top-2 right-2 w-8 h-8 rounded-md flex items-center justify-center"
+                    style={{ backgroundColor: "#DC2626" }}
+                    data-testid={`button-clear-photo-${slot.key}`}
+                  >
+                    <X className="w-5 h-5 text-white" />
+                  </button>
                 </div>
-              ))}
+              ) : (
+                <button
+                  onClick={() => handlePhotoCapture(slot.key)}
+                  className="w-full aspect-[4/3] bg-gray-200 rounded-lg flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-400 hover:bg-gray-300 transition-colors"
+                  data-testid={`button-capture-${slot.key}`}
+                >
+                  <Upload className="w-8 h-8 text-gray-500" />
+                  <span className="text-sm text-gray-600 text-center whitespace-pre-line">{slot.label}</span>
+                </button>
+              )}
             </div>
-          </CardContent>
-        </Card>
+          ))}
+        </div>
 
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Pen className="w-4 h-4 text-cyan-600" />
-              Customer Signature
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="border rounded-lg bg-white overflow-hidden">
-              <canvas
-                ref={signatureCanvasRef}
-                width={320}
-                height={150}
-                className="w-full touch-none"
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={stopDrawing}
-                onMouseLeave={stopDrawing}
-                onTouchStart={startDrawing}
-                onTouchMove={draw}
-                onTouchEnd={stopDrawing}
-                data-testid="canvas-signature"
-              />
-            </div>
-            <div className="flex items-center justify-between mt-2">
-              <p className="text-xs text-muted-foreground">
-                {hasSignature ? "Signature captured" : "Sign above"}
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearSignature}
-                disabled={!hasSignature}
-                data-testid="button-clear-signature"
-              >
-                Clear
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex justify-center mb-4">
+          <span 
+            className="px-6 py-2 rounded-full text-white font-semibold"
+            style={{ backgroundColor: "#29ABE2" }}
+          >
+            Optional Media
+          </span>
+        </div>
 
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-cyan-600" />
-              Collect Payment
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-              <div>
-                <div className="text-sm text-muted-foreground">Balance Due</div>
-                <div className="text-xl font-bold text-slate-800">
-                  ${job.balanceDue?.toFixed(2)}
-                </div>
-              </div>
-              <DollarSign className="w-8 h-8 text-emerald-600" />
-            </div>
-
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label>Payment Method</Label>
-                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger data-testid="select-payment-method">
-                    <SelectValue placeholder="Select method" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="credit_card">Credit Card</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                    <SelectItem value="insurance">Insurance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <Label>Amount</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  data-testid="input-payment-amount"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label>Notes (optional)</Label>
-                <Textarea
-                  placeholder="Payment notes..."
-                  value={paymentNotes}
-                  onChange={(e) => setPaymentNotes(e.target.value)}
-                  className="resize-none"
-                  data-testid="textarea-payment-notes"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Button 
-          size="lg" 
-          className="w-full bg-emerald-600 hover:bg-emerald-700"
-          onClick={handleCompleteJob}
-          disabled={completeJobMutation.isPending}
-          data-testid="button-submit-complete"
-        >
-          {completeJobMutation.isPending ? (
-            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-          ) : (
-            <CheckCircle2 className="w-5 h-5 mr-2" />
-          )}
-          Complete Job
-        </Button>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between py-3 border-b border-gray-200">
+            <span className="text-gray-700">Other images (Optional)</span>
+            <Button
+              size="sm"
+              style={{ backgroundColor: "#29ABE2" }}
+              data-testid="button-upload-other-images"
+            >
+              Upload
+            </Button>
+          </div>
+          <div className="flex items-center justify-between py-3 border-b border-gray-200">
+            <span className="text-gray-700">Other Video</span>
+            <Button
+              size="sm"
+              style={{ backgroundColor: "#29ABE2" }}
+              data-testid="button-upload-video"
+            >
+              Upload
+            </Button>
+          </div>
+        </div>
       </main>
     </div>
   );

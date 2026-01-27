@@ -16,6 +16,7 @@ import CalendarPage from "@/pages/calendar";
 import TechDashboard from "@/pages/tech-dashboard";
 import TechJobDetail from "@/pages/tech-job-detail";
 import TechJobComplete from "@/pages/tech-job-complete";
+import TechSignature from "@/pages/tech-signature";
 import UserManagement from "@/pages/user-management";
 import { PlaceholderPage } from "@/pages/placeholder-page";
 import { useAuth } from "@/hooks/use-auth";
@@ -101,6 +102,7 @@ function TechRouter() {
       <Route path="/" component={TechDashboard} />
       <Route path="/tech" component={TechDashboard} />
       <Route path="/tech/job/:id/complete" component={TechJobComplete} />
+      <Route path="/tech/job/:id/signature" component={TechSignature} />
       <Route path="/tech/job/:id" component={TechJobDetail} />
       <Route component={TechDashboard} />
     </Switch>

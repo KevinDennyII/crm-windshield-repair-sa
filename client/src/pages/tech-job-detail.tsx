@@ -1,27 +1,26 @@
-import { useRoute, Link } from "wouter";
+import { useState } from "react";
+import { useRoute, Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { 
   ArrowLeft, 
   Phone, 
   MapPin, 
-  Car, 
-  Clipboard, 
-  Clock,
-  Loader2,
-  Navigation,
-  Package,
   User,
-  Wrench,
-  CheckCircle2
+  Mic,
+  Download,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Check
 } from "lucide-react";
 import type { Job } from "@shared/schema";
 
 export default function TechJobDetail() {
   const [, params] = useRoute("/tech/job/:id");
+  const [, navigate] = useLocation();
   const jobId = params?.id;
+  const [tasksExpanded, setTasksExpanded] = useState(false);
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -39,8 +38,11 @@ export default function TechJobDetail() {
 
   if (!job) {
     return (
-      <div className="min-h-screen bg-slate-100">
-        <header className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3" style={{ backgroundColor: "#29ABE2" }}>
+      <div className="min-h-screen bg-white">
+        <header 
+          className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3"
+          style={{ backgroundColor: "#29ABE2" }}
+        >
           <Link href="/tech">
             <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" data-testid="button-back">
               <ArrowLeft className="w-5 h-5" />
@@ -48,15 +50,11 @@ export default function TechJobDetail() {
           </Link>
           <h1 className="text-lg font-bold text-white">Job Not Found</h1>
         </header>
-        <main className="p-4">
-          <Card>
-            <CardContent className="pt-6 text-center">
-              <p className="text-muted-foreground">This job could not be found.</p>
-              <Link href="/tech">
-                <Button className="mt-4" data-testid="button-return">Return to Dashboard</Button>
-              </Link>
-            </CardContent>
-          </Card>
+        <main className="p-4 text-center">
+          <p className="text-gray-500 py-8">This job could not be found.</p>
+          <Link href="/tech">
+            <Button data-testid="button-return">Return to Dashboard</Button>
+          </Link>
         </main>
       </div>
     );
@@ -65,263 +63,292 @@ export default function TechJobDetail() {
   const vehicle = job.vehicles?.[0];
   const part = vehicle?.parts?.[0];
 
-  const openMaps = () => {
-    const address = `${job.streetAddress}, ${job.city}, ${job.state} ${job.zipCode}`;
-    window.open(`https://maps.google.com/?q=${encodeURIComponent(address)}`, "_blank");
+  const fullAddress = `${job.streetAddress}, ${job.city}, ${job.state} ${job.zipCode}`;
+  const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(fullAddress)}`;
+  const mapEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(fullAddress)}&output=embed`;
+
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "N/A";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+  };
+
+  const taskList = [
+    "Inspect vehicle and verify damage",
+    "Confirm customer details",
+    "Remove old glass",
+    "Clean and prep frame",
+    "Install new glass",
+    "Apply urethane and seal",
+    "Perform calibration (if required)",
+    "Final quality check",
+    "Take photos",
+    "Collect signature",
+  ];
+
+  const calculateTax = () => {
+    return job.taxAmount || 0;
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-24">
-      <header className="sticky top-0 z-50 px-4 py-3" style={{ backgroundColor: "#29ABE2" }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/tech">
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" data-testid="button-back">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-lg font-bold text-white">{job.jobNumber}</h1>
-              <p className="text-xs text-white/80">
-                {job.installDate} @ {job.installTime}
-              </p>
-            </div>
-          </div>
-          <Badge 
-            variant="outline" 
-            className="bg-white/20 text-white border-white/30"
-            data-testid="badge-status"
-          >
-            {job.pipelineStage === "scheduled" ? "Scheduled" : "Completed"}
-          </Badge>
-        </div>
+    <div className="min-h-screen bg-white flex flex-col">
+      <header 
+        className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3"
+        style={{ backgroundColor: "#29ABE2" }}
+      >
+        <Link href="/tech">
+          <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" data-testid="button-back">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+        </Link>
+        <h1 className="text-lg font-bold text-white flex-1 text-center pr-8">
+          Order # {job.jobNumber}
+        </h1>
       </header>
 
-      <main className="p-4 space-y-4">
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <User className="w-4 h-4 text-cyan-600" />
-              Customer Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <div className="font-semibold text-lg">
-                {job.firstName} {job.lastName}
-              </div>
-              {job.isBusiness && job.businessName && (
-                <div className="text-sm text-muted-foreground">{job.businessName}</div>
-              )}
-            </div>
-            
-            <div className="flex items-start gap-2">
-              <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-              <div className="text-sm">
-                {job.streetAddress}<br />
-                {job.city}, {job.state} {job.zipCode}
-              </div>
-            </div>
+      <div className="relative h-40 bg-gray-200">
+        <iframe
+          src={mapEmbedUrl}
+          className="w-full h-full border-0"
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+          title="Location Map"
+        />
+        <a 
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute top-2 left-2 bg-white/90 rounded p-1 shadow"
+          data-testid="link-open-maps"
+        >
+          <Check className="w-4 h-4 text-blue-500" />
+        </a>
+      </div>
 
-            <div className="flex gap-2">
-              <a href={`tel:${job.phone}`} className="flex-1">
-                <Button className="w-full" size="lg" data-testid="button-call">
-                  <Phone className="w-4 h-4 mr-2" />
-                  Call
-                </Button>
-              </a>
-              <Button 
-                variant="outline" 
-                size="lg" 
-                className="flex-1"
-                onClick={openMaps}
-                data-testid="button-navigate"
+      <div 
+        className="grid grid-cols-4 text-center py-2"
+        style={{ backgroundColor: "#1B8EB8" }}
+      >
+        <div>
+          <div className="text-xs text-white/80 font-medium">YEAR</div>
+          <div className="text-sm text-white font-semibold truncate px-1">
+            {vehicle?.vehicleYear || "N/A"}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-white/80 font-medium">MAKE</div>
+          <div className="text-sm text-white font-semibold truncate px-1">
+            {vehicle?.vehicleMake || "N/A"}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-white/80 font-medium">MODEL</div>
+          <div className="text-sm text-white font-semibold truncate px-1">
+            {vehicle?.vehicleModel || "N/A"}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-white/80 font-medium">STYLE</div>
+          <div className="text-sm text-white font-semibold truncate px-1">
+            {vehicle?.bodyStyle || "N/A"}
+          </div>
+        </div>
+      </div>
+
+      <main className="flex-1 overflow-auto pb-4">
+        <div className="px-4 py-3">
+          <button
+            onClick={() => setTasksExpanded(!tasksExpanded)}
+            className="w-full py-3 rounded-full font-semibold text-white flex items-center justify-center gap-2"
+            style={{ backgroundColor: "#29ABE2" }}
+            data-testid="button-tasks-list"
+          >
+            My Tasks List
+            {tasksExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {tasksExpanded && (
+          <div className="px-4 pb-4 space-y-2">
+            {taskList.map((task, index) => (
+              <div 
+                key={index}
+                className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border"
+                data-testid={`task-item-${index}`}
               >
-                <Navigation className="w-4 h-4 mr-2" />
-                Navigate
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {vehicle && (
-          <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Car className="w-4 h-4 text-cyan-600" />
-                Vehicle Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <div className="text-muted-foreground text-xs">Year/Make/Model</div>
-                  <div className="font-medium">
-                    {vehicle.vehicleYear} {vehicle.vehicleMake} {vehicle.vehicleModel}
-                  </div>
+                <div className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center text-xs text-gray-400">
+                  {index + 1}
                 </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Body Style</div>
-                  <div className="font-medium">{vehicle.bodyStyle || "N/A"}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Color</div>
-                  <div className="font-medium">{vehicle.vehicleColor || "N/A"}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">License Plate</div>
-                  <div className="font-medium">{vehicle.licensePlate || "N/A"}</div>
-                </div>
+                <span className="text-sm text-gray-700">{task}</span>
               </div>
-              <div className="pt-2 border-t">
-                <div className="text-muted-foreground text-xs">VIN</div>
-                <div className="font-mono text-sm">{vehicle.vin || "N/A"}</div>
-              </div>
-            </CardContent>
-          </Card>
+            ))}
+          </div>
         )}
 
-        {part && (
-          <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Package className="w-4 h-4 text-cyan-600" />
-                Service Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <div className="text-muted-foreground text-xs">Job Type</div>
-                  <div className="font-medium capitalize">
-                    {part.jobType?.replace(/_/g, " ") || "N/A"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Location</div>
-                  <div className="font-medium capitalize">
-                    {job.repairLocation === "mobile" ? "Mobile" : "In-Shop"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Part Number</div>
-                  <div className="font-medium">{part.glassPartNumber || "N/A"}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Distributor</div>
-                  <div className="font-medium">{part.distributor || "N/A"}</div>
-                </div>
-              </div>
-              
-              {part.calibrationType && part.calibrationType !== "none" && (
-                <div className="pt-2 border-t">
-                  <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                    {part.calibrationType} Calibration Required
-                  </Badge>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clipboard className="w-4 h-4 text-cyan-600" />
-              Job Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <div className="text-muted-foreground text-xs">Duration</div>
-                <div className="font-medium flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {job.jobDuration || "2"} hours
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground text-xs">Installer</div>
-                <div className="font-medium">{job.installer || "Unassigned"}</div>
-              </div>
-            </div>
-            
-            {job.installNotes && (
-              <div className="pt-2 border-t">
-                <div className="text-muted-foreground text-xs mb-1">Install Notes</div>
-                <div className="text-sm bg-slate-50 p-2 rounded">
-                  {job.installNotes}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Wrench className="w-4 h-4 text-cyan-600" />
-              My Tasks
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {[
-                "Inspect vehicle and verify damage",
-                "Confirm customer details",
-                "Remove old glass",
-                "Clean and prep frame",
-                "Install new glass",
-                "Apply urethane and seal",
-                "Perform calibration (if required)",
-                "Final quality check",
-                "Take photos",
-                "Collect signature",
-              ].map((task, index) => (
-                <div 
-                  key={index} 
-                  className="flex items-center gap-3 p-2 rounded bg-slate-50 border"
-                  data-testid={`task-item-${index}`}
-                >
-                  <div className="w-6 h-6 rounded-full border-2 border-slate-300 flex items-center justify-center text-xs text-slate-400">
-                    {index + 1}
-                  </div>
-                  <span className="text-sm">{task}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm bg-emerald-50 border-emerald-200">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="text-sm text-muted-foreground">Total Due</div>
-                <div className="text-2xl font-bold text-emerald-700">
-                  ${job.totalDue?.toFixed(2)}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm text-muted-foreground">Balance Due</div>
-                <div className="text-xl font-semibold text-slate-700">
-                  ${job.balanceDue?.toFixed(2)}
-                </div>
-              </div>
-            </div>
-            
+        <div className="divide-y divide-gray-200">
+          <div className="px-4 py-3 flex justify-between">
+            <span className="text-gray-600">Service Type</span>
+            <span className="font-semibold text-gray-900 capitalize">
+              {part?.jobType?.replace(/_/g, " ") || "Replacement"}
+            </span>
+          </div>
+          <div className="px-4 py-3 flex justify-between">
+            <span className="text-gray-600">Glass Type</span>
+            <span className="font-semibold text-gray-900 capitalize">
+              {part?.jobType?.replace(/_/g, " ") || "Windshield"}
+            </span>
+          </div>
+          <div className="px-4 py-3 flex justify-between">
+            <span className="text-gray-600">Part#</span>
+            <span className="font-semibold text-gray-900">
+              {part?.glassPartNumber || "N/A"}
+            </span>
+          </div>
+          <div className="px-4 py-3 flex justify-between">
+            <span className="text-gray-600">Warehouse Name</span>
+            <span className="font-semibold text-gray-900">
+              {part?.distributor || "N/A"}
+            </span>
+          </div>
+          <div className="px-4 py-3 flex justify-between">
+            <span className="text-gray-600">Warehouse Order#</span>
+            <span className="font-semibold text-gray-900">
+              {part?.glassPartNumber || "N/A"}
+            </span>
+          </div>
+          <div className="px-4 py-3 flex justify-between">
+            <span className="text-gray-600">Moldings</span>
+            <span className="font-semibold text-gray-900">
+              Not Available
+            </span>
+          </div>
+          <div className="px-4 py-3 flex justify-between items-center">
+            <span className="text-gray-600">Media Attachments</span>
             <Link href={`/tech/job/${job.id}/complete`}>
-              <Button 
-                size="lg" 
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
-                data-testid="button-complete-job"
+              <Button
+                size="sm"
+                className="px-4"
+                style={{ backgroundColor: "#29ABE2" }}
+                data-testid="button-view-media"
               >
-                <CheckCircle2 className="w-5 h-5 mr-2" />
-                Complete Job
+                View
               </Button>
             </Link>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        <div className="px-4 py-3 grid grid-cols-2 gap-4 border-t border-gray-200">
+          <div className="flex items-center gap-2">
+            <User className="w-5 h-5 text-gray-500" />
+            <span className="text-gray-900 font-medium">
+              {job.firstName} {job.lastName}
+            </span>
+          </div>
+          <a 
+            href={`tel:${job.phone}`}
+            className="flex items-center gap-2"
+            data-testid="link-call"
+          >
+            <Phone className="w-5 h-5 text-gray-500" />
+            <span className="text-gray-900">{job.phone}</span>
+          </a>
+        </div>
+
+        <a 
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-4 py-3 flex items-start gap-2 border-t border-gray-200"
+          data-testid="link-navigate"
+        >
+          <MapPin className="w-5 h-5 text-gray-500 shrink-0 mt-0.5" />
+          <span className="text-gray-900">
+            {job.streetAddress}, {job.city}, {job.state}, {job.zipCode}
+          </span>
+        </a>
+
+        <div className="divide-y divide-gray-200 border-t border-gray-200">
+          <div className="px-4 py-3 grid grid-cols-2">
+            <span style={{ color: "#29ABE2" }} className="font-semibold">Payment Type</span>
+            <span className="text-gray-900 text-right capitalize">
+              {job.paymentMethod?.join(", ")?.replace(/_/g, " ") || "N/A"}
+            </span>
+          </div>
+          <div className="px-4 py-3 grid grid-cols-2">
+            <span style={{ color: "#29ABE2" }} className="font-semibold">Estimate/Tax</span>
+            <span className="text-gray-900 text-right">
+              ${(job.totalDue || 0).toFixed(2)}/${calculateTax().toFixed(2)}
+            </span>
+          </div>
+          <div className="px-4 py-3 grid grid-cols-2">
+            <span style={{ color: "#29ABE2" }} className="font-semibold">Total</span>
+            <span className="text-gray-900 text-right font-bold">
+              ${(job.totalDue || 0).toFixed(2)}
+            </span>
+          </div>
+          <div className="px-4 py-3 grid grid-cols-2">
+            <span style={{ color: "#29ABE2" }} className="font-semibold">Status</span>
+            <span className="text-gray-900 text-right capitalize">
+              {job.pipelineStage === "paid_completed" ? "Completed" : job.pipelineStage}
+            </span>
+          </div>
+          <div className="px-4 py-3 grid grid-cols-2">
+            <span style={{ color: "#29ABE2" }} className="font-semibold">Schedule Date</span>
+            <span className="text-gray-900 text-right">
+              {formatDate(job.installDate)}
+            </span>
+          </div>
+          <div className="px-4 py-3 grid grid-cols-2">
+            <span style={{ color: "#29ABE2" }} className="font-semibold">Schedule Time</span>
+            <span className="text-gray-900 text-right">
+              {job.installTime || "N/A"}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 border-t border-gray-200">
+          <button
+            className="py-4 flex items-center justify-center gap-2 border-r border-gray-200"
+            style={{ backgroundColor: "#DC2626" }}
+            data-testid="button-voice-recorder"
+          >
+            <Mic className="w-5 h-5 text-white" />
+            <span className="text-white font-medium">Voice Recorder</span>
+          </button>
+          <button
+            className="py-4 flex items-center justify-center gap-2"
+            style={{ backgroundColor: "#29ABE2" }}
+            data-testid="button-invoice"
+          >
+            <Download className="w-5 h-5 text-white" />
+            <span className="text-white font-medium">Invoice</span>
+          </button>
+        </div>
+
+        <div className="px-4 py-4 border-t border-gray-200">
+          <h3 className="text-xl font-bold text-center text-gray-900 mb-4">SIGNATURE</h3>
+          <Link href={`/tech/job/${job.id}/signature`}>
+            <div 
+              className="w-full h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:bg-gray-50"
+              data-testid="signature-area"
+            >
+              <span className="text-gray-400">Tap to sign</span>
+            </div>
+          </Link>
+        </div>
+
+        <div className="px-4 pb-4">
+          <Link href={`/tech/job/${job.id}/complete`}>
+            <Button 
+              size="lg"
+              className="w-full py-6 text-lg font-semibold"
+              style={{ backgroundColor: "#22C55E" }}
+              data-testid="button-completed"
+            >
+              Completed
+            </Button>
+          </Link>
+        </div>
       </main>
     </div>
   );
