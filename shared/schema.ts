@@ -200,6 +200,10 @@ export const jobSchema = z.object({
   // Calibration decline tracking
   calibrationDeclined: z.boolean().default(false),
   
+  // Signature capture
+  signatureImage: z.string().optional(),
+  receiptSentAt: z.string().optional(),
+  
   createdAt: z.string().optional(),
 });
 

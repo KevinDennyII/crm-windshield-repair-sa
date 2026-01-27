@@ -251,6 +251,123 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  // Send receipt email with signature
+  app.post("/api/jobs/:id/send-receipt", async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (!job.email) {
+        return res.status(400).json({ message: "Customer has no email address" });
+      }
+
+      // Get vehicle and part info
+      const vehicle = job.vehicles?.[0];
+      const part = vehicle?.parts?.[0];
+
+      // Build receipt HTML
+      const receiptHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { text-align: center; border-bottom: 2px solid #29ABE2; padding-bottom: 20px; margin-bottom: 20px; }
+    .header h1 { color: #29ABE2; margin: 0; }
+    .section { margin-bottom: 20px; }
+    .section-title { font-weight: bold; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 10px; }
+    .row { display: flex; justify-content: space-between; padding: 5px 0; }
+    .label { color: #666; }
+    .value { font-weight: bold; color: #333; }
+    .total-row { font-size: 1.2em; border-top: 2px solid #333; padding-top: 10px; margin-top: 10px; }
+    .signature-section { margin-top: 30px; text-align: center; }
+    .signature-section img { max-width: 300px; border: 1px solid #ddd; padding: 10px; background: #fff; }
+    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>AutoGlass Pro</h1>
+    <p>Service Receipt</p>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Job Details</div>
+    <div class="row"><span class="label">Job Number:</span><span class="value">${job.jobNumber}</span></div>
+    <div class="row"><span class="label">Date:</span><span class="value">${job.installDate || new Date().toLocaleDateString()}</span></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Customer Information</div>
+    <div class="row"><span class="label">Name:</span><span class="value">${job.firstName} ${job.lastName}</span></div>
+    <div class="row"><span class="label">Phone:</span><span class="value">${job.phone}</span></div>
+    <div class="row"><span class="label">Email:</span><span class="value">${job.email}</span></div>
+    ${job.streetAddress ? `<div class="row"><span class="label">Address:</span><span class="value">${job.streetAddress}, ${job.city}, ${job.state} ${job.zipCode}</span></div>` : ''}
+  </div>
+
+  ${vehicle ? `
+  <div class="section">
+    <div class="section-title">Vehicle Information</div>
+    <div class="row"><span class="label">Vehicle:</span><span class="value">${vehicle.vehicleYear} ${vehicle.vehicleMake} ${vehicle.vehicleModel}</span></div>
+    ${vehicle.vin ? `<div class="row"><span class="label">VIN:</span><span class="value">${vehicle.vin}</span></div>` : ''}
+    ${vehicle.bodyStyle ? `<div class="row"><span class="label">Body Style:</span><span class="value">${vehicle.bodyStyle}</span></div>` : ''}
+  </div>
+  ` : ''}
+
+  ${part ? `
+  <div class="section">
+    <div class="section-title">Service Details</div>
+    <div class="row"><span class="label">Service:</span><span class="value">${(part.jobType || 'windshield_replacement').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</span></div>
+    ${part.glassPartNumber ? `<div class="row"><span class="label">Part #:</span><span class="value">${part.glassPartNumber}</span></div>` : ''}
+    ${part.distributor ? `<div class="row"><span class="label">Supplier:</span><span class="value">${part.distributor}</span></div>` : ''}
+  </div>
+  ` : ''}
+
+  <div class="section">
+    <div class="section-title">Payment Summary</div>
+    <div class="row"><span class="label">Subtotal:</span><span class="value">$${(job.subtotal || 0).toFixed(2)}</span></div>
+    <div class="row"><span class="label">Tax:</span><span class="value">$${(job.taxAmount || 0).toFixed(2)}</span></div>
+    <div class="row total-row"><span class="label">Total:</span><span class="value">$${(job.totalDue || 0).toFixed(2)}</span></div>
+    <div class="row"><span class="label">Amount Paid:</span><span class="value">$${(job.amountPaid || 0).toFixed(2)}</span></div>
+    ${job.paymentMethod && job.paymentMethod.length > 0 ? `<div class="row"><span class="label">Payment Method:</span><span class="value">${job.paymentMethod.join(', ').replace(/_/g, ' ')}</span></div>` : ''}
+  </div>
+
+  ${job.signatureImage ? `
+  <div class="signature-section">
+    <div class="section-title">Customer Signature</div>
+    <img src="${job.signatureImage}" alt="Customer Signature" />
+    <p style="font-size: 12px; color: #666; margin-top: 5px;">Signed on ${new Date().toLocaleDateString()}</p>
+  </div>
+  ` : ''}
+
+  <div class="footer">
+    <p>Thank you for choosing AutoGlass Pro!</p>
+    <p>Questions? Contact us at windshieldrepairsa@gmail.com</p>
+  </div>
+</body>
+</html>`;
+
+      await sendEmail(
+        job.email,
+        `AutoGlass Pro Receipt - Job #${job.jobNumber}`,
+        receiptHtml
+      );
+
+      // Update job with receipt sent timestamp
+      await storage.updateJob(job.id, {
+        receiptSentAt: new Date().toISOString()
+      });
+
+      res.json({ message: "Receipt sent successfully" });
+    } catch (error: any) {
+      console.error("Failed to send receipt:", error);
+      res.status(500).json({ message: error.message || "Failed to send receipt" });
+    }
+  });
+
   // Get email inbox threads
   app.get("/api/emails/inbox", async (req, res) => {
     try {

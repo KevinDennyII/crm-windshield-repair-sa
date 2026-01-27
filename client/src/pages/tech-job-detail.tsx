@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useRoute, Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { 
   ArrowLeft, 
   Phone, 
@@ -12,13 +14,16 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
-  Check
+  Check,
+  Mail,
+  Send
 } from "lucide-react";
 import type { Job } from "@shared/schema";
 
 export default function TechJobDetail() {
   const [, params] = useRoute("/tech/job/:id");
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   const jobId = params?.id;
   const [tasksExpanded, setTasksExpanded] = useState(false);
   const [taskStatus, setTaskStatus] = useState({
@@ -32,6 +37,27 @@ export default function TechJobDetail() {
   });
 
   const job = jobs.find(j => j.id === jobId);
+
+  const sendReceiptMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/jobs/${jobId}/send-receipt`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({
+        title: "Receipt Sent",
+        description: "The receipt has been emailed to the customer.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send receipt",
+        variant: "destructive",
+      });
+    },
+  });
 
   if (isLoading) {
     return (
@@ -367,14 +393,59 @@ export default function TechJobDetail() {
 
         <div className="px-4 py-4 border-t border-gray-200">
           <h3 className="text-xl font-bold text-center text-gray-900 mb-4">SIGNATURE</h3>
-          <Link href={`/tech/job/${job.id}/signature`}>
-            <div 
-              className="w-full h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:bg-gray-50"
-              data-testid="signature-area"
-            >
-              <span className="text-gray-400">Tap to sign</span>
+          {job.signatureImage ? (
+            <div className="space-y-3">
+              <div 
+                className="w-full h-24 border-2 border-green-300 rounded-lg flex items-center justify-center bg-green-50"
+                data-testid="signature-captured"
+              >
+                <img 
+                  src={job.signatureImage} 
+                  alt="Customer Signature" 
+                  className="max-h-20 max-w-full object-contain"
+                />
+              </div>
+              <button
+                onClick={() => sendReceiptMutation.mutate()}
+                disabled={sendReceiptMutation.isPending || !job.email}
+                className="w-full py-3 rounded-lg font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ backgroundColor: "#29ABE2" }}
+                data-testid="button-send-receipt"
+              >
+                {sendReceiptMutation.isPending ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Mail className="w-5 h-5" />
+                )}
+                <span>
+                  {sendReceiptMutation.isPending 
+                    ? "Sending..." 
+                    : job.receiptSentAt 
+                      ? "Resend Receipt" 
+                      : "Send Receipt to Customer"}
+                </span>
+              </button>
+              {job.receiptSentAt && (
+                <p className="text-xs text-center text-gray-500">
+                  Receipt sent on {new Date(job.receiptSentAt).toLocaleDateString()}
+                </p>
+              )}
+              {!job.email && (
+                <p className="text-xs text-center text-red-500">
+                  No email address on file
+                </p>
+              )}
             </div>
-          </Link>
+          ) : (
+            <Link href={`/tech/job/${job.id}/signature`}>
+              <div 
+                className="w-full h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:bg-gray-50"
+                data-testid="signature-area"
+              >
+                <span className="text-gray-400">Tap to sign</span>
+              </div>
+            </Link>
+          )}
         </div>
 
         <div className="px-4 pb-4">

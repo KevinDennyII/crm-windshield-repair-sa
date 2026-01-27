@@ -123,9 +123,16 @@ export default function TechSignature() {
   const handleDone = () => {
     if (!job) return;
     
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    // Get signature as base64 image
+    const signatureImage = canvas.toDataURL("image/png");
+    
     completeJobMutation.mutate({
       pipelineStage: "paid_completed",
       paymentStatus: "paid",
+      signatureImage: signatureImage,
     });
   };
 
