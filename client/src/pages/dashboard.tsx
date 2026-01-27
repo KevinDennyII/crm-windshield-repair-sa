@@ -46,7 +46,11 @@ function getWeekBounds(): { start: Date; end: Date } {
 // Check if a date falls within Mon-Sat of current week
 function isInCurrentWeek(dateStr: string | undefined): boolean {
   if (!dateStr) return false;
-  const date = new Date(dateStr);
+  // Parse date string as local date (YYYY-MM-DD format) to avoid timezone issues
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return false;
+  const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  date.setHours(12, 0, 0, 0); // Set to noon to avoid edge cases
   const { start, end } = getWeekBounds();
   return date >= start && date <= end;
 }
