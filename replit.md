@@ -37,6 +37,34 @@ Key server files:
 - `server/gmail.ts` - Gmail API integration for sending emails, fetching inbox, and replying to threads
 - `server/vite.ts` - Development server with Vite HMR integration
 - `server/static.ts` - Production static file serving
+- `server/replit_integrations/auth/` - Replit Auth integration for OIDC authentication
+
+### Authentication & Authorization
+- **Auth Provider**: Replit Auth (OIDC-based)
+- **User Roles**: admin, csr (customer service), technician
+- **Role-based Access**:
+  - **Admin**: Full access to all features including user management
+  - **CSR**: Pipeline access, scheduling, customer communication
+  - **Technician**: Mobile-optimized interface for field work only
+
+Authentication files:
+- `shared/models/auth.ts` - User schema with role definitions
+- `server/replit_integrations/auth/` - Auth routes, storage, middleware
+- `client/src/hooks/use-auth.ts` - Frontend auth hook with role helpers
+
+### Technician Mobile Portal
+Mobile-optimized interface for field technicians:
+- `client/src/pages/tech-dashboard.tsx` - Main dashboard with job summaries (this week, last week, yearly)
+- `client/src/pages/tech-job-detail.tsx` - Job details with customer info, vehicle info, task checklist
+- `client/src/pages/tech-job-complete.tsx` - Job completion flow with photo capture, signature, payment
+
+Features:
+- Blue header theme (#29ABE2)
+- Large touch-friendly buttons
+- Photo documentation (4 slots: Pre-Inspection, VIN, Part Installed, After)
+- Canvas-based signature capture
+- Payment collection with method selection
+- One-tap call/navigate to customer location
 
 ### Data Layer
 - **ORM**: Drizzle ORM configured for PostgreSQL
