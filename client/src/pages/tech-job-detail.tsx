@@ -21,6 +21,11 @@ export default function TechJobDetail() {
   const [, navigate] = useLocation();
   const jobId = params?.id;
   const [tasksExpanded, setTasksExpanded] = useState(false);
+  const [taskStatus, setTaskStatus] = useState({
+    onMyWay: false,
+    onSite: false,
+    takePayment: false
+  });
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -73,18 +78,9 @@ export default function TechJobDetail() {
     return date.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
   };
 
-  const taskList = [
-    "Inspect vehicle and verify damage",
-    "Confirm customer details",
-    "Remove old glass",
-    "Clean and prep frame",
-    "Install new glass",
-    "Apply urethane and seal",
-    "Perform calibration (if required)",
-    "Final quality check",
-    "Take photos",
-    "Collect signature",
-  ];
+  const toggleTask = (task: keyof typeof taskStatus) => {
+    setTaskStatus(prev => ({ ...prev, [task]: !prev[task] }));
+  };
 
   const calculateTax = () => {
     return job.taxAmount || 0;
@@ -169,19 +165,63 @@ export default function TechJobDetail() {
         </div>
 
         {tasksExpanded && (
-          <div className="px-4 pb-4 space-y-2">
-            {taskList.map((task, index) => (
+          <div className="px-4 pb-4 space-y-3">
+            <button
+              onClick={() => toggleTask("onMyWay")}
+              className="w-full flex items-center gap-4 p-4 bg-gray-50 rounded-lg border"
+              data-testid="task-on-my-way"
+            >
               <div 
-                key={index}
-                className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border"
-                data-testid={`task-item-${index}`}
+                className={`w-7 h-7 rounded border-2 flex items-center justify-center transition-colors ${
+                  taskStatus.onMyWay 
+                    ? "bg-green-500 border-green-500" 
+                    : "border-gray-400 bg-white"
+                }`}
               >
-                <div className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center text-xs text-gray-400">
-                  {index + 1}
-                </div>
-                <span className="text-sm text-gray-700">{task}</span>
+                {taskStatus.onMyWay && <Check className="w-5 h-5 text-white" />}
               </div>
-            ))}
+              <span className={`text-base font-medium ${taskStatus.onMyWay ? "text-gray-500 line-through" : "text-gray-800"}`}>
+                On My Way
+              </span>
+            </button>
+
+            <button
+              onClick={() => toggleTask("onSite")}
+              className="w-full flex items-center gap-4 p-4 bg-gray-50 rounded-lg border"
+              data-testid="task-on-site"
+            >
+              <div 
+                className={`w-7 h-7 rounded border-2 flex items-center justify-center transition-colors ${
+                  taskStatus.onSite 
+                    ? "bg-green-500 border-green-500" 
+                    : "border-gray-400 bg-white"
+                }`}
+              >
+                {taskStatus.onSite && <Check className="w-5 h-5 text-white" />}
+              </div>
+              <span className={`text-base font-medium ${taskStatus.onSite ? "text-gray-500 line-through" : "text-gray-800"}`}>
+                On Site
+              </span>
+            </button>
+
+            <button
+              onClick={() => toggleTask("takePayment")}
+              className="w-full flex items-center gap-4 p-4 bg-gray-50 rounded-lg border"
+              data-testid="task-take-payment"
+            >
+              <div 
+                className={`w-7 h-7 rounded border-2 flex items-center justify-center transition-colors ${
+                  taskStatus.takePayment 
+                    ? "bg-green-500 border-green-500" 
+                    : "border-gray-400 bg-white"
+                }`}
+              >
+                {taskStatus.takePayment && <Check className="w-5 h-5 text-white" />}
+              </div>
+              <span className={`text-base font-medium ${taskStatus.takePayment ? "text-gray-500 line-through" : "text-gray-800"}`}>
+                Take Payment
+              </span>
+            </button>
           </div>
         )}
 
