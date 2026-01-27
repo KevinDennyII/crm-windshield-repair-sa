@@ -1752,26 +1752,7 @@ export function JobDetailModal({
                                                     data-testid={`input-mobile-fee-${part.id}`}
                                                   />
                                                 </div>
-                                                <div className="grid gap-1">
-                                                  <Label className="text-xs text-orange-600 dark:text-orange-400">Material Cost</Label>
-                                                  <Input
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.01"
-                                                    value={part.materialCost ?? ""}
-                                                    onChange={(e) =>
-                                                      handlePartChange(
-                                                        vehicle.id,
-                                                        part.id,
-                                                        "materialCost",
-                                                        parseFloat(e.target.value) || 0
-                                                      )
-                                                    }
-                                                    placeholder="Your cost"
-                                                    data-testid={`input-material-cost-${part.id}`}
-                                                  />
                                                 </div>
-                                              </div>
 
                                               {/* Calculated Totals */}
                                               <div className="flex items-center justify-end gap-4 mt-3 pt-3 border-t text-sm">

@@ -82,10 +82,15 @@ export default function Dashboard() {
     (job) => job.pipelineStage === "paid_completed" && isInCurrentWeek(job.installDate)
   );
   
-  // Materials Cost: sum of all materialCost from parts in completed jobs this week
+  // Materials Cost: sum of glass (partPrice) + accessories + urethane from completed jobs this week
   const weeklyMaterialsCost = weeklyCompletedJobs.reduce((sum, job) => {
     const jobMaterialsCost = job.vehicles.reduce((vSum, vehicle) => {
-      return vSum + vehicle.parts.reduce((pSum, part) => pSum + (part.materialCost || 0), 0);
+      return vSum + vehicle.parts.reduce((pSum, part) => {
+        const glass = part.partPrice || 0;
+        const accessories = part.accessoriesPrice || 0;
+        const urethane = part.urethanePrice || 0;
+        return pSum + glass + accessories + urethane;
+      }, 0);
     }, 0);
     return sum + jobMaterialsCost;
   }, 0);
