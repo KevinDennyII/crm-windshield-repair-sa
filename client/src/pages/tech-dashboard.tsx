@@ -119,10 +119,11 @@ export default function TechDashboard() {
       )}
 
       <div 
-        className={`fixed top-0 left-0 h-full w-72 z-50 transform transition-transform duration-300 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed top-0 left-0 h-full w-72 z-50 transform transition-all duration-300 ${
+          sidebarOpen ? "translate-x-0 visible" : "-translate-x-full invisible"
         }`}
         style={{ backgroundColor: "#29ABE2" }}
+        aria-hidden={!sidebarOpen}
       >
         <div className="p-4">
           <Button
