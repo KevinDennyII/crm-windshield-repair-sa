@@ -35,6 +35,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   type Job,
   type InsertJob,
@@ -47,12 +48,14 @@ import {
   calibrationTypes,
   causesOfLoss,
   paymentSources,
+  paymentMethods,
   customerTypes,
   timeFrames,
   timeFrameDetails,
   type PaymentHistoryEntry,
   type CustomerType,
   type TimeFrame,
+  type PaymentMethod,
 } from "@shared/schema";
 import {
   User,
@@ -346,6 +349,7 @@ const getDefaultFormData = (): InsertJob => ({
   amountPaid: 0,
   balanceDue: 0,
   paymentStatus: "pending",
+  paymentMethod: undefined,
   paymentHistory: [],
   installNotes: "",
   calibrationDeclined: false,
@@ -1788,6 +1792,53 @@ export function JobDetailModal({
                     </CardContent>
                   </Card>
                 )}
+
+                {/* Payment Method Selection */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Payment Method
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ToggleGroup
+                      type="single"
+                      value={formData.paymentMethod || ""}
+                      onValueChange={(value) => handleChange("paymentMethod", value || undefined)}
+                      className="flex flex-wrap justify-start gap-2"
+                    >
+                      <ToggleGroupItem
+                        value="cash"
+                        variant="outline"
+                        data-testid="button-payment-method-cash"
+                      >
+                        Cash
+                      </ToggleGroupItem>
+                      <ToggleGroupItem
+                        value="card"
+                        variant="outline"
+                        data-testid="button-payment-method-card"
+                      >
+                        Card
+                      </ToggleGroupItem>
+                      <ToggleGroupItem
+                        value="check"
+                        variant="outline"
+                        data-testid="button-payment-method-check"
+                      >
+                        Check
+                      </ToggleGroupItem>
+                      <ToggleGroupItem
+                        value="zelle"
+                        variant="outline"
+                        data-testid="button-payment-method-zelle"
+                      >
+                        Zelle
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                  </CardContent>
+                </Card>
               </TabsContent>
 
               {/* Insurance & Payments Tab */}

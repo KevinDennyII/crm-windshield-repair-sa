@@ -133,6 +133,14 @@ export function buildCalendarEventDescription(job: Job, vehicle: Vehicle, part: 
     v.parts.some(p => p.jobType === 'windshield_repair')
   );
   lines.push(`Free RCR included: ${hasRcr ? 'Y' : 'N'}`);
+  
+  const paymentMethodLabels: Record<string, string> = {
+    cash: 'Cash',
+    card: 'Card',
+    check: 'Check',
+    zelle: 'Zelle'
+  };
+  lines.push(`Payment Method: ${job.paymentMethod ? paymentMethodLabels[job.paymentMethod] : 'Not specified'}`);
   lines.push('');
   
   const paymentNotes = job.paymentHistory.map(p => 

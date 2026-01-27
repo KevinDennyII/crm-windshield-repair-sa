@@ -29,6 +29,9 @@ export type PipelineStage = typeof pipelineStages[number];
 export const paymentStatuses = ["pending", "partial", "paid"] as const;
 export type PaymentStatus = typeof paymentStatuses[number];
 
+export const paymentMethods = ["cash", "card", "check", "zelle"] as const;
+export type PaymentMethod = typeof paymentMethods[number];
+
 export const customerTypes = ["retail", "dealer", "fleet"] as const;
 export type CustomerType = typeof customerTypes[number];
 
@@ -194,6 +197,7 @@ export const jobSchema = z.object({
   amountPaid: z.number().default(0),
   balanceDue: z.number().default(0),
   paymentStatus: z.enum(paymentStatuses).default("pending"),
+  paymentMethod: z.enum(paymentMethods).optional(),
   paymentHistory: z.array(paymentHistorySchema).default([]),
   
   // Notes
