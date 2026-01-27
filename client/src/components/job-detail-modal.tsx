@@ -50,10 +50,12 @@ import {
   paymentSources,
   paymentMethods,
   customerTypes,
+  leadSources,
   timeFrames,
   timeFrameDetails,
   type PaymentHistoryEntry,
   type CustomerType,
+  type LeadSource,
   type TimeFrame,
   type PaymentMethod,
 } from "@shared/schema";
@@ -253,6 +255,15 @@ const customerTypeLabels: Record<string, string> = {
   dealer: "Dealer Account",
   fleet: "Fleet Account",
   subcontractor: "Subcontractor",
+};
+
+const leadSourceLabels: Record<string, string> = {
+  google_ads: "Google Ads",
+  referral: "Referral",
+  dealer: "Dealer",
+  repeat: "Repeat",
+  subcontractor: "Subcontractor",
+  facebook: "Facebook",
 };
 
 // Subcontractor labor rate options
@@ -805,6 +816,46 @@ export function JobDetailModal({
                             </SelectContent>
                           </Select>
                         </div>
+                        <div className="grid gap-2">
+                          <Label>Lead Source</Label>
+                          <Select
+                            value={formData.leadSource || ""}
+                            onValueChange={(value) => handleChange("leadSource", value)}
+                          >
+                            <SelectTrigger data-testid="select-lead-source">
+                              <SelectValue placeholder="Select source" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {leadSources.map((source) => (
+                                <SelectItem key={source} value={source}>
+                                  {leadSourceLabels[source]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Lead Source - always visible */}
+                    {!formData.isBusiness && (
+                      <div className="grid gap-2">
+                        <Label>Lead Source</Label>
+                        <Select
+                          value={formData.leadSource || ""}
+                          onValueChange={(value) => handleChange("leadSource", value)}
+                        >
+                          <SelectTrigger data-testid="select-lead-source">
+                            <SelectValue placeholder="Select source" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {leadSources.map((source) => (
+                              <SelectItem key={source} value={source}>
+                                {leadSourceLabels[source]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
 

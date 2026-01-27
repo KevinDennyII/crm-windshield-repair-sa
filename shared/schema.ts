@@ -35,6 +35,9 @@ export type PaymentMethod = typeof paymentMethods[number];
 export const customerTypes = ["retail", "dealer", "fleet", "subcontractor"] as const;
 export type CustomerType = typeof customerTypes[number];
 
+export const leadSources = ["google_ads", "referral", "dealer", "repeat", "subcontractor", "facebook"] as const;
+export type LeadSource = typeof leadSources[number];
+
 export const jobTypes = [
   "windshield_replacement",
   "windshield_repair",
