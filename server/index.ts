@@ -3,6 +3,7 @@ import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { seedSampleUsers } from "./db";
 
 const app = express();
 
@@ -68,6 +69,13 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+  
+  // Seed sample users on startup (ensures they exist in production)
+  try {
+    await seedSampleUsers();
+  } catch (error) {
+    console.error("Failed to seed users:", error);
+  }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
