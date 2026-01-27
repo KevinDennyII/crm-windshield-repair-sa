@@ -349,7 +349,7 @@ const getDefaultFormData = (): InsertJob => ({
   amountPaid: 0,
   balanceDue: 0,
   paymentStatus: "pending",
-  paymentMethod: undefined,
+  paymentMethod: [],
   paymentHistory: [],
   installNotes: "",
   calibrationDeclined: false,
@@ -1803,14 +1803,15 @@ export function JobDetailModal({
                   </CardHeader>
                   <CardContent>
                     <ToggleGroup
-                      type="single"
-                      value={formData.paymentMethod || ""}
-                      onValueChange={(value) => handleChange("paymentMethod", value || undefined)}
+                      type="multiple"
+                      value={Array.isArray(formData.paymentMethod) ? formData.paymentMethod : []}
+                      onValueChange={(value) => handleChange("paymentMethod", value as any)}
                       className="flex flex-wrap justify-start gap-2"
                     >
                       <ToggleGroupItem
                         value="cash"
                         variant="outline"
+                        className="data-[state=on]:bg-sky-500 data-[state=on]:text-white data-[state=on]:border-sky-500"
                         data-testid="button-payment-method-cash"
                       >
                         Cash
@@ -1818,6 +1819,7 @@ export function JobDetailModal({
                       <ToggleGroupItem
                         value="card"
                         variant="outline"
+                        className="data-[state=on]:bg-sky-500 data-[state=on]:text-white data-[state=on]:border-sky-500"
                         data-testid="button-payment-method-card"
                       >
                         Card
@@ -1825,6 +1827,7 @@ export function JobDetailModal({
                       <ToggleGroupItem
                         value="check"
                         variant="outline"
+                        className="data-[state=on]:bg-sky-500 data-[state=on]:text-white data-[state=on]:border-sky-500"
                         data-testid="button-payment-method-check"
                       >
                         Check
@@ -1832,9 +1835,18 @@ export function JobDetailModal({
                       <ToggleGroupItem
                         value="zelle"
                         variant="outline"
+                        className="data-[state=on]:bg-sky-500 data-[state=on]:text-white data-[state=on]:border-sky-500"
                         data-testid="button-payment-method-zelle"
                       >
                         Zelle
+                      </ToggleGroupItem>
+                      <ToggleGroupItem
+                        value="bank_deposit"
+                        variant="outline"
+                        className="data-[state=on]:bg-sky-500 data-[state=on]:text-white data-[state=on]:border-sky-500"
+                        data-testid="button-payment-method-bank-deposit"
+                      >
+                        Bank Deposit
                       </ToggleGroupItem>
                     </ToggleGroup>
                   </CardContent>

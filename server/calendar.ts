@@ -138,9 +138,14 @@ export function buildCalendarEventDescription(job: Job, vehicle: Vehicle, part: 
     cash: 'Cash',
     card: 'Card',
     check: 'Check',
-    zelle: 'Zelle'
+    zelle: 'Zelle',
+    bank_deposit: 'Bank Deposit'
   };
-  lines.push(`Payment Method: ${job.paymentMethod ? paymentMethodLabels[job.paymentMethod] : 'Not specified'}`);
+  const paymentMethodsArr = Array.isArray(job.paymentMethod) ? job.paymentMethod : [];
+  const paymentMethodDisplay = paymentMethodsArr.length > 0
+    ? paymentMethodsArr.map(m => paymentMethodLabels[m] || m).join(', ')
+    : 'Not specified';
+  lines.push(`Payment Method: ${paymentMethodDisplay}`);
   lines.push('');
   
   const paymentNotes = job.paymentHistory.map(p => 
