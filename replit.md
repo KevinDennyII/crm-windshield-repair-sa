@@ -198,3 +198,47 @@ The analyzer scans all TypeScript/JavaScript files and reports:
 - **Principles Guide**: `scripts/cleanup-principles.md`
 - **React Notes**: https://separated-day-526.notion.site/The-Joy-Of-React-d234359051a44f2ca721bcb4c9ec5de5
 - **CSS Notes**: https://separated-day-526.notion.site/ea79a7c11e9940f9bd572a40dd1f8957
+
+## Security Scan Script
+
+A security analyzer based on Steve Gibson's "Security Now" podcast (grc.com) and OWASP best practices.
+
+### Running the Security Scan
+
+To run the security analyzer, use one of these methods:
+
+1. **Shell command**: `./scripts/run-security.sh`
+2. **Direct execution**: `npx tsx scripts/security-analyzer.ts`
+
+You can simply type "run security scan" or ask the AI assistant to run it for you.
+
+### What It Checks
+
+**Dependency Vulnerabilities:**
+- npm audit for known CVEs
+- Outdated security-critical packages
+- Prototype pollution risks
+
+**Code Security Issues:**
+- Hardcoded secrets/API keys
+- SQL injection vulnerabilities
+- XSS (Cross-Site Scripting) risks
+- Command injection
+- Insecure randomness (Math.random for security)
+- Eval usage
+- Path traversal risks
+- Weak crypto algorithms
+- CORS misconfigurations
+
+**Security Checklist:**
+- Environment variable usage for secrets
+- HTTPS for external APIs
+- Authentication on API routes
+- Security headers (helmet)
+
+### Reference Documents
+
+- **Principles Guide**: `scripts/security-principles.md`
+- **Security Now**: https://twit.tv/shows/security-now
+- **GRC.com**: https://www.grc.com/default.htm
+- **OWASP Top 10**: https://owasp.org/www-project-top-ten/
