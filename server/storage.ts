@@ -1,7 +1,7 @@
-import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, jobs } from "@shared/schema";
+import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, jobs, users } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, max } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -169,33 +169,32 @@ function jobToDbRow(job: Partial<InsertJob> & { jobNumber?: string }): any {
 }
 
 export class DatabaseStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
-  }
-
   async getNextJobNumber(): Promise<string> {
-    const result = await db.select({ count: sql<number>`count(*)` }).from(jobs);
-    const count = Number(result[0]?.count) || 0;
-    return String(count + 1).padStart(6, '0');
+    const result = await db.select({ maxNum: sql<string>`MAX(job_number)` }).from(jobs);
+    const maxNum = result[0]?.maxNum;
+    const nextNum = maxNum ? parseInt(maxNum, 10) + 1 : 1;
+    return String(nextNum).padStart(6, '0');
   }
 
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const rows = await db.select().from(users).where(eq(users.id, id));
+    return rows[0] as User | undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const rows = await db.select().from(users).where(eq(users.username, username));
+    return rows[0] as User | undefined;
   }
 
   async createUser(upsertUser: UpsertUser): Promise<User> {
-    const id = randomUUID();
-    const user = { ...upsertUser, id } as User;
-    this.users.set(id, user);
-    return user;
+    const id = upsertUser.id || randomUUID();
+    const existingUser = await this.getUser(id);
+    if (existingUser) {
+      return existingUser;
+    }
+    await db.insert(users).values({ ...upsertUser, id });
+    const created = await this.getUser(id);
+    return created!;
   }
 
   async getAllJobs(): Promise<Job[]> {
