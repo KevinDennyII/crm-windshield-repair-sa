@@ -168,3 +168,33 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - **OpenAI / Google Generative AI**: AI integrations (included in build allowlist)
 - **Nodemailer**: Email sending (included in build allowlist)
 - **Passport**: Authentication (included in build allowlist)
+
+## Code Cleanup Script
+
+A code analysis tool based on Clean Code principles and Josh Comeau's React/CSS best practices.
+
+### Running the Cleanup Script
+
+To run the cleanup analyzer, use one of these methods:
+
+1. **Shell command**: `./scripts/run-cleanup.sh`
+2. **Direct execution**: `npx tsx scripts/cleanup-analyzer.ts`
+
+You can simply type "run cleanup script" or ask the AI assistant to run it for you.
+
+### What It Checks
+
+The analyzer scans all TypeScript/JavaScript files and reports:
+- **File Size**: Files over 500 lines
+- **Function Length**: Functions over 50 lines
+- **Magic Numbers**: Unexplained numeric values
+- **React Patterns**: Array index as keys, passing setState directly
+- **DRY Violations**: Repeated className patterns
+- **Debug Code**: console.log statements
+- **Dead Code**: Commented-out code
+
+### Reference Documents
+
+- **Principles Guide**: `scripts/cleanup-principles.md`
+- **React Notes**: https://separated-day-526.notion.site/The-Joy-Of-React-d234359051a44f2ca721bcb4c9ec5de5
+- **CSS Notes**: https://separated-day-526.notion.site/ea79a7c11e9940f9bd572a40dd1f8957
