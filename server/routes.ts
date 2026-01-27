@@ -400,9 +400,8 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   ${part ? `
   <div class="section">
     <div class="section-title">Service Details</div>
-    <div class="row"><span class="label">Service:</span><span class="value">${(part.jobType || 'windshield_replacement').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</span></div>
-    ${part.glassPartNumber ? `<div class="row"><span class="label">Part #:</span><span class="value">${part.glassPartNumber}</span></div>` : ''}
-    ${part.distributor ? `<div class="row"><span class="label">Supplier:</span><span class="value">${part.distributor}</span></div>` : ''}
+    <div class="row"><span class="label">Job Type:</span><span class="value">${(part.serviceType || 'replace').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</span></div>
+    <div class="row"><span class="label">Glass Type:</span><span class="value">${(part.glassType || 'windshield').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</span></div>
   </div>
   ` : ''}
 
