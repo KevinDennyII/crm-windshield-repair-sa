@@ -19,11 +19,9 @@ export type User = typeof users.$inferSelect;
 
 export const pipelineStages = [
   "quote",
-  "glass_ordered",
-  "glass_arrived",
   "scheduled",
-  "in_progress",
-  "paid_completed"
+  "paid_completed",
+  "lost_opportunity"
 ] as const;
 
 export type PipelineStage = typeof pipelineStages[number];

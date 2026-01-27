@@ -15,11 +15,9 @@ import { type Job } from "@shared/schema";
 
 const stageLabels: Record<string, string> = {
   quote: "Quote",
-  glass_ordered: "Glass Ordered",
-  glass_arrived: "Glass Arrived",
   scheduled: "Scheduled",
-  in_progress: "In Progress",
   paid_completed: "Paid/Completed",
+  lost_opportunity: "Lost Opportunity",
 };
 
 export default function Payments() {

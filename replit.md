@@ -48,7 +48,7 @@ Key server files:
 ### Shared Code
 The `shared/` directory contains code used by both frontend and backend:
 - `schema.ts` - Database schema definitions, TypeScript types, and Zod validation schemas
-- Pipeline stages: quote → glass_ordered → glass_arrived → scheduled → in_progress → paid_completed
+- Pipeline stages: quote → scheduled → paid_completed → lost_opportunity
 - Payment statuses: pending, partial, paid
 
 ### Data Model (Multi-Vehicle/Multi-Part Support)

@@ -25,30 +25,20 @@ const stageConfig: Record<
     color: "text-amber-600 dark:text-amber-400",
     bgColor: "bg-amber-50 dark:bg-amber-950/30",
   },
-  glass_ordered: {
-    label: "Glass Ordered",
-    color: "text-blue-600 dark:text-blue-400",
-    bgColor: "bg-blue-50 dark:bg-blue-950/30",
-  },
-  glass_arrived: {
-    label: "Glass Arrived",
-    color: "text-purple-600 dark:text-purple-400",
-    bgColor: "bg-purple-50 dark:bg-purple-950/30",
-  },
   scheduled: {
     label: "Scheduled",
     color: "text-cyan-600 dark:text-cyan-400",
     bgColor: "bg-cyan-50 dark:bg-cyan-950/30",
   },
-  in_progress: {
-    label: "In Progress",
-    color: "text-orange-600 dark:text-orange-400",
-    bgColor: "bg-orange-50 dark:bg-orange-950/30",
-  },
   paid_completed: {
     label: "Paid/Completed",
     color: "text-green-600 dark:text-green-400",
     bgColor: "bg-green-50 dark:bg-green-950/30",
+  },
+  lost_opportunity: {
+    label: "Lost Opportunity",
+    color: "text-gray-600 dark:text-gray-400",
+    bgColor: "bg-red-100 dark:bg-red-950/40",
   },
 };
 
@@ -70,6 +60,11 @@ export function KanbanBoard({
     null
   );
   const [emailJob, setEmailJob] = useState<Job | null>(null);
+  const [hideLostOpportunity, setHideLostOpportunity] = useState(false);
+
+  const activeJobsCount = hideLostOpportunity 
+    ? jobs.filter(job => job.pipelineStage !== "lost_opportunity").length 
+    : jobs.length;
 
   const handleDragStart = (e: React.DragEvent, job: Job) => {
     setDraggedJob(job);
@@ -142,17 +137,29 @@ export function KanbanBoard({
         <div>
           <h1 className="text-xl font-semibold">Opportunities</h1>
           <p className="text-sm text-muted-foreground">
-            {jobs.length} active jobs in pipeline
+            {activeJobsCount} active jobs in pipeline
           </p>
         </div>
-        <Button onClick={onAddJob} data-testid="button-add-job">
-          <Plus className="h-4 w-4 mr-2" />
-          New Job
-        </Button>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={hideLostOpportunity}
+              onChange={(e) => setHideLostOpportunity(e.target.checked)}
+              className="rounded border-gray-300"
+              data-testid="checkbox-hide-lost"
+            />
+            Hide Lost from count
+          </label>
+          <Button onClick={onAddJob} data-testid="button-add-job">
+            <Plus className="h-4 w-4 mr-2" />
+            New Job
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1 p-4">
-        <div className="flex gap-4 min-w-max pb-4 md:min-w-0 md:grid md:grid-cols-6">
+        <div className="flex gap-4 min-w-max pb-4 md:min-w-0 md:grid md:grid-cols-4">
           {pipelineStages.map((stage) => {
             const config = stageConfig[stage];
             const stageJobs = getJobsByStage(stage);
