@@ -12,6 +12,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { db } from "./db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { COMPANY_LOGO_BASE64 } from "./logo";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Setup authentication BEFORE other routes
@@ -369,7 +370,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 </head>
 <body>
   <div class="header">
-    <h1>AutoGlass Pro</h1>
+    <img src="${COMPANY_LOGO_BASE64}" alt="Windshield Repair SA" style="max-width: 280px; height: auto; margin-bottom: 10px;" />
     <p>Service Receipt</p>
   </div>
 
@@ -423,7 +424,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   ` : ''}
 
   <div class="footer">
-    <p>Thank you for choosing AutoGlass Pro!</p>
+    <p>Thank you for choosing Windshield Repair SA!</p>
     <p>Questions? Contact us at windshieldrepairsa@gmail.com</p>
   </div>
 </body>
@@ -431,7 +432,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
       await sendEmail(
         job.email,
-        `AutoGlass Pro Receipt - Job #${job.jobNumber}`,
+        `Windshield Repair SA Receipt - Job #${job.jobNumber}`,
         receiptHtml
       );
 
