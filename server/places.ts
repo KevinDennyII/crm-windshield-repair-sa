@@ -20,6 +20,45 @@ interface PlaceDetailsResponse {
   city: string;
   state: string;
   zip: string;
+  lat?: number;
+  lng?: number;
+  mobileFee?: number;
+  distanceMiles?: number;
+}
+
+// San Antonio downtown coordinates (center of the fee zones)
+const SAN_ANTONIO_CENTER = {
+  lat: 29.4241,
+  lng: -98.4936
+};
+
+// Distance thresholds in miles and corresponding mobile fees
+// Based on the zone map:
+// - Inside Loop 1604 (~10 miles): $0
+// - Green zone (~15 miles): $10
+// - Blue zone (~25 miles): $20  
+// - Purple zone (~35 miles): $25
+// - Pink zone (~45 miles): $35
+// - Red zone (>45 miles): $50
+function calculateMobileFee(distanceMiles: number): number {
+  if (distanceMiles <= 10) return 0;    // Inside 1604
+  if (distanceMiles <= 15) return 10;   // Green zone
+  if (distanceMiles <= 25) return 20;   // Blue zone
+  if (distanceMiles <= 35) return 25;   // Purple zone
+  if (distanceMiles <= 45) return 35;   // Pink zone
+  return 50;                             // Red zone
+}
+
+function calculateDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3959; // Earth's radius in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 export function isPlacesConfigured(): boolean {
@@ -60,7 +99,7 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetailsResp
 
   const url = new URL("https://maps.googleapis.com/maps/api/place/details/json");
   url.searchParams.set("place_id", placeId);
-  url.searchParams.set("fields", "address_components");
+  url.searchParams.set("fields", "address_components,geometry");
   url.searchParams.set("key", GOOGLE_PLACES_API_KEY);
 
   const response = await fetch(url.toString());
@@ -99,10 +138,33 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetailsResp
     }
   }
 
+  // Get coordinates and calculate mobile fee
+  const location = data.result?.geometry?.location;
+  let lat: number | undefined;
+  let lng: number | undefined;
+  let distanceMiles: number | undefined;
+  let mobileFee: number | undefined;
+
+  if (location?.lat !== undefined && location?.lng !== undefined) {
+    lat = location.lat;
+    lng = location.lng;
+    distanceMiles = calculateDistanceMiles(
+      SAN_ANTONIO_CENTER.lat,
+      SAN_ANTONIO_CENTER.lng,
+      lat as number,
+      lng as number
+    );
+    mobileFee = calculateMobileFee(distanceMiles);
+  }
+
   return {
     street: streetNumber ? `${streetNumber} ${route}` : route,
     city,
     state,
     zip,
+    lat,
+    lng,
+    distanceMiles: distanceMiles ? Math.round(distanceMiles * 10) / 10 : undefined,
+    mobileFee,
   };
 }

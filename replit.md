@@ -120,11 +120,18 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - Event description includes: lead source, customer info, VIN, service details, glass type, part#, cost, supplier, totals, payment notes, booked/installed by
 - API endpoints: GET /api/calendar/status, GET /api/calendar/events, POST /api/jobs/:id/calendar, DELETE /api/jobs/:id/calendar
 
-### Address Autocomplete
+### Address Autocomplete & Mobile Fee Calculator
 - **Google Places API**: Address autocomplete for customer address fields (requires GOOGLE_MAPS_API_KEY secret)
-- **server/places.ts**: Places API integration for autocomplete and place details
+- **server/places.ts**: Places API integration for autocomplete, place details, and mobile fee calculation
 - Auto-suggests addresses as user types in the Street Address field
 - Auto-fills city, state, and zip code when an address is selected
+- **Mobile Fee Zones** (distance from San Antonio downtown):
+  - 0-10 miles (inside Loop 1604): $0
+  - 10-15 miles: $10
+  - 15-25 miles: $20
+  - 25-35 miles: $25
+  - 35-45 miles: $35
+  - 45+ miles: $50
 - API endpoints: GET /api/places/status, GET /api/places/autocomplete, GET /api/places/details
 
 ### Social Integration (Pending)

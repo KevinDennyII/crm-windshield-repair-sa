@@ -718,10 +718,26 @@ export function JobDetailModal({
                         value={formData.streetAddress || ""}
                         onChange={(value) => handleChange("streetAddress", value)}
                         onAddressSelect={(address) => {
-                          handleChange("streetAddress", address.street);
-                          handleChange("city", address.city);
-                          handleChange("state", address.state);
-                          handleChange("zipCode", address.zip);
+                          // Update address fields
+                          setFormData(prev => ({
+                            ...prev,
+                            streetAddress: address.street,
+                            city: address.city,
+                            state: address.state,
+                            zipCode: address.zip
+                          }));
+                          
+                          // Auto-set mobile fee on all parts if calculated
+                          if (address.mobileFee !== undefined && vehicles.length > 0) {
+                            const updatedVehicles = vehicles.map(vehicle => ({
+                              ...vehicle,
+                              parts: vehicle.parts.map(part => ({
+                                ...part,
+                                mobileFee: address.mobileFee as number
+                              }))
+                            }));
+                            setVehicles(updatedVehicles);
+                          }
                         }}
                         placeholder="Start typing an address..."
                         data-testid="input-street-address"

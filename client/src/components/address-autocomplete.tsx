@@ -11,6 +11,8 @@ interface AddressAutocompleteProps {
     state: string;
     zip: string;
     fullAddress: string;
+    mobileFee?: number;
+    distanceMiles?: number;
   }) => void;
   placeholder?: string;
   className?: string;
@@ -121,6 +123,8 @@ export function AddressAutocomplete({
             state: data.state || "",
             zip: data.zip || "",
             fullAddress: prediction.description,
+            mobileFee: data.mobileFee,
+            distanceMiles: data.distanceMiles,
           });
         }
       } else {
