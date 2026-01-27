@@ -27,6 +27,23 @@ export type CustomerType = typeof customerTypes[number];
 export const leadSources = ["google_ads", "referral", "dealer", "repeat", "subcontractor", "facebook"] as const;
 export type LeadSource = typeof leadSources[number];
 
+// Service type - what action is being performed
+export const serviceTypes = ["repair", "replace", "calibration"] as const;
+export type ServiceType = typeof serviceTypes[number];
+
+// Glass type - what part is being worked on
+export const glassTypes = [
+  "windshield",
+  "door_glass",
+  "back_glass",
+  "back_glass_powerslide",
+  "quarter_glass",
+  "sunroof",
+  "side_mirror"
+] as const;
+export type GlassType = typeof glassTypes[number];
+
+// Legacy jobTypes for backwards compatibility during migration
 export const jobTypes = [
   "windshield_replacement",
   "windshield_repair",
@@ -92,7 +109,9 @@ export type PaymentHistoryEntry = z.infer<typeof paymentHistorySchema>;
 // Part schema - each part has its own pricing calculator
 export const partSchema = z.object({
   id: z.string(),
-  jobType: z.enum(jobTypes).default("windshield_replacement"),
+  serviceType: z.enum(serviceTypes).default("replace"),
+  glassType: z.enum(glassTypes).default("windshield"),
+  jobType: z.enum(jobTypes).optional(), // Legacy field for backwards compatibility
   glassPartNumber: z.string().optional(),
   isAftermarket: z.boolean().default(true),
   distributor: z.string().optional(),

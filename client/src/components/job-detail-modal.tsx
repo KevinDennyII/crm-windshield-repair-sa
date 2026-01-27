@@ -43,7 +43,8 @@ import {
   type Part,
   pipelineStages,
   paymentStatuses,
-  jobTypes,
+  serviceTypes,
+  glassTypes,
   repairLocations,
   calibrationTypes,
   causesOfLoss,
@@ -58,6 +59,8 @@ import {
   type LeadSource,
   type TimeFrame,
   type PaymentMethod,
+  type ServiceType,
+  type GlassType,
 } from "@shared/schema";
 import {
   User,
@@ -103,9 +106,14 @@ const stageLabels: Record<string, string> = {
   lost_opportunity: "Lost Opportunity",
 };
 
-const jobTypeLabels: Record<string, string> = {
-  windshield_replacement: "Windshield Replacement",
-  windshield_repair: "Windshield Repair",
+const serviceTypeLabels: Record<string, string> = {
+  repair: "Repair",
+  replace: "Replace",
+  calibration: "Calibration",
+};
+
+const glassTypeLabels: Record<string, string> = {
+  windshield: "Windshield",
   door_glass: "Door Glass",
   back_glass: "Back Glass",
   back_glass_powerslide: "Back Glass (Powerslide)",
@@ -113,6 +121,54 @@ const jobTypeLabels: Record<string, string> = {
   sunroof: "Sunroof",
   side_mirror: "Side Mirror",
 };
+
+// Helper to migrate legacy jobType to serviceType + glassType
+function deriveServiceAndGlassType(part: Part): { serviceType: string; glassType: string } {
+  // If new fields exist, use them
+  if (part.serviceType && part.glassType) {
+    return { serviceType: part.serviceType, glassType: part.glassType };
+  }
+  
+  // Fallback: derive from legacy jobType field
+  const legacyJobType = (part as any).jobType || "windshield_replacement";
+  
+  // Map legacy jobType to new fields
+  if (legacyJobType === "windshield_repair") {
+    return { serviceType: "repair", glassType: "windshield" };
+  }
+  if (legacyJobType === "windshield_replacement") {
+    return { serviceType: "replace", glassType: "windshield" };
+  }
+  if (legacyJobType === "door_glass") {
+    return { serviceType: "replace", glassType: "door_glass" };
+  }
+  if (legacyJobType === "back_glass") {
+    return { serviceType: "replace", glassType: "back_glass" };
+  }
+  if (legacyJobType === "back_glass_powerslide") {
+    return { serviceType: "replace", glassType: "back_glass_powerslide" };
+  }
+  if (legacyJobType === "quarter_glass") {
+    return { serviceType: "replace", glassType: "quarter_glass" };
+  }
+  if (legacyJobType === "sunroof") {
+    return { serviceType: "replace", glassType: "sunroof" };
+  }
+  if (legacyJobType === "side_mirror") {
+    return { serviceType: "replace", glassType: "side_mirror" };
+  }
+  
+  // Default fallback
+  return { serviceType: "replace", glassType: "windshield" };
+}
+
+// Helper to get display label for a part
+function getPartDisplayLabel(part: Part): string {
+  const { serviceType, glassType } = deriveServiceAndGlassType(part);
+  const service = serviceTypeLabels[serviceType] || "Replace";
+  const glass = glassTypeLabels[glassType] || "Windshield";
+  return `${glass} ${service}`;
+}
 
 const bodyStyleOptions = [
   "Sedan",
@@ -130,7 +186,8 @@ const bodyStyleOptions = [
 ] as const;
 
 function calculateLaborPrice(
-  jobType: string,
+  serviceType: string,
+  glassType: string,
   bodyStyle: string,
   vehicleYear: string,
   partCost: number,
@@ -163,8 +220,18 @@ function calculateLaborPrice(
     return Math.round(partCost * 0.75);
   }
   
-  // Door glass replacement rules
-  if (jobType === "door_glass" || jobType === "quarter_glass" || jobType === "side_mirror") {
+  // Repair jobs - typically lower labor
+  if (serviceType === "repair") {
+    return 50; // Standard repair labor
+  }
+  
+  // Calibration-only jobs
+  if (serviceType === "calibration") {
+    return 0; // Calibration labor is tracked separately via calibrationPrice
+  }
+  
+  // Door glass, quarter glass, side mirror replacement rules
+  if (glassType === "door_glass" || glassType === "quarter_glass" || glassType === "side_mirror") {
     if (is18Wheeler) {
       return 150; // 18 wheelers $150 any year for door glass
     }
@@ -172,8 +239,8 @@ function calculateLaborPrice(
   }
   
   // Windshield and Back Glass replacement rules
-  if (jobType === "windshield_replacement" || jobType === "back_glass" || 
-      jobType === "back_glass_powerslide" || jobType === "sunroof") {
+  if (glassType === "windshield" || glassType === "back_glass" || 
+      glassType === "back_glass_powerslide" || glassType === "sunroof") {
     
     // 18 wheeler rule
     if (is18Wheeler) {
@@ -181,7 +248,7 @@ function calculateLaborPrice(
     }
     
     // Powerslide back glass
-    if (jobType === "back_glass_powerslide") {
+    if (glassType === "back_glass_powerslide") {
       return 185;
     }
     
@@ -206,11 +273,6 @@ function calculateLaborPrice(
     
     // Default to SUV/Pickup pricing if body style not recognized
     return 175;
-  }
-  
-  // Windshield repair - typically lower labor
-  if (jobType === "windshield_repair") {
-    return 50; // Standard repair labor
   }
   
   // Default fallback
@@ -282,7 +344,8 @@ const durationOptions = [
 function createDefaultPart(): Part {
   return {
     id: crypto.randomUUID(),
-    jobType: "windshield_replacement",
+    serviceType: "replace",
+    glassType: "windshield",
     glassPartNumber: "",
     isAftermarket: true,
     distributor: "",
@@ -422,10 +485,18 @@ export function JobDetailModal({
   useEffect(() => {
     if (job) {
       const { id, jobNumber, createdAt, vehicles: jobVehicles, ...jobData } = job;
-      setFormData({ ...jobData, vehicles: jobVehicles || [] });
-      setVehicles(jobVehicles || []);
-      if (jobVehicles && jobVehicles.length > 0) {
-        setExpandedVehicles(new Set([jobVehicles[0].id]));
+      // Normalize parts to ensure serviceType/glassType are populated from legacy jobType
+      const normalizedVehicles = (jobVehicles || []).map((v: Vehicle) => ({
+        ...v,
+        parts: v.parts.map((p: Part) => {
+          const { serviceType, glassType } = deriveServiceAndGlassType(p);
+          return { ...p, serviceType, glassType };
+        }),
+      }));
+      setFormData({ ...jobData, vehicles: normalizedVehicles });
+      setVehicles(normalizedVehicles);
+      if (normalizedVehicles.length > 0) {
+        setExpandedVehicles(new Set([normalizedVehicles[0].id]));
       }
     } else {
       setFormData(getDefaultFormData());
@@ -535,7 +606,8 @@ export function JobDetailModal({
     // Calculate labor price based on vehicle info
     if (vehicle) {
       newPart.laborPrice = calculateLaborPrice(
-        newPart.jobType,
+        newPart.serviceType,
+        newPart.glassType,
         vehicle.bodyStyle || "",
         vehicle.vehicleYear || "",
         newPart.partPrice,
@@ -778,7 +850,8 @@ export function JobDetailModal({
                                 ...vehicle,
                                 parts: vehicle.parts.map(part => {
                                   const newLaborPrice = calculateLaborPrice(
-                                    part.jobType,
+                                    part.serviceType,
+                                    part.glassType,
                                     vehicle.bodyStyle || "",
                                     vehicle.vehicleYear || "",
                                     part.partPrice,
@@ -1311,7 +1384,8 @@ export function JobDetailModal({
                                         if (vehicle.parts.length > 0) {
                                           const updatedParts = vehicle.parts.map(part => {
                                             const newLaborPrice = calculateLaborPrice(
-                                              part.jobType,
+                                              part.serviceType,
+                                              part.glassType,
                                               vehicle.bodyStyle || "",
                                               newYear,
                                               part.partPrice,
@@ -1375,7 +1449,8 @@ export function JobDetailModal({
                                         // Recalculate labor for all parts when body style changes
                                         const updatedParts = vehicle.parts.map(part => {
                                           const newLaborPrice = calculateLaborPrice(
-                                            part.jobType,
+                                            part.serviceType,
+                                            part.glassType,
                                             value,
                                             vehicle.vehicleYear,
                                             part.partPrice,
@@ -1532,7 +1607,7 @@ export function JobDetailModal({
                                           <CardHeader className="pb-2">
                                             <div className="flex items-center justify-between gap-4">
                                               <CardTitle className="text-sm">
-                                                Part {pIndex + 1}: {jobTypeLabels[part.jobType]}
+                                                Part {pIndex + 1}: {getPartDisplayLabel(part)}
                                               </CardTitle>
                                               <div className="flex items-center gap-2">
                                                 <span className="font-semibold text-sm">
@@ -1554,21 +1629,22 @@ export function JobDetailModal({
                                           </CardHeader>
                                           <CardContent className="space-y-4">
                                             {/* Part Type & Glass Info */}
-                                            <div className="grid sm:grid-cols-3 gap-4">
+                                            <div className="grid sm:grid-cols-4 gap-4">
                                               <div className="grid gap-2">
                                                 <Label>Job Type</Label>
                                                 <Select
-                                                  value={part.jobType}
-                                                  onValueChange={(value: typeof jobTypes[number]) => {
-                                                    // Calculate new labor price based on job type
+                                                  value={part.serviceType}
+                                                  onValueChange={(value: ServiceType) => {
+                                                    // Calculate new labor price based on service type
                                                     const newLaborPrice = calculateLaborPrice(
                                                       value,
+                                                      part.glassType,
                                                       vehicle.bodyStyle || "",
                                                       vehicle.vehicleYear || "",
                                                       part.partPrice,
                                                       formData.customerType
                                                     );
-                                                    const updatedPart = { ...part, jobType: value, laborPrice: newLaborPrice };
+                                                    const updatedPart = { ...part, serviceType: value, laborPrice: newLaborPrice };
                                                     const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
                                                     setVehicles(prev => prev.map(v => 
                                                       v.id === vehicle.id 
@@ -1582,14 +1658,55 @@ export function JobDetailModal({
                                                   }}
                                                 >
                                                   <SelectTrigger
-                                                    data-testid={`select-part-type-${part.id}`}
+                                                    data-testid={`select-service-type-${part.id}`}
                                                   >
                                                     <SelectValue />
                                                   </SelectTrigger>
                                                   <SelectContent>
-                                                    {jobTypes.map((type) => (
+                                                    {serviceTypes.map((type) => (
                                                       <SelectItem key={type} value={type}>
-                                                        {jobTypeLabels[type]}
+                                                        {serviceTypeLabels[type]}
+                                                      </SelectItem>
+                                                    ))}
+                                                  </SelectContent>
+                                                </Select>
+                                              </div>
+                                              <div className="grid gap-2">
+                                                <Label>Glass Type</Label>
+                                                <Select
+                                                  value={part.glassType}
+                                                  onValueChange={(value: GlassType) => {
+                                                    // Calculate new labor price based on glass type
+                                                    const newLaborPrice = calculateLaborPrice(
+                                                      part.serviceType,
+                                                      value,
+                                                      vehicle.bodyStyle || "",
+                                                      vehicle.vehicleYear || "",
+                                                      part.partPrice,
+                                                      formData.customerType
+                                                    );
+                                                    const updatedPart = { ...part, glassType: value, laborPrice: newLaborPrice };
+                                                    const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
+                                                    setVehicles(prev => prev.map(v => 
+                                                      v.id === vehicle.id 
+                                                        ? { ...v, parts: v.parts.map(p => 
+                                                            p.id === part.id 
+                                                              ? { ...updatedPart, partsSubtotal, partTotal }
+                                                              : p
+                                                          )}
+                                                        : v
+                                                    ));
+                                                  }}
+                                                >
+                                                  <SelectTrigger
+                                                    data-testid={`select-glass-type-${part.id}`}
+                                                  >
+                                                    <SelectValue />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    {glassTypes.map((type) => (
+                                                      <SelectItem key={type} value={type}>
+                                                        {glassTypeLabels[type]}
                                                       </SelectItem>
                                                     ))}
                                                   </SelectContent>
@@ -1799,7 +1916,8 @@ export function JobDetailModal({
                                                       const newPartPrice = parseFloat(e.target.value) || 0;
                                                       // Recalculate labor if part price crosses $250 threshold
                                                       const newLaborPrice = calculateLaborPrice(
-                                                        part.jobType,
+                                                        part.serviceType,
+                                                        part.glassType,
                                                         vehicle.bodyStyle || "",
                                                         vehicle.vehicleYear || "",
                                                         newPartPrice,
@@ -2179,7 +2297,7 @@ export function JobDetailModal({
                                 data-testid={`summary-part-${p.id}`}
                               >
                                 <span className="text-muted-foreground">
-                                  {v.vehicleYear} {v.vehicleMake} - {jobTypeLabels[p.jobType]}:
+                                  {v.vehicleYear} {v.vehicleMake} - {getPartDisplayLabel(p)}:
                                 </span>
                                 <span>${partTotal.toFixed(2)}</span>
                               </div>

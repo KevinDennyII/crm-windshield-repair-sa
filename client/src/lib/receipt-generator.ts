@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import type { Job, Vehicle, Part, JobType, CustomerType } from '@shared/schema';
+import type { Job, Vehicle, Part, ServiceType, GlassType, CustomerType } from '@shared/schema';
 import logoImage from '@assets/WhatsApp_Image_2026-01-25_at_7.43.18_PM_1769394237285.jpeg';
 
 export type ReceiptType = 'dealer' | 'fleet' | 'rock_chip_repair' | 'windshield_replacement' | 'other_glass_replacement';
@@ -23,12 +23,18 @@ export function determineReceiptType(job: Job): ReceiptType {
   
   const allParts: Part[] = job.vehicles.flatMap(v => v.parts);
   
-  const hasWindshieldRepair = allParts.some(p => p.jobType === 'windshield_repair');
+  const hasWindshieldRepair = allParts.some(p => {
+    const { serviceType, glassType } = deriveServiceAndGlassType(p);
+    return serviceType === 'repair' && glassType === 'windshield';
+  });
   if (hasWindshieldRepair && allParts.length === 1) {
     return 'rock_chip_repair';
   }
   
-  const hasWindshieldReplacement = allParts.some(p => p.jobType === 'windshield_replacement');
+  const hasWindshieldReplacement = allParts.some(p => {
+    const { serviceType, glassType } = deriveServiceAndGlassType(p);
+    return serviceType === 'replace' && glassType === 'windshield';
+  });
   if (hasWindshieldReplacement) {
     return 'windshield_replacement';
   }
@@ -46,17 +52,63 @@ export function getReceiptTypeLabel(type: ReceiptType): string {
   }
 }
 
-function formatJobTypeLabel(jobType: JobType): string {
-  switch (jobType) {
-    case 'windshield_replacement': return 'Windshield Replacement';
-    case 'windshield_repair': return 'Rock Chip Repair';
-    case 'door_glass': return 'Door Glass Replacement';
-    case 'back_glass': return 'Back Glass Replacement';
-    case 'quarter_glass': return 'Quarter Glass Replacement';
-    case 'sunroof': return 'Sunroof Replacement';
-    case 'side_mirror': return 'Side Mirror Replacement';
-    default: return 'Glass Service';
+const glassTypeLabels: Record<string, string> = {
+  windshield: 'Windshield',
+  door_glass: 'Door Glass',
+  back_glass: 'Back Glass',
+  back_glass_powerslide: 'Back Glass (Powerslide)',
+  quarter_glass: 'Quarter Glass',
+  sunroof: 'Sunroof',
+  side_mirror: 'Side Mirror',
+};
+
+const serviceTypeLabels: Record<string, string> = {
+  repair: 'Repair',
+  replace: 'Replacement',
+  calibration: 'Calibration',
+};
+
+// Helper to migrate legacy jobType to serviceType + glassType
+function deriveServiceAndGlassType(part: Part): { serviceType: string; glassType: string } {
+  if (part.serviceType && part.glassType) {
+    return { serviceType: part.serviceType, glassType: part.glassType };
   }
+  
+  const legacyJobType = (part as any).jobType || "windshield_replacement";
+  
+  if (legacyJobType === "windshield_repair") {
+    return { serviceType: "repair", glassType: "windshield" };
+  }
+  if (legacyJobType === "windshield_replacement") {
+    return { serviceType: "replace", glassType: "windshield" };
+  }
+  if (legacyJobType === "door_glass") {
+    return { serviceType: "replace", glassType: "door_glass" };
+  }
+  if (legacyJobType === "back_glass") {
+    return { serviceType: "replace", glassType: "back_glass" };
+  }
+  if (legacyJobType === "back_glass_powerslide") {
+    return { serviceType: "replace", glassType: "back_glass_powerslide" };
+  }
+  if (legacyJobType === "quarter_glass") {
+    return { serviceType: "replace", glassType: "quarter_glass" };
+  }
+  if (legacyJobType === "sunroof") {
+    return { serviceType: "replace", glassType: "sunroof" };
+  }
+  if (legacyJobType === "side_mirror") {
+    return { serviceType: "replace", glassType: "side_mirror" };
+  }
+  
+  return { serviceType: "replace", glassType: "windshield" };
+}
+
+function formatPartLabel(part: Part): string {
+  const { serviceType, glassType } = deriveServiceAndGlassType(part);
+  const glass = glassTypeLabels[glassType] || 'Glass';
+  const service = serviceTypeLabels[serviceType] || 'Service';
+  return `${glass} ${service}`;
 }
 
 function formatDate(dateStr?: string): string {
@@ -173,7 +225,7 @@ function addLineItems(doc: jsPDF, job: Job, yPos: number): { yPos: number; subto
   for (const vehicle of job.vehicles) {
     for (const part of vehicle.parts) {
       const vehicleDesc = `${vehicle.vehicleYear} ${vehicle.vehicleMake} ${vehicle.vehicleModel}`;
-      const partDesc = formatJobTypeLabel(part.jobType);
+      const partDesc = formatPartLabel(part);
       const vinDesc = vehicle.vin ? `VIN ${vehicle.vin}` : '';
       
       doc.text(String(itemNum), 20, yPos);

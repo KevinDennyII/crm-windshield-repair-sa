@@ -20,7 +20,8 @@ export interface IStorage {
 function createDefaultPart(overrides: Partial<Part> = {}): Part {
   return {
     id: randomUUID(),
-    jobType: "windshield_replacement",
+    serviceType: "replace",
+    glassType: "windshield",
     glassPartNumber: "",
     isAftermarket: true,
     distributor: "",
@@ -37,6 +38,8 @@ function createDefaultPart(overrides: Partial<Part> = {}): Part {
     laborPrice: 0,
     calibrationPrice: 0,
     mobileFee: 0,
+    materialCost: 0,
+    subcontractorCost: 0,
     partsSubtotal: 0,
     partTotal: 0,
     ...overrides,
@@ -108,7 +111,7 @@ export class MemStorage implements IStorage {
             vehicleColor: "White",
             parts: [
               createDefaultPart({
-                jobType: "windshield_replacement",
+                serviceType: "replace", glassType: "windshield",
                 glassPartNumber: "FW02345GTY",
                 isAftermarket: true,
                 distributor: "Pilkington",
@@ -173,7 +176,7 @@ export class MemStorage implements IStorage {
             vehicleColor: "Silver",
             parts: [
               createDefaultPart({
-                jobType: "windshield_replacement",
+                serviceType: "replace", glassType: "windshield",
                 glassPartNumber: "FW03456GTY",
                 isAftermarket: false,
                 distributor: "AGC",
@@ -242,7 +245,7 @@ export class MemStorage implements IStorage {
             vehicleColor: "Blue",
             parts: [
               createDefaultPart({
-                jobType: "door_glass",
+                serviceType: "replace", glassType: "door_glass",
                 glassPartNumber: "DW04567GTY",
                 isAftermarket: true,
                 distributor: "Guardian",
@@ -268,7 +271,7 @@ export class MemStorage implements IStorage {
             vehicleColor: "White",
             parts: [
               createDefaultPart({
-                jobType: "windshield_replacement",
+                serviceType: "replace", glassType: "windshield",
                 glassPartNumber: "FW04568GTY",
                 isAftermarket: true,
                 distributor: "Guardian",
@@ -335,7 +338,7 @@ export class MemStorage implements IStorage {
             vehicleColor: "Black",
             parts: [
               createDefaultPart({
-                jobType: "windshield_replacement",
+                serviceType: "replace", glassType: "windshield",
                 glassPartNumber: "FW05678GTY",
                 isAftermarket: true,
                 distributor: "Pilkington",
@@ -351,7 +354,7 @@ export class MemStorage implements IStorage {
                 partTotal: 620,
               }),
               createDefaultPart({
-                jobType: "door_glass",
+                serviceType: "replace", glassType: "door_glass",
                 glassPartNumber: "DG05679GTY",
                 isAftermarket: true,
                 distributor: "Pilkington",
@@ -428,7 +431,7 @@ export class MemStorage implements IStorage {
             vehicleColor: "Red",
             parts: [
               createDefaultPart({
-                jobType: "windshield_replacement",
+                serviceType: "replace", glassType: "windshield",
                 glassPartNumber: "FW06789GTY",
                 isAftermarket: true,
                 distributor: "AGC",
@@ -503,7 +506,7 @@ export class MemStorage implements IStorage {
             vehicleColor: "Gray",
             parts: [
               createDefaultPart({
-                jobType: "back_glass",
+                serviceType: "replace", glassType: "back_glass",
                 glassPartNumber: "BW07890GTY",
                 isAftermarket: true,
                 distributor: "Guardian",
@@ -585,7 +588,7 @@ export class MemStorage implements IStorage {
             vehicleColor: "Red",
             parts: [
               createDefaultPart({
-                jobType: "windshield_replacement",
+                serviceType: "replace", glassType: "windshield",
                 glassPartNumber: "FW08901GTY",
                 isAftermarket: true,
                 distributor: "Pilkington",
@@ -657,7 +660,7 @@ export class MemStorage implements IStorage {
             vehicleColor: "Silver",
             parts: [
               createDefaultPart({
-                jobType: "windshield_repair",
+                serviceType: "repair", glassType: "windshield",
                 glassPartNumber: "",
                 isAftermarket: false,
                 distributor: "",

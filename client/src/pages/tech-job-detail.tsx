@@ -255,13 +255,13 @@ export default function TechJobDetail() {
           <div className="px-4 py-3 flex justify-between">
             <span className="text-gray-600">Service Type</span>
             <span className="font-semibold text-gray-900 capitalize">
-              {part?.jobType?.replace(/_/g, " ") || "Replacement"}
+              {part?.serviceType?.replace(/_/g, " ") || "Replace"}
             </span>
           </div>
           <div className="px-4 py-3 flex justify-between">
             <span className="text-gray-600">Glass Type</span>
             <span className="font-semibold text-gray-900 capitalize">
-              {part?.jobType?.replace(/_/g, " ") || "Windshield"}
+              {part?.glassType?.replace(/_/g, " ") || "Windshield"}
             </span>
           </div>
           <div className="px-4 py-3 flex justify-between">
