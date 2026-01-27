@@ -271,6 +271,7 @@ export function JobDetailModal({
 }: JobDetailModalProps) {
   const [formData, setFormData] = useState<InsertJob>(getDefaultFormData());
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [calculatedMobileFee, setCalculatedMobileFee] = useState<number | null>(null);
   const [expandedVehicles, setExpandedVehicles] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState("customer");
   const [newPayment, setNewPayment] = useState({
@@ -301,6 +302,7 @@ export function JobDetailModal({
       setVehicles([]);
       setExpandedVehicles(new Set());
     }
+    setCalculatedMobileFee(null); // Reset mobile fee when modal opens/job changes
     setActiveTab("customer");
     setNewPayment({ source: "cash", amount: 0, notes: "" });
     if (job) {
@@ -396,6 +398,13 @@ export function JobDetailModal({
 
   const handleAddPart = (vehicleId: string) => {
     const newPart = createDefaultPart();
+    // Apply the calculated mobile fee from address selection (including $0 for local addresses)
+    if (calculatedMobileFee !== null) {
+      newPart.mobileFee = calculatedMobileFee;
+      const { partsSubtotal, partTotal } = calculatePartTotals(newPart);
+      newPart.partsSubtotal = partsSubtotal;
+      newPart.partTotal = partTotal;
+    }
     setVehicles((prev) =>
       prev.map((v) =>
         v.id === vehicleId ? { ...v, parts: [...v.parts, newPart] } : v
@@ -728,15 +737,22 @@ export function JobDetailModal({
                           }));
                           
                           // Auto-set mobile fee on all parts if calculated
-                          if (address.mobileFee !== undefined && vehicles.length > 0) {
-                            const updatedVehicles = vehicles.map(vehicle => ({
-                              ...vehicle,
-                              parts: vehicle.parts.map(part => ({
-                                ...part,
-                                mobileFee: address.mobileFee as number
-                              }))
-                            }));
-                            setVehicles(updatedVehicles);
+                          if (address.mobileFee !== undefined) {
+                            // Store for future parts
+                            setCalculatedMobileFee(address.mobileFee);
+                            
+                            // Apply to existing parts
+                            if (vehicles.length > 0) {
+                              const updatedVehicles = vehicles.map(vehicle => ({
+                                ...vehicle,
+                                parts: vehicle.parts.map(part => {
+                                  const updatedPart = { ...part, mobileFee: address.mobileFee as number };
+                                  const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart);
+                                  return { ...updatedPart, partsSubtotal, partTotal };
+                                })
+                              }));
+                              setVehicles(updatedVehicles);
+                            }
                           }
                         }}
                         placeholder="Start typing an address..."
@@ -1544,7 +1560,7 @@ export function JobDetailModal({
                                                     type="number"
                                                     min="0"
                                                     step="0.01"
-                                                    value={part.mobileFee || ""}
+                                                    value={part.mobileFee ?? ""}
                                                     onChange={(e) =>
                                                       handlePartChange(
                                                         vehicle.id,
