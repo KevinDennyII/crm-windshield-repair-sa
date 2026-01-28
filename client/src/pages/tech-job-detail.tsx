@@ -107,8 +107,18 @@ export default function TechJobDetail() {
   const part = vehicle?.parts?.[0];
 
   const fullAddress = `${job.streetAddress}, ${job.city}, ${job.state} ${job.zipCode}`;
-  const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(fullAddress)}`;
   const mapEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(fullAddress)}&output=embed`;
+  
+  const openMapsApp = () => {
+    const encodedAddress = encodeURIComponent(fullAddress);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
+    if (isIOS) {
+      window.location.href = `maps://maps.apple.com/?q=${encodedAddress}`;
+    } else {
+      window.open(`https://maps.google.com/?q=${encodedAddress}`, '_blank');
+    }
+  };
 
   const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return "N/A";
@@ -148,15 +158,14 @@ export default function TechJobDetail() {
           referrerPolicy="no-referrer-when-downgrade"
           title="Location Map"
         />
-        <a 
-          href={mapsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute top-2 left-2 bg-white/90 rounded p-1 shadow"
-          data-testid="link-open-maps"
+        <button 
+          onClick={openMapsApp}
+          className="absolute top-2 left-2 bg-white/90 rounded-lg px-3 py-2 shadow flex items-center gap-2"
+          data-testid="button-open-maps"
         >
-          <Check className="w-4 h-4 text-blue-500" />
-        </a>
+          <MapPin className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-medium text-blue-600">Navigate</span>
+        </button>
       </div>
 
       <div 
@@ -332,18 +341,16 @@ export default function TechJobDetail() {
           </a>
         </div>
 
-        <a 
-          href={mapsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-4 py-3 flex items-start gap-2 border-t border-gray-200"
-          data-testid="link-navigate"
+        <button 
+          onClick={openMapsApp}
+          className="w-full px-4 py-3 flex items-start gap-2 border-t border-gray-200 text-left hover:bg-gray-50"
+          data-testid="button-navigate"
         >
           <MapPin className="w-5 h-5 text-gray-500 shrink-0 mt-0.5" />
           <span className="text-gray-900">
             {job.streetAddress}, {job.city}, {job.state}, {job.zipCode}
           </span>
-        </a>
+        </button>
 
         <div className="divide-y divide-gray-200 border-t border-gray-200">
           <div className="px-4 py-3 grid grid-cols-2">

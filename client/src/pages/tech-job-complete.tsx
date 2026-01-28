@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,10 @@ import {
   ArrowLeft, 
   X,
   Loader2,
-  Upload
+  Upload,
+  Camera,
+  Image as ImageIcon,
+  Video
 } from "lucide-react";
 import type { Job } from "@shared/schema";
 
@@ -20,6 +23,9 @@ export default function TechJobComplete() {
     partInstalled: "",
     after: ""
   });
+  const [showMediaPicker, setShowMediaPicker] = useState<string | null>(null);
+  const [otherImages, setOtherImages] = useState<string[]>([]);
+  const [otherVideos, setOtherVideos] = useState<string[]>([]);
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -27,11 +33,13 @@ export default function TechJobComplete() {
 
   const job = jobs.find(j => j.id === jobId);
 
-  const handlePhotoCapture = (slot: string) => {
+  const handlePhotoCapture = (slot: string, useCamera: boolean = true) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
-    input.capture = "environment";
+    input.accept = "image/*,video/*";
+    if (useCamera) {
+      input.capture = "environment";
+    }
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
@@ -41,8 +49,49 @@ export default function TechJobComplete() {
             ...prev,
             [slot]: reader.result as string
           }));
+          setShowMediaPicker(null);
         };
         reader.readAsDataURL(file);
+      }
+    };
+    input.click();
+  };
+
+  const handleOtherImageUpload = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = true;
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files) {
+        Array.from(files).forEach(file => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setOtherImages(prev => [...prev, reader.result as string]);
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+    };
+    input.click();
+  };
+
+  const handleVideoUpload = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "video/*";
+    input.multiple = true;
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files) {
+        Array.from(files).forEach(file => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setOtherVideos(prev => [...prev, reader.result as string]);
+          };
+          reader.readAsDataURL(file);
+        });
       }
     };
     input.click();
@@ -136,9 +185,36 @@ export default function TechJobComplete() {
                     <X className="w-5 h-5 text-white" />
                   </button>
                 </div>
+              ) : showMediaPicker === slot.key ? (
+                <div className="w-full aspect-[4/3] bg-white rounded-lg border-2 border-blue-400 flex flex-col items-stretch justify-center gap-2 p-2">
+                  <button
+                    onClick={() => handlePhotoCapture(slot.key, true)}
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    data-testid={`button-camera-${slot.key}`}
+                  >
+                    <Camera className="w-5 h-5" />
+                    <span className="text-sm font-medium">Take Photo</span>
+                  </button>
+                  <button
+                    onClick={() => handlePhotoCapture(slot.key, false)}
+                    className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                    data-testid={`button-gallery-${slot.key}`}
+                  >
+                    <ImageIcon className="w-5 h-5" />
+                    <span className="text-sm font-medium">Choose from Gallery</span>
+                  </button>
+                  <button
+                    onClick={() => setShowMediaPicker(null)}
+                    className="flex-1 flex items-center justify-center gap-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                    data-testid={`button-cancel-${slot.key}`}
+                  >
+                    <X className="w-5 h-5" />
+                    <span className="text-sm font-medium">Cancel</span>
+                  </button>
+                </div>
               ) : (
                 <button
-                  onClick={() => handlePhotoCapture(slot.key)}
+                  onClick={() => setShowMediaPicker(slot.key)}
                   className="w-full aspect-[4/3] bg-gray-200 rounded-lg flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-400 hover:bg-gray-300 transition-colors"
                   data-testid={`button-capture-${slot.key}`}
                 >
@@ -161,25 +237,78 @@ export default function TechJobComplete() {
 
         <div className="space-y-3">
           <div className="flex items-center justify-between py-3 border-b border-gray-200">
-            <span className="text-gray-700">Other images (Optional)</span>
+            <div className="flex items-center gap-2">
+              <ImageIcon className="w-5 h-5 text-gray-500" />
+              <span className="text-gray-700">Other images (Optional)</span>
+              {otherImages.length > 0 && (
+                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+                  {otherImages.length}
+                </span>
+              )}
+            </div>
             <Button
               size="sm"
+              onClick={handleOtherImageUpload}
               style={{ backgroundColor: "#29ABE2" }}
               data-testid="button-upload-other-images"
             >
               Upload
             </Button>
           </div>
+          
+          {otherImages.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 pb-3">
+              {otherImages.map((img, idx) => (
+                <div key={idx} className="relative aspect-square rounded overflow-hidden">
+                  <img src={img} alt={`Other ${idx + 1}`} className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => setOtherImages(prev => prev.filter((_, i) => i !== idx))}
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"
+                    data-testid={`button-remove-other-image-${idx}`}
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          
           <div className="flex items-center justify-between py-3 border-b border-gray-200">
-            <span className="text-gray-700">Other Video</span>
+            <div className="flex items-center gap-2">
+              <Video className="w-5 h-5 text-gray-500" />
+              <span className="text-gray-700">Other Video (Optional)</span>
+              {otherVideos.length > 0 && (
+                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+                  {otherVideos.length}
+                </span>
+              )}
+            </div>
             <Button
               size="sm"
+              onClick={handleVideoUpload}
               style={{ backgroundColor: "#29ABE2" }}
               data-testid="button-upload-video"
             >
               Upload
             </Button>
           </div>
+          
+          {otherVideos.length > 0 && (
+            <div className="grid grid-cols-2 gap-2 pb-3">
+              {otherVideos.map((vid, idx) => (
+                <div key={idx} className="relative aspect-video rounded overflow-hidden bg-black">
+                  <video src={vid} className="w-full h-full object-contain" controls />
+                  <button
+                    onClick={() => setOtherVideos(prev => prev.filter((_, i) => i !== idx))}
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"
+                    data-testid={`button-remove-video-${idx}`}
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </main>
     </div>

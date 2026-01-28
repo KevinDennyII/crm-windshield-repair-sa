@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,46 @@ import {
   Settings, 
   LogOut,
   Loader2,
-  ChevronRight
+  ChevronRight,
+  Package,
+  ChevronDown,
+  ChevronUp,
+  Truck
 } from "lucide-react";
-import type { Job } from "@shared/schema";
+import type { Job, Part, Vehicle } from "@shared/schema";
 
-type TabType = "current" | "last" | "yearly";
+type TabType = "current" | "last" | "yearly" | "pickup";
+
+const DISTRIBUTOR_ADDRESSES = {
+  mygrant: "4825 Eisenhauer Rd, San Antonio, TX",
+  pgw: "3417 Steen Street Unit C, San Antonio, TX"
+};
+
+const TIME_FRAME_ORDER: Record<string, number> = {
+  "9a-12p": 1,
+  "10a-2p": 2,
+  "12p-3p": 3,
+  "2p-6p": 4,
+  "3p-6p": 5,
+  "custom": 6
+};
+
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3959;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function getStopLabel(index: number): string {
+  const ordinals = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"];
+  return ordinals[index] || `${index + 1}th`;
+}
 
 export default function TechDashboard() {
   const { user, logout } = useAuth();
@@ -26,6 +61,10 @@ export default function TechDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("current");
+  const [pickupExpanded, setPickupExpanded] = useState<Record<string, boolean>>({
+    mygrant: true,
+    pgw: true
+  });
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -35,6 +74,7 @@ export default function TechDashboard() {
   const completedJobs = jobs.filter(job => job.pipelineStage === "paid_completed");
 
   const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfWeek = new Date(now);
   startOfWeek.setDate(now.getDate() - now.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
@@ -47,40 +87,95 @@ export default function TechDashboard() {
 
   const startOfYear = new Date(now.getFullYear(), 0, 1);
 
+  const sortJobsByRoute = (jobsToSort: Job[]): Job[] => {
+    return [...jobsToSort].sort((a, b) => {
+      const timeA = TIME_FRAME_ORDER[a.timeFrame || "custom"] || 99;
+      const timeB = TIME_FRAME_ORDER[b.timeFrame || "custom"] || 99;
+      if (timeA !== timeB) return timeA - timeB;
+      
+      const installTimeA = a.installTime || "23:59";
+      const installTimeB = b.installTime || "23:59";
+      return installTimeA.localeCompare(installTimeB);
+    });
+  };
+
   const getFilteredJobs = () => {
     const allJobs = [...scheduledJobs, ...completedJobs];
     
     switch (activeTab) {
       case "current":
-        return allJobs.filter(job => {
+        const currentWeekJobs = allJobs.filter(job => {
           if (!job.installDate) return false;
           const installDate = new Date(job.installDate);
           return installDate >= startOfWeek && installDate < endOfWeek;
         });
+        return sortJobsByRoute(currentWeekJobs);
       case "last":
-        return allJobs.filter(job => {
+        const lastWeekJobs = allJobs.filter(job => {
           if (!job.installDate) return false;
           const installDate = new Date(job.installDate);
           return installDate >= startOfLastWeek && installDate < startOfWeek;
         });
+        return sortJobsByRoute(lastWeekJobs);
       case "yearly":
-        return allJobs.filter(job => {
+        const yearlyJobs = allJobs.filter(job => {
           if (!job.installDate) return false;
           const installDate = new Date(job.installDate);
           return installDate >= startOfYear;
         });
+        return sortJobsByRoute(yearlyJobs);
+      case "pickup":
+        return [];
       default:
-        return scheduledJobs;
+        return sortJobsByRoute(scheduledJobs);
     }
   };
 
   const filteredJobs = getFilteredJobs();
+
+  const todaysJobs = useMemo(() => {
+    return scheduledJobs.filter(job => {
+      if (!job.installDate) return false;
+      const installDate = new Date(job.installDate);
+      return installDate.toDateString() === today.toDateString();
+    });
+  }, [scheduledJobs, today]);
+
+  const sortedTodaysJobs = useMemo(() => sortJobsByRoute(todaysJobs), [todaysJobs]);
+
+  const pickupList = useMemo(() => {
+    const list: { mygrant: { job: Job; vehicle: Vehicle; part: Part }[]; pgw: { job: Job; vehicle: Vehicle; part: Part }[]; other: { job: Job; vehicle: Vehicle; part: Part }[] } = {
+      mygrant: [],
+      pgw: [],
+      other: []
+    };
+
+    sortedTodaysJobs.forEach(job => {
+      job.vehicles?.forEach(vehicle => {
+        vehicle.parts?.forEach(part => {
+          const distributor = (part.distributor || "").toLowerCase();
+          const item = { job, vehicle, part };
+          
+          if (distributor.includes("mygrant")) {
+            list.mygrant.push(item);
+          } else if (distributor.includes("pgw")) {
+            list.pgw.push(item);
+          } else if (distributor) {
+            list.other.push(item);
+          }
+        });
+      });
+    });
+
+    return list;
+  }, [sortedTodaysJobs]);
 
   const getTabLabel = () => {
     switch (activeTab) {
       case "current": return "Current Week";
       case "last": return "Last Week";
       case "yearly": return "Yearly";
+      case "pickup": return "Today's Pickup List";
     }
   };
 
@@ -99,6 +194,21 @@ export default function TechDashboard() {
   const handleLogout = () => {
     logout();
     setSidebarOpen(false);
+  };
+
+  const isJobComplete = (job: Job) => {
+    return job.pipelineStage === "paid_completed";
+  };
+
+  const openMapsApp = (address: string) => {
+    const encodedAddress = encodeURIComponent(address);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
+    if (isIOS) {
+      window.location.href = `maps://maps.apple.com/?q=${encodedAddress}`;
+    } else {
+      window.open(`https://maps.google.com/?q=${encodedAddress}`, '_blank');
+    }
   };
 
   if (isLoading) {
@@ -156,6 +266,18 @@ export default function TechDashboard() {
           </div>
 
           <nav className="space-y-2 mt-4">
+            <button
+              onClick={() => { setActiveTab("pickup"); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeTab === "pickup" ? "bg-white/20" : "hover:bg-white/10"
+              }`}
+              data-testid="nav-pickup-list"
+            >
+              <Package className="w-5 h-5 text-white" />
+              <span className="text-white font-medium">Pickup List</span>
+              <span className="text-white/70 text-sm ml-auto">{sortedTodaysJobs.length}</span>
+            </button>
+
             <button
               onClick={() => { setActiveTab("current"); setSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
@@ -267,56 +389,234 @@ export default function TechDashboard() {
       </div>
 
       <main className="flex-1 overflow-auto">
-        {filteredJobs.length === 0 ? (
+        {activeTab === "pickup" ? (
+          <div className="p-4 space-y-4">
+            {pickupList.mygrant.length > 0 && (
+              <div className="border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setPickupExpanded(prev => ({ ...prev, mygrant: !prev.mygrant }))}
+                  className="w-full px-4 py-3 flex items-center justify-between bg-blue-50 hover:bg-blue-100 transition-colors"
+                  data-testid="button-expand-mygrant"
+                >
+                  <div className="flex items-center gap-3">
+                    <Truck className="w-5 h-5 text-blue-600" />
+                    <div className="text-left">
+                      <h3 className="font-bold text-gray-900">Mygrant Glass</h3>
+                      <p className="text-sm text-gray-500">{DISTRIBUTOR_ADDRESSES.mygrant}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-blue-600">{pickupList.mygrant.length} parts</span>
+                    {pickupExpanded.mygrant ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </div>
+                </button>
+                {pickupExpanded.mygrant && (
+                  <div className="divide-y">
+                    <button
+                      onClick={() => openMapsApp(DISTRIBUTOR_ADDRESSES.mygrant)}
+                      className="w-full px-4 py-2 flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                      data-testid="button-navigate-mygrant"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      <span className="font-medium">Navigate to Mygrant</span>
+                    </button>
+                    {pickupList.mygrant.map((item, idx) => (
+                      <div key={`mygrant-${idx}`} className="px-4 py-3 bg-white">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {item.vehicle.vehicleYear} {item.vehicle.vehicleMake} {item.vehicle.vehicleModel}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Customer: {item.job.firstName} {item.job.lastName}
+                            </p>
+                          </div>
+                          <span className="text-sm font-medium text-blue-600">#{item.job.jobNumber}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pickupList.pgw.length > 0 && (
+              <div className="border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setPickupExpanded(prev => ({ ...prev, pgw: !prev.pgw }))}
+                  className="w-full px-4 py-3 flex items-center justify-between bg-green-50 hover:bg-green-100 transition-colors"
+                  data-testid="button-expand-pgw"
+                >
+                  <div className="flex items-center gap-3">
+                    <Truck className="w-5 h-5 text-green-600" />
+                    <div className="text-left">
+                      <h3 className="font-bold text-gray-900">PGW</h3>
+                      <p className="text-sm text-gray-500">{DISTRIBUTOR_ADDRESSES.pgw}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-green-600">{pickupList.pgw.length} parts</span>
+                    {pickupExpanded.pgw ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </div>
+                </button>
+                {pickupExpanded.pgw && (
+                  <div className="divide-y">
+                    <button
+                      onClick={() => openMapsApp(DISTRIBUTOR_ADDRESSES.pgw)}
+                      className="w-full px-4 py-2 flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 transition-colors"
+                      data-testid="button-navigate-pgw"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      <span className="font-medium">Navigate to PGW</span>
+                    </button>
+                    {pickupList.pgw.map((item, idx) => (
+                      <div key={`pgw-${idx}`} className="px-4 py-3 bg-white">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {item.vehicle.vehicleYear} {item.vehicle.vehicleMake} {item.vehicle.vehicleModel}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Customer: {item.job.firstName} {item.job.lastName}
+                            </p>
+                          </div>
+                          <span className="text-sm font-medium text-green-600">#{item.job.jobNumber}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pickupList.other.length > 0 && (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="px-4 py-3 bg-gray-50">
+                  <div className="flex items-center gap-3">
+                    <Package className="w-5 h-5 text-gray-600" />
+                    <h3 className="font-bold text-gray-900">Other Distributors</h3>
+                    <span className="text-sm font-medium text-gray-600 ml-auto">{pickupList.other.length} parts</span>
+                  </div>
+                </div>
+                <div className="divide-y">
+                  {pickupList.other.map((item, idx) => (
+                    <div key={`other-${idx}`} className="px-4 py-3 bg-white">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-medium text-gray-600">{item.part.distributor}</p>
+                          <p className="font-medium text-gray-900">
+                            {item.vehicle.vehicleYear} {item.vehicle.vehicleMake} {item.vehicle.vehicleModel}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
+                          </p>
+                        </div>
+                        <span className="text-sm font-medium text-gray-600">#{item.job.jobNumber}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {pickupList.mygrant.length === 0 && pickupList.pgw.length === 0 && pickupList.other.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                <Package className="w-12 h-12 mb-3 text-gray-300" />
+                <p>No parts to pick up today</p>
+              </div>
+            )}
+          </div>
+        ) : filteredJobs.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-gray-500">
             No jobs for this period
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {filteredJobs.map(job => (
-              <Link key={job.id} href={`/tech/job/${job.id}`}>
-                <div 
-                  className="px-4 py-4 hover:bg-gray-50 cursor-pointer"
-                  data-testid={`job-card-${job.id}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900">
-                        {job.firstName} {job.lastName}
-                      </h3>
-                      <div className="mt-1 space-y-0.5">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-sm text-gray-600">Schedule Date</span>
-                          <span className="text-sm font-medium text-gray-900 ml-auto">
-                            {formatDate(job.installDate)}
-                          </span>
+            {filteredJobs.map((job, index) => {
+              const isComplete = isJobComplete(job);
+              const isToday = job.installDate && new Date(job.installDate).toDateString() === today.toDateString();
+              
+              return (
+                <Link key={job.id} href={`/tech/job/${job.id}`}>
+                  <div 
+                    className={`px-4 py-4 cursor-pointer transition-colors ${
+                      isComplete 
+                        ? "bg-white hover:bg-gray-50" 
+                        : "hover:bg-blue-100"
+                    }`}
+                    style={{ 
+                      backgroundColor: isComplete ? undefined : "#E3F2FD"
+                    }}
+                    data-testid={`job-card-${job.id}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          {isToday && !isComplete && (
+                            <span 
+                              className="text-xs font-bold px-2 py-1 rounded text-white"
+                              style={{ backgroundColor: "#29ABE2" }}
+                            >
+                              {getStopLabel(index)} Stop
+                            </span>
+                          )}
+                          <h3 className="text-lg font-bold text-gray-900">
+                            {job.firstName} {job.lastName}
+                          </h3>
+                          {isComplete && (
+                            <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-100 text-green-700">
+                              Complete
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-sm text-gray-600">Schedule Time</span>
-                          <span className="text-sm font-medium text-gray-900 ml-auto">
-                            {job.installTime || "N/A"}
-                          </span>
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-sm text-gray-600">Payment Type</span>
-                          <span className="text-sm font-medium text-gray-900 ml-auto capitalize">
-                            {job.paymentMethod?.join(", ")?.replace(/_/g, " ") || "N/A"}
-                          </span>
+                        <div className="mt-1 space-y-0.5">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-sm text-gray-600">Schedule Date</span>
+                            <span className="text-sm font-medium text-gray-900 ml-auto">
+                              {formatDate(job.installDate)}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-sm text-gray-600">Schedule Time</span>
+                            <span className="text-sm font-medium text-gray-900 ml-auto">
+                              {job.installTime || job.timeFrame?.replace(/-/g, " - ") || "N/A"}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-sm text-gray-600">Payment Type</span>
+                            <span className="text-sm font-medium text-gray-900 ml-auto capitalize">
+                              {job.paymentMethod?.join(", ")?.replace(/_/g, " ") || "N/A"}
+                            </span>
+                          </div>
+                          {job.streetAddress && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <MapPin className="w-4 h-4 text-gray-400" />
+                              <span className="text-sm text-gray-600 truncate">
+                                {job.streetAddress}, {job.city}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                    <div className="text-right ml-4">
-                      <span 
-                        className="text-sm font-semibold"
-                        style={{ color: "#1B8EB8" }}
-                      >
-                        #{job.jobNumber}
-                      </span>
+                      <div className="text-right ml-4">
+                        <span 
+                          className="text-sm font-semibold"
+                          style={{ color: "#1B8EB8" }}
+                        >
+                          #{job.jobNumber}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
       </main>
