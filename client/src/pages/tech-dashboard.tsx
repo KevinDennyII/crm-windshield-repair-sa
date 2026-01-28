@@ -89,6 +89,14 @@ export default function TechDashboard() {
 
   const sortJobsByRoute = (jobsToSort: Job[]): Job[] => {
     return [...jobsToSort].sort((a, b) => {
+      // Put scheduled (non-completed) jobs at the top, completed jobs at the bottom
+      const aIsComplete = a.pipelineStage === "paid_completed";
+      const bIsComplete = b.pipelineStage === "paid_completed";
+      if (aIsComplete !== bIsComplete) {
+        return aIsComplete ? 1 : -1; // Completed jobs go to bottom
+      }
+      
+      // Within each group, sort by time frame then install time
       const timeA = TIME_FRAME_ORDER[a.timeFrame || "custom"] || 99;
       const timeB = TIME_FRAME_ORDER[b.timeFrame || "custom"] || 99;
       if (timeA !== timeB) return timeA - timeB;
