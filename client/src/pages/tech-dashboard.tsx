@@ -538,34 +538,47 @@ export default function TechDashboard() {
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {filteredJobs.map((job, index) => {
-              const isComplete = isJobComplete(job);
-              const isToday = job.installDate && new Date(job.installDate).toDateString() === today.toDateString();
+            {(() => {
+              // Pre-calculate stop numbers for today's incomplete jobs only
+              const todaysIncompleteJobs = filteredJobs.filter(job => {
+                const isComplete = isJobComplete(job);
+                const isToday = job.installDate && new Date(job.installDate).toDateString() === today.toDateString();
+                return isToday && !isComplete;
+              });
+              const stopIndexMap = new Map<string, number>();
+              todaysIncompleteJobs.forEach((job, idx) => {
+                stopIndexMap.set(job.id, idx);
+              });
               
-              return (
-                <Link key={job.id} href={`/tech/job/${job.id}`}>
-                  <div 
-                    className={`px-4 py-4 cursor-pointer transition-colors ${
-                      isComplete 
-                        ? "bg-white hover:bg-gray-50" 
-                        : "hover:bg-blue-100"
-                    }`}
-                    style={{ 
-                      backgroundColor: isComplete ? undefined : "#E3F2FD"
-                    }}
-                    data-testid={`job-card-${job.id}`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          {isToday && !isComplete && (
-                            <span 
-                              className="text-xs font-bold px-2 py-1 rounded text-white"
-                              style={{ backgroundColor: "#29ABE2" }}
-                            >
-                              {getStopLabel(index)} Stop
-                            </span>
-                          )}
+              return filteredJobs.map((job) => {
+                const isComplete = isJobComplete(job);
+                const isToday = job.installDate && new Date(job.installDate).toDateString() === today.toDateString();
+                const stopIndex = stopIndexMap.get(job.id);
+                
+                return (
+                  <Link key={job.id} href={`/tech/job/${job.id}`}>
+                    <div 
+                      className={`px-4 py-4 cursor-pointer transition-colors ${
+                        isComplete 
+                          ? "bg-white hover:bg-gray-50" 
+                          : "hover:bg-blue-100"
+                      }`}
+                      style={{ 
+                        backgroundColor: isComplete ? undefined : "#E3F2FD"
+                      }}
+                      data-testid={`job-card-${job.id}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            {isToday && !isComplete && stopIndex !== undefined && (
+                              <span 
+                                className="text-xs font-bold px-2 py-1 rounded text-white"
+                                style={{ backgroundColor: "#29ABE2" }}
+                              >
+                                {getStopLabel(stopIndex)} Stop
+                              </span>
+                            )}
                           <h3 className="text-lg font-bold text-gray-900">
                             {job.firstName} {job.lastName}
                           </h3>
@@ -615,8 +628,9 @@ export default function TechDashboard() {
                     </div>
                   </div>
                 </Link>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         )}
       </main>
