@@ -1,7 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRoute, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { 
   ArrowLeft, 
   X,
@@ -9,12 +11,14 @@ import {
   Upload,
   Camera,
   Image as ImageIcon,
-  Video
+  Video,
+  Save
 } from "lucide-react";
 import type { Job } from "@shared/schema";
 
 export default function TechJobComplete() {
   const [, params] = useRoute("/tech/job/:id/complete");
+  const { toast } = useToast();
   const jobId = params?.id;
   
   const [photos, setPhotos] = useState<{ [key: string]: string }>({
@@ -26,12 +30,82 @@ export default function TechJobComplete() {
   const [showMediaPicker, setShowMediaPicker] = useState<string | null>(null);
   const [otherImages, setOtherImages] = useState<string[]>([]);
   const [otherVideos, setOtherVideos] = useState<string[]>([]);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
 
   const job = jobs.find(j => j.id === jobId);
+
+  // Load saved photos from job when component mounts or job changes
+  useEffect(() => {
+    if (job?.completionPhotos && typeof job.completionPhotos === 'object') {
+      const savedPhotos = job.completionPhotos as { [key: string]: string };
+      setPhotos({
+        preInspection: savedPhotos.preInspection || "",
+        vin: savedPhotos.vin || "",
+        partInstalled: savedPhotos.partInstalled || "",
+        after: savedPhotos.after || "",
+      });
+      // Parse other images/videos or reset to empty array
+      try {
+        setOtherImages(savedPhotos.otherImages ? JSON.parse(savedPhotos.otherImages) : []);
+      } catch { 
+        setOtherImages([]);
+      }
+      try {
+        setOtherVideos(savedPhotos.otherVideos ? JSON.parse(savedPhotos.otherVideos) : []);
+      } catch { 
+        setOtherVideos([]);
+      }
+    } else {
+      // Reset all photos when no saved data exists (new job or cleared)
+      setPhotos({
+        preInspection: "",
+        vin: "",
+        partInstalled: "",
+        after: ""
+      });
+      setOtherImages([]);
+      setOtherVideos([]);
+    }
+    setHasUnsavedChanges(false);
+  }, [job?.id]);
+
+  // Mutation to save photos to server
+  const savePhotosMutation = useMutation({
+    mutationFn: async (photosData: { [key: string]: string }) => {
+      const response = await apiRequest("PATCH", `/api/jobs/${jobId}`, {
+        completionPhotos: photosData,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      setHasUnsavedChanges(false);
+      toast({
+        title: "Photos Saved",
+        description: "Your photos have been saved successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save photos",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const savePhotos = () => {
+    const photosData = {
+      ...photos,
+      otherImages: JSON.stringify(otherImages),
+      otherVideos: JSON.stringify(otherVideos),
+    };
+    savePhotosMutation.mutate(photosData);
+  };
 
   const handlePhotoCapture = (slot: string, useCamera: boolean = true) => {
     const input = document.createElement("input");
@@ -50,6 +124,7 @@ export default function TechJobComplete() {
             [slot]: reader.result as string
           }));
           setShowMediaPicker(null);
+          setHasUnsavedChanges(true);
         };
         reader.readAsDataURL(file);
       }
@@ -69,6 +144,7 @@ export default function TechJobComplete() {
           const reader = new FileReader();
           reader.onloadend = () => {
             setOtherImages(prev => [...prev, reader.result as string]);
+            setHasUnsavedChanges(true);
           };
           reader.readAsDataURL(file);
         });
@@ -89,6 +165,7 @@ export default function TechJobComplete() {
           const reader = new FileReader();
           reader.onloadend = () => {
             setOtherVideos(prev => [...prev, reader.result as string]);
+            setHasUnsavedChanges(true);
           };
           reader.readAsDataURL(file);
         });
@@ -102,6 +179,7 @@ export default function TechJobComplete() {
       ...prev,
       [slot]: ""
     }));
+    setHasUnsavedChanges(true);
   };
 
   if (isLoading) {
@@ -157,9 +235,9 @@ export default function TechJobComplete() {
         <div className="flex justify-center mb-4">
           <span 
             className="px-6 py-2 rounded-full text-white font-semibold"
-            style={{ backgroundColor: "#DC2626" }}
+            style={{ backgroundColor: "#29ABE2" }}
           >
-            Required Media
+            Media (Optional)
           </span>
         </div>
 
@@ -262,7 +340,10 @@ export default function TechJobComplete() {
                 <div key={idx} className="relative aspect-square rounded overflow-hidden">
                   <img src={img} alt={`Other ${idx + 1}`} className="w-full h-full object-cover" />
                   <button
-                    onClick={() => setOtherImages(prev => prev.filter((_, i) => i !== idx))}
+                    onClick={() => {
+                      setOtherImages(prev => prev.filter((_, i) => i !== idx));
+                      setHasUnsavedChanges(true);
+                    }}
                     className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"
                     data-testid={`button-remove-other-image-${idx}`}
                   >
@@ -299,7 +380,10 @@ export default function TechJobComplete() {
                 <div key={idx} className="relative aspect-video rounded overflow-hidden bg-black">
                   <video src={vid} className="w-full h-full object-contain" controls />
                   <button
-                    onClick={() => setOtherVideos(prev => prev.filter((_, i) => i !== idx))}
+                    onClick={() => {
+                      setOtherVideos(prev => prev.filter((_, i) => i !== idx));
+                      setHasUnsavedChanges(true);
+                    }}
                     className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"
                     data-testid={`button-remove-video-${idx}`}
                   >
@@ -309,6 +393,29 @@ export default function TechJobComplete() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Save Button */}
+        <div className="mt-6 pb-4">
+          <Button
+            onClick={savePhotos}
+            disabled={!hasUnsavedChanges || savePhotosMutation.isPending}
+            className="w-full py-6 text-lg font-semibold"
+            style={{ backgroundColor: hasUnsavedChanges ? "#22C55E" : "#9CA3AF" }}
+            data-testid="button-save-photos"
+          >
+            {savePhotosMutation.isPending ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-5 h-5 mr-2" />
+                {hasUnsavedChanges ? "Save Photos" : "Photos Saved"}
+              </>
+            )}
+          </Button>
         </div>
       </main>
     </div>

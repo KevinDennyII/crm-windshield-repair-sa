@@ -65,6 +65,7 @@ export const jobs = pgTable("jobs", {
   
   // Notes
   installNotes: text("install_notes"),
+  repeatCustomerNotes: text("repeat_customer_notes"),
   
   // Calibration decline tracking
   calibrationDeclined: boolean("calibration_declined").default(false),
@@ -72,6 +73,9 @@ export const jobs = pgTable("jobs", {
   // Signature capture
   signatureImage: text("signature_image"),
   receiptSentAt: varchar("receipt_sent_at"),
+  
+  // Completion photos (optional)
+  completionPhotos: jsonb("completion_photos").default({}),
   
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -285,6 +289,7 @@ export const jobSchema = z.object({
   
   // Notes
   installNotes: z.string().optional(),
+  repeatCustomerNotes: z.string().optional(),
   
   // Calibration decline tracking
   calibrationDeclined: z.boolean().default(false),
@@ -292,6 +297,9 @@ export const jobSchema = z.object({
   // Signature capture
   signatureImage: z.string().optional(),
   receiptSentAt: z.string().optional(),
+  
+  // Completion photos (optional)
+  completionPhotos: z.record(z.string()).optional(),
   
   createdAt: z.string().optional(),
 });

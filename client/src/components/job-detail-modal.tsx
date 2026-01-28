@@ -83,6 +83,7 @@ import {
   Loader2,
   Copy,
   ExternalLink,
+  RefreshCcw,
 } from "lucide-react";
 import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
@@ -914,6 +915,22 @@ export function JobDetailModal({
                       </div>
                     )}
 
+                    {/* Repeat Customer Notes for business accounts */}
+                    {formData.isBusiness && formData.leadSource === "repeat" && (
+                      <div className="grid gap-2 p-3 bg-purple-50 dark:bg-purple-950 rounded-lg border border-purple-200 dark:border-purple-800">
+                        <Label className="text-purple-700 dark:text-purple-300 font-medium flex items-center gap-2">
+                          <RefreshCcw className="w-4 h-4" /> Repeat Customer Notes
+                        </Label>
+                        <Textarea
+                          value={formData.repeatCustomerNotes || ""}
+                          onChange={(e) => handleChange("repeatCustomerNotes", e.target.value)}
+                          placeholder="Add notes about this repeat customer (e.g., 'Afternoon jobs only', 'Prefers cash payment', etc.)"
+                          className="min-h-[80px] bg-white dark:bg-gray-900"
+                          data-testid="textarea-repeat-customer-notes-business"
+                        />
+                      </div>
+                    )}
+
                     {/* Lead Source - always visible */}
                     {!formData.isBusiness && (
                       <div className="grid gap-2">
@@ -933,6 +950,22 @@ export function JobDetailModal({
                             ))}
                           </SelectContent>
                         </Select>
+                      </div>
+                    )}
+
+                    {/* Repeat Customer Notes - appears when lead source is "repeat" */}
+                    {formData.leadSource === "repeat" && (
+                      <div className="grid gap-2 p-3 bg-purple-50 dark:bg-purple-950 rounded-lg border border-purple-200 dark:border-purple-800">
+                        <Label className="text-purple-700 dark:text-purple-300 font-medium flex items-center gap-2">
+                          <RefreshCcw className="w-4 h-4" /> Repeat Customer Notes
+                        </Label>
+                        <Textarea
+                          value={formData.repeatCustomerNotes || ""}
+                          onChange={(e) => handleChange("repeatCustomerNotes", e.target.value)}
+                          placeholder="Add notes about this repeat customer (e.g., 'Afternoon jobs only', 'Prefers cash payment', etc.)"
+                          className="min-h-[80px] bg-white dark:bg-gray-900"
+                          data-testid="textarea-repeat-customer-notes"
+                        />
                       </div>
                     )}
 
