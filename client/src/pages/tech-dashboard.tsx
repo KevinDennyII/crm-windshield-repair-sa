@@ -441,6 +441,11 @@ export default function TechDashboard() {
                             <p className="text-sm text-gray-500">
                               Customer: {item.job.firstName} {item.job.lastName}
                             </p>
+                            {item.job.customerType === "subcontractor" && item.job.businessName && (
+                              <p className="text-sm font-medium text-purple-600">
+                                For Subcontractor: {item.job.businessName}
+                              </p>
+                            )}
                           </div>
                           <span className="text-sm font-medium text-blue-600">#{item.job.jobNumber}</span>
                         </div>
@@ -493,6 +498,11 @@ export default function TechDashboard() {
                             <p className="text-sm text-gray-500">
                               Customer: {item.job.firstName} {item.job.lastName}
                             </p>
+                            {item.job.customerType === "subcontractor" && item.job.businessName && (
+                              <p className="text-sm font-medium text-purple-600">
+                                For Subcontractor: {item.job.businessName}
+                              </p>
+                            )}
                           </div>
                           <span className="text-sm font-medium text-green-600">#{item.job.jobNumber}</span>
                         </div>
@@ -524,6 +534,11 @@ export default function TechDashboard() {
                           <p className="text-sm text-gray-600">
                             Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
                           </p>
+                          {item.job.customerType === "subcontractor" && item.job.businessName && (
+                            <p className="text-sm font-medium text-purple-600">
+                              For Subcontractor: {item.job.businessName}
+                            </p>
+                          )}
                         </div>
                         <span className="text-sm font-medium text-gray-600">#{item.job.jobNumber}</span>
                       </div>
