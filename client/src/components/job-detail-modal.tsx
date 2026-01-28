@@ -397,7 +397,11 @@ function calculatePartTotals(part: Part, customerType?: string): { partsSubtotal
     (part.partPrice + part.markup + part.accessoriesPrice + part.urethanePrice) * 
     (1 + part.salesTaxPercent / 100);
   const subtotalBeforeFee = partsSubtotal + part.laborPrice + part.calibrationPrice + part.mobileFee;
-  const partTotal = Math.ceil(subtotalBeforeFee * 1.035);
+  
+  // Dealers pay by check, so waive the 3.5% processing fee
+  const partTotal = customerType === "dealer" 
+    ? Math.ceil(subtotalBeforeFee) 
+    : Math.ceil(subtotalBeforeFee * 1.035);
   return { partsSubtotal, partTotal };
 }
 

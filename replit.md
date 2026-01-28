@@ -93,9 +93,10 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - Parts Subtotal = (Part Price + Markup + Accessories + Urethane) × (1 + Tax%)
 - Part Total = ceil((Parts Subtotal + Labor + Calibration + Mobile Fee) × 1.035)
 - Job Total = Sum of all Part Totals across all vehicles
+- **Dealer exception**: Dealers pay by check, so the 3.5% processing fee is waived (no × 1.035)
 
 **Automatic Labor Pricing (auto-calculated based on vehicle/part info):**
-- **Dealer customers**: Always $90 labor (overrides all other rules)
+- **Dealer customers**: Always $90 labor (overrides all other rules), no 3.5% fee (they pay by check)
 - **Subcontractor customers**: Manual selection of $100, $110, or $125 labor rate (they provide their own parts)
 - Parts costing $250+: Labor = 75% of part cost (highest priority rule for non-dealer/subcontractor)
 - Windshield/Back Glass (2017+):
