@@ -316,7 +316,6 @@ export default function CalendarPage() {
                   {selectedDateEvents.map((event, index) => {
                     if (event.type === 'job') {
                       const job = event.data as Job;
-                      const vehicle = job.vehicles[0];
                       return (
                         <Card key={index} className="bg-muted/30" data-testid={`event-job-${job.id}`}>
                           <CardContent className="p-3 space-y-2">
@@ -331,12 +330,23 @@ export default function CalendarPage() {
                                 </span>
                               </div>
                             </div>
-                            {vehicle && (
-                              <div className="flex items-center gap-1 text-sm">
-                                <Car className="h-3 w-3 text-muted-foreground" />
-                                <span>
-                                  {vehicle.vehicleYear} {vehicle.vehicleMake} {vehicle.vehicleModel}
-                                </span>
+                            {job.vehicles && job.vehicles.length > 0 && (
+                              <div className="space-y-1">
+                                {job.vehicles.map((vehicle, vIdx) => (
+                                  <div key={vIdx}>
+                                    <div className="flex items-center gap-1 text-sm">
+                                      <Car className="h-3 w-3 text-muted-foreground" />
+                                      <span className="font-medium">
+                                        {vehicle.vehicleYear} {vehicle.vehicleMake} {vehicle.vehicleModel}
+                                      </span>
+                                    </div>
+                                    {vehicle.parts && vehicle.parts.map((part, pIdx) => (
+                                      <div key={pIdx} className="ml-4 text-xs text-muted-foreground">
+                                        {part.glassType?.replace(/_/g, ' ')} - {part.glassPartNumber || 'No part#'}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))}
                               </div>
                             )}
                             <div className="flex items-center gap-1 text-sm">

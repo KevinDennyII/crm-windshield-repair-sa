@@ -105,12 +105,13 @@ function formatCurrency(amount: number): string {
   return `$${amount.toLocaleString()}`;
 }
 
-export function buildCalendarEventTitle(job: Job, vehicle: Vehicle, startTime: string, endTime: string): string {
+export function buildCalendarEventTitle(job: Job, vehicles: Vehicle[], startTime: string, endTime: string): string {
   const timeRange = `${formatTimeForTitle(startTime)}-${formatTimeForTitle(endTime)}`;
-  return `${job.jobNumber} ${timeRange} ${vehicle.vehicleYear} ${vehicle.vehicleMake} ${vehicle.vehicleModel}`;
+  const vehicleInfo = vehicles.map(v => `${v.vehicleYear} ${v.vehicleMake} ${v.vehicleModel}`).join(' | ');
+  return `${job.jobNumber} ${timeRange} ${vehicleInfo}`;
 }
 
-export function buildCalendarEventDescription(job: Job, vehicle: Vehicle, part: Part): string {
+export function buildCalendarEventDescription(job: Job, vehicles: Vehicle[]): string {
   const lines: string[] = [];
   
   lines.push(`Lead Source: ${job.leadSource || 'Direct'}`);
@@ -119,14 +120,29 @@ export function buildCalendarEventDescription(job: Job, vehicle: Vehicle, part: 
   lines.push(`Phone: ${formatPhoneDisplay(job.phone)}`);
   lines.push(`Email: ${job.email || ''}`);
   lines.push('');
-  lines.push(`VIN: ${vehicle.vin || ''}`);
-  lines.push('');
-  lines.push(`Service: ${getServiceType(part.jobType)}`);
-  lines.push(`Glass: ${getGlassType(part.jobType)}`);
-  lines.push(`Part#: ${part.glassPartNumber || ''}`);
-  lines.push(`Cost: ${formatCurrency(part.partPrice)}`);
-  lines.push(`${part.distributor || ''}/${job.installer || ''}`);
-  lines.push('');
+  
+  // Include all vehicles and their parts
+  vehicles.forEach((vehicle, vIndex) => {
+    if (vehicles.length > 1) {
+      lines.push(`--- Vehicle ${vIndex + 1} ---`);
+    }
+    lines.push(`VIN: ${vehicle.vin || ''}`);
+    lines.push(`${vehicle.vehicleYear} ${vehicle.vehicleMake} ${vehicle.vehicleModel}`);
+    
+    vehicle.parts.forEach((part, pIndex) => {
+      if (vehicle.parts.length > 1) {
+        lines.push(`  Part ${pIndex + 1}:`);
+      }
+      const jobType = part.jobType || 'windshield_replacement';
+      lines.push(`  Service: ${getServiceType(jobType)}`);
+      lines.push(`  Glass: ${getGlassType(jobType)}`);
+      lines.push(`  Part#: ${part.glassPartNumber || ''}`);
+      lines.push(`  Cost: ${formatCurrency(part.partPrice)}`);
+      lines.push(`  ${part.distributor || ''}/${job.installer || ''}`);
+    });
+    lines.push('');
+  });
+  
   lines.push(`Total: ${formatCurrency(job.totalDue)}`);
   
   const hasRcr = job.vehicles.some(v => 
@@ -180,24 +196,15 @@ export async function createCalendarEvent(job: Job): Promise<string | null> {
 
   const calendar = await getUncachableGoogleCalendarClient();
   
-  const vehicle = job.vehicles[0];
-  if (!vehicle) {
+  if (!job.vehicles || job.vehicles.length === 0) {
     throw new Error('Job must have at least one vehicle');
   }
-  
-  const part = vehicle.parts[0] || {
-    id: '',
-    jobType: 'windshield_replacement' as const,
-    partPrice: 0,
-    glassPartNumber: '',
-    distributor: ''
-  };
 
   const startTime = job.installTime;
   const endTime = job.installEndTime || calculateEndTime(job.installTime, job.jobDuration || '2');
   
-  const title = buildCalendarEventTitle(job, vehicle, startTime, endTime);
-  const description = buildCalendarEventDescription(job, vehicle, part);
+  const title = buildCalendarEventTitle(job, job.vehicles, startTime, endTime);
+  const description = buildCalendarEventDescription(job, job.vehicles);
   const location = buildFullAddress(job);
 
   const startDateTime = `${job.installDate}T${startTime}:00`;
@@ -232,24 +239,15 @@ export async function updateCalendarEvent(eventId: string, job: Job): Promise<vo
 
   const calendar = await getUncachableGoogleCalendarClient();
   
-  const vehicle = job.vehicles[0];
-  if (!vehicle) {
+  if (!job.vehicles || job.vehicles.length === 0) {
     throw new Error('Job must have at least one vehicle');
   }
-  
-  const part = vehicle.parts[0] || {
-    id: '',
-    jobType: 'windshield_replacement' as const,
-    partPrice: 0,
-    glassPartNumber: '',
-    distributor: ''
-  };
 
   const startTime = job.installTime;
   const endTime = job.installEndTime || calculateEndTime(job.installTime, job.jobDuration || '2');
   
-  const title = buildCalendarEventTitle(job, vehicle, startTime, endTime);
-  const description = buildCalendarEventDescription(job, vehicle, part);
+  const title = buildCalendarEventTitle(job, job.vehicles, startTime, endTime);
+  const description = buildCalendarEventDescription(job, job.vehicles);
   const location = buildFullAddress(job);
 
   const startDateTime = `${job.installDate}T${startTime}:00`;
