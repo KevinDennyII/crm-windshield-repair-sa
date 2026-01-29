@@ -19,6 +19,7 @@ import TechJobComplete from "@/pages/tech-job-complete";
 import TechSignature from "@/pages/tech-signature";
 import UserManagement from "@/pages/user-management";
 import { PlaceholderPage } from "@/pages/placeholder-page";
+import Reports from "@/pages/reports";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import {
@@ -83,13 +84,7 @@ function AdminCsrRouter() {
           icon={Star}
         />
       </Route>
-      <Route path="/reporting">
-        <PlaceholderPage
-          title="Reporting"
-          description="Analytics and business insights"
-          icon={BarChart3}
-        />
-      </Route>
+      <Route path="/reporting" component={Reports} />
       <Route path="/users" component={UserManagement} />
       <Route component={NotFound} />
     </Switch>
