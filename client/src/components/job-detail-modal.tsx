@@ -1933,34 +1933,87 @@ export function JobDetailModal({
                                                 <div className="grid sm:grid-cols-3 gap-3">
                                                   <div className="grid gap-1">
                                                     <Label className="text-xs">Labor Rate</Label>
-                                                    <Select
-                                                      value={part.laborPrice?.toString() || "100"}
-                                                      onValueChange={(value) => {
-                                                        const newLaborPrice = parseInt(value);
-                                                        const updatedPart = { ...part, laborPrice: newLaborPrice };
-                                                        const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
-                                                        setVehicles(prev => prev.map(v => 
-                                                          v.id === vehicle.id 
-                                                            ? { ...v, parts: v.parts.map(p => 
-                                                                p.id === part.id 
-                                                                  ? { ...updatedPart, partsSubtotal, partTotal }
-                                                                  : p
-                                                              )}
-                                                            : v
-                                                        ));
-                                                      }}
-                                                    >
-                                                      <SelectTrigger data-testid={`select-labor-rate-${part.id}`}>
-                                                        <SelectValue placeholder="Select rate" />
-                                                      </SelectTrigger>
-                                                      <SelectContent>
-                                                        {subcontractorLaborRates.map((rate) => (
-                                                          <SelectItem key={rate} value={rate.toString()}>
-                                                            ${rate}
-                                                          </SelectItem>
-                                                        ))}
-                                                      </SelectContent>
-                                                    </Select>
+                                                    <div className="flex gap-2">
+                                                      <Select
+                                                        value={
+                                                          subcontractorLaborRates.includes(part.laborPrice as 100 | 110 | 125) 
+                                                            ? part.laborPrice?.toString() 
+                                                            : "other"
+                                                        }
+                                                        onValueChange={(value) => {
+                                                          if (value === "other") {
+                                                            // Set to a custom value (keep current or default to 0)
+                                                            const currentPrice = part.laborPrice || 0;
+                                                            const isPreset = subcontractorLaborRates.includes(currentPrice as 100 | 110 | 125);
+                                                            const newLaborPrice = isPreset ? 0 : currentPrice;
+                                                            const updatedPart = { ...part, laborPrice: newLaborPrice };
+                                                            const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
+                                                            setVehicles(prev => prev.map(v => 
+                                                              v.id === vehicle.id 
+                                                                ? { ...v, parts: v.parts.map(p => 
+                                                                    p.id === part.id 
+                                                                      ? { ...updatedPart, partsSubtotal, partTotal }
+                                                                      : p
+                                                                  )}
+                                                                : v
+                                                            ));
+                                                          } else {
+                                                            const newLaborPrice = parseInt(value);
+                                                            const updatedPart = { ...part, laborPrice: newLaborPrice };
+                                                            const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
+                                                            setVehicles(prev => prev.map(v => 
+                                                              v.id === vehicle.id 
+                                                                ? { ...v, parts: v.parts.map(p => 
+                                                                    p.id === part.id 
+                                                                      ? { ...updatedPart, partsSubtotal, partTotal }
+                                                                      : p
+                                                                  )}
+                                                                : v
+                                                            ));
+                                                          }
+                                                        }}
+                                                      >
+                                                        <SelectTrigger data-testid={`select-labor-rate-${part.id}`} className={!subcontractorLaborRates.includes(part.laborPrice as 100 | 110 | 125) ? "w-24" : ""}>
+                                                          <SelectValue placeholder="Select rate" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                          {subcontractorLaborRates.map((rate) => (
+                                                            <SelectItem key={rate} value={rate.toString()}>
+                                                              ${rate}
+                                                            </SelectItem>
+                                                          ))}
+                                                          <SelectItem value="other">Other...</SelectItem>
+                                                        </SelectContent>
+                                                      </Select>
+                                                      {!subcontractorLaborRates.includes(part.laborPrice as 100 | 110 | 125) && (
+                                                        <div className="flex items-center gap-1">
+                                                          <span className="text-sm text-muted-foreground">$</span>
+                                                          <Input
+                                                            type="number"
+                                                            min="0"
+                                                            step="1"
+                                                            value={part.laborPrice ?? ""}
+                                                            onChange={(e) => {
+                                                              const newLaborPrice = parseFloat(e.target.value) || 0;
+                                                              const updatedPart = { ...part, laborPrice: newLaborPrice };
+                                                              const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
+                                                              setVehicles(prev => prev.map(v => 
+                                                                v.id === vehicle.id 
+                                                                  ? { ...v, parts: v.parts.map(p => 
+                                                                      p.id === part.id 
+                                                                        ? { ...updatedPart, partsSubtotal, partTotal }
+                                                                        : p
+                                                                    )}
+                                                                  : v
+                                                              ));
+                                                            }}
+                                                            placeholder="Amount"
+                                                            className="w-20"
+                                                            data-testid={`input-custom-labor-rate-${part.id}`}
+                                                          />
+                                                        </div>
+                                                      )}
+                                                    </div>
                                                   </div>
                                                   <div className="grid gap-1">
                                                     <Label className="text-xs">Mobile Fee</Label>
