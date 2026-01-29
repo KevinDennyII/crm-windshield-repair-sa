@@ -12,6 +12,7 @@ import {
   Calendar,
   ShoppingCart,
   Banknote,
+  Focus,
 } from "lucide-react";
 import { type Job } from "@shared/schema";
 
@@ -100,6 +101,23 @@ export default function Dashboard() {
   
   // Weekly Profit: revenue minus materials
   const weeklyProfit = weeklyRevenue - weeklyMaterialsCost;
+  
+  // Calibration Profit: sum of calibration fees minus $100 cost per calibration from completed jobs this week
+  const CALIBRATION_COST = 100;
+  const weeklyCalibrationData = weeklyCompletedJobs.reduce((acc, job) => {
+    job.vehicles.forEach(vehicle => {
+      vehicle.parts.forEach(part => {
+        if (part.calibrationType && part.calibrationType !== "none" && part.calibrationType !== "declined") {
+          const calibrationFee = part.calibrationPrice || 0;
+          acc.totalFees += calibrationFee;
+          acc.count += 1;
+        }
+      });
+    });
+    return acc;
+  }, { totalFees: 0, count: 0 });
+  
+  const weeklyCalibrationProfit = weeklyCalibrationData.totalFees - (weeklyCalibrationData.count * CALIBRATION_COST);
 
   const jobsByStage = jobs.reduce((acc, job) => {
     acc[job.pipelineStage] = (acc[job.pipelineStage] || 0) + 1;
@@ -231,6 +249,26 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Calibration Profit Card */}
+      {weeklyCalibrationData.count > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Calibration Profit</CardTitle>
+              <Focus className="h-4 w-4 text-purple-500" />
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${weeklyCalibrationProfit >= 0 ? 'text-purple-600 dark:text-purple-400' : 'text-red-600 dark:text-red-400'}`} data-testid="text-calibration-profit">
+                {formatUSD(weeklyCalibrationProfit)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {weeklyCalibrationData.count} calibration{weeklyCalibrationData.count !== 1 ? 's' : ''}: {formatUSD(weeklyCalibrationData.totalFees)} - {formatUSD(weeklyCalibrationData.count * CALIBRATION_COST)} cost
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
