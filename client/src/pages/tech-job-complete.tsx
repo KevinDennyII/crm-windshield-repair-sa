@@ -396,26 +396,38 @@ export default function TechJobComplete() {
         </div>
 
         {/* Save Button */}
-        <div className="mt-6 pb-4">
-          <Button
-            onClick={savePhotos}
-            disabled={!hasUnsavedChanges || savePhotosMutation.isPending}
-            className="w-full py-6 text-lg font-semibold"
-            style={{ backgroundColor: hasUnsavedChanges ? "#22C55E" : "#9CA3AF" }}
-            data-testid="button-save-photos"
-          >
-            {savePhotosMutation.isPending ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-5 h-5 mr-2" />
-                {hasUnsavedChanges ? "Save Photos" : "Photos Saved"}
-              </>
-            )}
-          </Button>
+        <div className="mt-6 pb-4 space-y-3">
+          {hasUnsavedChanges && (
+            <Button
+              onClick={savePhotos}
+              disabled={savePhotosMutation.isPending}
+              className="w-full py-6 text-lg font-semibold"
+              style={{ backgroundColor: "#22C55E" }}
+              data-testid="button-save-photos"
+            >
+              {savePhotosMutation.isPending ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-5 h-5 mr-2" />
+                  Save Photos
+                </>
+              )}
+            </Button>
+          )}
+          
+          <Link href={`/tech/job/${job.id}/signature`}>
+            <Button
+              className="w-full py-6 text-lg font-semibold"
+              style={{ backgroundColor: "#29ABE2" }}
+              data-testid="button-continue-signature"
+            >
+              Continue to Signature
+            </Button>
+          </Link>
         </div>
       </main>
     </div>
