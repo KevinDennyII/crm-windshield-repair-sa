@@ -296,6 +296,7 @@ const calibrationLabels: Record<string, string> = {
   static: "Static Calibration",
   dynamic: "Dynamic Calibration",
   dual: "Dual Calibration",
+  approve: "Approve",
   declined: "Declined",
 };
 
