@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { KanbanBoard } from "@/components/kanban-board";
 import { JobDetailModal } from "@/components/job-detail-modal";
+import { RepeatCustomerReminderDialog } from "@/components/repeat-customer-reminder-dialog";
 import { type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +13,9 @@ export default function Opportunities() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNewJob, setIsNewJob] = useState(false);
+  
+  const [pendingMoveJob, setPendingMoveJob] = useState<{ job: Job; newStage: PipelineStage } | null>(null);
+  const [showRepeatReminder, setShowRepeatReminder] = useState(false);
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -156,7 +160,28 @@ export default function Opportunities() {
   };
 
   const handleMoveJob = (jobId: string, newStage: PipelineStage) => {
+    const job = jobs.find(j => j.id === jobId);
+    
+    if (job && newStage === "scheduled" && job.leadSource === "repeat") {
+      setPendingMoveJob({ job, newStage });
+      setShowRepeatReminder(true);
+      return;
+    }
+    
     moveJobMutation.mutate({ id: jobId, pipelineStage: newStage });
+  };
+
+  const handleRepeatReminderConfirm = () => {
+    if (pendingMoveJob) {
+      moveJobMutation.mutate({ id: pendingMoveJob.job.id, pipelineStage: pendingMoveJob.newStage });
+    }
+    setShowRepeatReminder(false);
+    setPendingMoveJob(null);
+  };
+
+  const handleRepeatReminderCancel = () => {
+    setShowRepeatReminder(false);
+    setPendingMoveJob(null);
   };
 
   const handleDeleteJob = (jobId: string) => {
@@ -209,6 +234,13 @@ export default function Opportunities() {
         onDelete={handleDeleteJob}
         onAddPayment={handleAddPayment}
         isNew={isNewJob}
+      />
+
+      <RepeatCustomerReminderDialog
+        isOpen={showRepeatReminder}
+        onConfirm={handleRepeatReminderConfirm}
+        onCancel={handleRepeatReminderCancel}
+        job={pendingMoveJob?.job || null}
       />
     </>
   );
