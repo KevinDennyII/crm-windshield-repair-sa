@@ -103,8 +103,11 @@ export default function TechJobDetail() {
     );
   }
 
-  const vehicle = job.vehicles?.[0];
-  const part = vehicle?.parts?.[0];
+  const vehicles = job.vehicles || [];
+  const hasMultipleVehicles = vehicles.length > 1;
+  const firstVehicle = vehicles[0];
+  
+  const totalParts = vehicles.reduce((sum, v) => sum + (v.parts?.length || 0), 0);
 
   const fullAddress = `${job.streetAddress}, ${job.city}, ${job.state} ${job.zipCode}`;
   const mapEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(fullAddress)}&output=embed`;
@@ -168,37 +171,52 @@ export default function TechJobDetail() {
         </button>
       </div>
 
-      <div 
-        className="grid grid-cols-4 text-center py-2"
-        style={{ backgroundColor: "#1B8EB8" }}
-      >
-        <div>
-          <div className="text-xs text-white/80 font-medium">YEAR</div>
-          <div className="text-sm text-white font-semibold truncate px-1">
-            {vehicle?.vehicleYear || "N/A"}
+      {!hasMultipleVehicles && firstVehicle && (
+        <div style={{ backgroundColor: "#1B8EB8" }}>
+          <div className="grid grid-cols-4 text-center py-2">
+            <div>
+              <div className="text-xs text-white/80 font-medium">YEAR</div>
+              <div className="text-sm text-white font-semibold truncate px-1">
+                {firstVehicle.vehicleYear || "N/A"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-white/80 font-medium">MAKE</div>
+              <div className="text-sm text-white font-semibold truncate px-1">
+                {firstVehicle.vehicleMake || "N/A"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-white/80 font-medium">MODEL</div>
+              <div className="text-sm text-white font-semibold truncate px-1">
+                {firstVehicle.vehicleModel || "N/A"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-white/80 font-medium">STYLE</div>
+              <div className="text-sm text-white font-semibold truncate px-1">
+                {firstVehicle.bodyStyle || "N/A"}
+              </div>
+            </div>
           </div>
         </div>
-        <div>
-          <div className="text-xs text-white/80 font-medium">MAKE</div>
-          <div className="text-sm text-white font-semibold truncate px-1">
-            {vehicle?.vehicleMake || "N/A"}
-          </div>
-        </div>
-        <div>
-          <div className="text-xs text-white/80 font-medium">MODEL</div>
-          <div className="text-sm text-white font-semibold truncate px-1">
-            {vehicle?.vehicleModel || "N/A"}
-          </div>
-        </div>
-        <div>
-          <div className="text-xs text-white/80 font-medium">STYLE</div>
-          <div className="text-sm text-white font-semibold truncate px-1">
-            {vehicle?.bodyStyle || "N/A"}
-          </div>
-        </div>
-      </div>
+      )}
 
       <main className="flex-1 overflow-auto pb-4">
+        {(hasMultipleVehicles || totalParts > 1) && (
+          <div className="px-4 py-2 bg-amber-50 border-b border-amber-200">
+            <div className="flex items-center justify-center gap-4 text-sm">
+              <span className="font-semibold text-amber-800">
+                {vehicles.length} {vehicles.length === 1 ? "Vehicle" : "Vehicles"}
+              </span>
+              <span className="text-amber-600">|</span>
+              <span className="font-semibold text-amber-800">
+                {totalParts} {totalParts === 1 ? "Service" : "Services"} Total
+              </span>
+            </div>
+          </div>
+        )}
+        
         <div className="px-4 py-3">
           <button
             onClick={() => setTasksExpanded(!tasksExpanded)}
@@ -272,57 +290,147 @@ export default function TechJobDetail() {
           </div>
         )}
 
-        <div className="divide-y divide-gray-200">
-          <div className="px-4 py-3 flex justify-between">
-            <span className="text-gray-600">Service Type</span>
-            <span className="font-semibold text-gray-900 capitalize">
-              {part?.serviceType?.replace(/_/g, " ") || "Replace"}
-            </span>
+        {vehicles.map((veh, vehIndex) => {
+          const vehParts = veh.parts || [];
+          return (
+            <div key={vehIndex}>
+              {hasMultipleVehicles && (
+                <div className="px-4 py-3 bg-blue-600">
+                  <div className="flex items-center justify-between">
+                    <span className="text-white font-bold">
+                      Vehicle {vehIndex + 1} of {vehicles.length}
+                    </span>
+                    <span className="text-white/80 text-sm">
+                      {veh.vehicleYear} {veh.vehicleMake} {veh.vehicleModel}
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              {vehParts.map((part, partIndex) => (
+                <div key={partIndex} className="divide-y divide-gray-200">
+                  {vehParts.length > 1 && (
+                    <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
+                      <span className="text-sm font-bold" style={{ color: "#29ABE2" }}>
+                        Service {partIndex + 1} of {vehParts.length}
+                      </span>
+                    </div>
+                  )}
+                  <div className="px-4 py-3 flex justify-between">
+                    <span className="text-gray-600">Service Type</span>
+                    <span className="font-semibold text-gray-900 capitalize">
+                      {part?.serviceType?.replace(/_/g, " ") || "Replace"}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between">
+                    <span className="text-gray-600">Glass Type</span>
+                    <span className="font-semibold text-gray-900 capitalize">
+                      {part?.glassType?.replace(/_/g, " ") || "Windshield"}
+                    </span>
+                  </div>
+                  {part?.calibrationType && part.calibrationType !== "none" && part.calibrationType !== "declined" && (
+                    <div className="px-4 py-3 flex justify-between bg-orange-50">
+                      <span className="text-orange-700 font-medium">Calibration Required</span>
+                      <span className="font-semibold text-orange-700 capitalize">
+                        {part.calibrationType.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                  )}
+                  <div className="px-4 py-3 flex justify-between">
+                    <span className="text-gray-600">Part#</span>
+                    <span className="font-semibold text-gray-900">
+                      {part?.glassPartNumber || "N/A"}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between">
+                    <span className="text-gray-600">Warehouse Name</span>
+                    <span className="font-semibold text-gray-900">
+                      {part?.distributor || "N/A"}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between">
+                    <span className="text-gray-600">Warehouse Order#</span>
+                    <span className="font-semibold text-gray-900">
+                      {part?.glassPartNumber || "N/A"}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between">
+                    <span className="text-gray-600">Moldings</span>
+                    <span className="font-semibold text-gray-900">
+                      Not Available
+                    </span>
+                  </div>
+                  {partIndex === vehParts.length - 1 && (
+                    <div className="px-4 py-3 flex justify-between items-center">
+                      <span className="text-gray-600">Media Attachments</span>
+                      <Link href={`/tech/job/${job.id}/complete`}>
+                        <Button
+                          size="sm"
+                          className="px-4"
+                          style={{ backgroundColor: "#29ABE2" }}
+                          data-testid={`button-view-media-${vehIndex}`}
+                        >
+                          View
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+                  {partIndex < vehParts.length - 1 && (
+                    <div className="h-2 bg-gray-100" />
+                  )}
+                </div>
+              ))}
+              
+              {vehParts.length === 0 && (
+                <div className="divide-y divide-gray-200">
+                  <div className="px-4 py-3 flex justify-between">
+                    <span className="text-gray-600">Service Type</span>
+                    <span className="font-semibold text-gray-900">N/A</span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between items-center">
+                    <span className="text-gray-600">Media Attachments</span>
+                    <Link href={`/tech/job/${job.id}/complete`}>
+                      <Button
+                        size="sm"
+                        className="px-4"
+                        style={{ backgroundColor: "#29ABE2" }}
+                        data-testid={`button-view-media-${vehIndex}`}
+                      >
+                        View
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              )}
+              
+              {vehIndex < vehicles.length - 1 && (
+                <div className="h-4 bg-gray-200" />
+              )}
+            </div>
+          );
+        })}
+        
+        {vehicles.length === 0 && (
+          <div className="divide-y divide-gray-200">
+            <div className="px-4 py-3 flex justify-between">
+              <span className="text-gray-600">Service Type</span>
+              <span className="font-semibold text-gray-900">N/A</span>
+            </div>
+            <div className="px-4 py-3 flex justify-between items-center">
+              <span className="text-gray-600">Media Attachments</span>
+              <Link href={`/tech/job/${job.id}/complete`}>
+                <Button
+                  size="sm"
+                  className="px-4"
+                  style={{ backgroundColor: "#29ABE2" }}
+                  data-testid="button-view-media"
+                >
+                  View
+                </Button>
+              </Link>
+            </div>
           </div>
-          <div className="px-4 py-3 flex justify-between">
-            <span className="text-gray-600">Glass Type</span>
-            <span className="font-semibold text-gray-900 capitalize">
-              {part?.glassType?.replace(/_/g, " ") || "Windshield"}
-            </span>
-          </div>
-          <div className="px-4 py-3 flex justify-between">
-            <span className="text-gray-600">Part#</span>
-            <span className="font-semibold text-gray-900">
-              {part?.glassPartNumber || "N/A"}
-            </span>
-          </div>
-          <div className="px-4 py-3 flex justify-between">
-            <span className="text-gray-600">Warehouse Name</span>
-            <span className="font-semibold text-gray-900">
-              {part?.distributor || "N/A"}
-            </span>
-          </div>
-          <div className="px-4 py-3 flex justify-between">
-            <span className="text-gray-600">Warehouse Order#</span>
-            <span className="font-semibold text-gray-900">
-              {part?.glassPartNumber || "N/A"}
-            </span>
-          </div>
-          <div className="px-4 py-3 flex justify-between">
-            <span className="text-gray-600">Moldings</span>
-            <span className="font-semibold text-gray-900">
-              Not Available
-            </span>
-          </div>
-          <div className="px-4 py-3 flex justify-between items-center">
-            <span className="text-gray-600">Media Attachments</span>
-            <Link href={`/tech/job/${job.id}/complete`}>
-              <Button
-                size="sm"
-                className="px-4"
-                style={{ backgroundColor: "#29ABE2" }}
-                data-testid="button-view-media"
-              >
-                View
-              </Button>
-            </Link>
-          </div>
-        </div>
+        )}
 
         <div className="px-4 py-3 grid grid-cols-2 gap-4 border-t border-gray-200">
           <div className="flex items-center gap-2">
