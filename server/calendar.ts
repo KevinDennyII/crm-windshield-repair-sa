@@ -75,7 +75,14 @@ function formatTimeForTitle(time: string): string {
   return `${hour12}:${minutes.toString().padStart(2, '0')}${ampm}`;
 }
 
-function getServiceType(jobType: string): string {
+function getServiceType(part: { serviceType?: string; jobType?: string }): string {
+  // Check serviceType first (newer field)
+  if (part.serviceType === 'repair') return 'Repair';
+  if (part.serviceType === 'replace') return 'Replacement';
+  if (part.serviceType === 'calibration') return 'Calibration';
+  
+  // Fall back to legacy jobType for older jobs
+  const jobType = part.jobType || '';
   switch (jobType) {
     case 'windshield_replacement': return 'Replacement';
     case 'windshield_repair': return 'Repair';
@@ -88,7 +95,25 @@ function getServiceType(jobType: string): string {
   }
 }
 
-function getGlassType(jobType: string): string {
+function getGlassType(part: { glassType?: string; jobType?: string }): string {
+  // Check glassType first (newer field)
+  if (part.glassType) {
+    const glassTypeLabels: Record<string, string> = {
+      'windshield': 'Windshield',
+      'back_glass': 'Back Glass',
+      'door_glass': 'Door Glass',
+      'quarter_glass': 'Quarter Glass',
+      'sunroof': 'Sunroof',
+      'side_mirror': 'Side Mirror',
+      'rock_chip': 'Rock Chip',
+      'vent_glass': 'Vent Glass',
+      'other': 'Other'
+    };
+    return glassTypeLabels[part.glassType] || part.glassType;
+  }
+  
+  // Fall back to legacy jobType for older jobs
+  const jobType = part.jobType || '';
   switch (jobType) {
     case 'windshield_replacement': return 'Windshield';
     case 'windshield_repair': return 'Windshield';
@@ -133,9 +158,8 @@ export function buildCalendarEventDescription(job: Job, vehicles: Vehicle[]): st
       if (vehicle.parts.length > 1) {
         lines.push(`  Part ${pIndex + 1}:`);
       }
-      const jobType = part.jobType || 'windshield_replacement';
-      lines.push(`  Service: ${getServiceType(jobType)}`);
-      lines.push(`  Glass: ${getGlassType(jobType)}`);
+      lines.push(`  Service: ${getServiceType(part)}`);
+      lines.push(`  Glass: ${getGlassType(part)}`);
       lines.push(`  Part#: ${part.glassPartNumber || ''}`);
       lines.push(`  Cost: ${formatCurrency(part.partPrice)}`);
       lines.push(`  ${part.distributor || ''}/${job.installer || ''}`);
@@ -146,7 +170,7 @@ export function buildCalendarEventDescription(job: Job, vehicles: Vehicle[]): st
   lines.push(`Total: ${formatCurrency(job.totalDue)}`);
   
   const hasRcr = job.vehicles.some(v => 
-    v.parts.some(p => p.jobType === 'windshield_repair')
+    v.parts.some(p => p.serviceType === 'repair' || p.jobType === 'windshield_repair')
   );
   lines.push(`Free RCR included: ${hasRcr ? 'Y' : 'N'}`);
   
