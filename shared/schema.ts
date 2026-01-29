@@ -6,6 +6,24 @@ import { z } from "zod";
 // Export auth models (users table with roles)
 export * from "./models/auth";
 
+// Customer reminders table for storing reminders by customer name
+export const customerReminders = pgTable("customer_reminders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerKey: varchar("customer_key").notNull().unique(),
+  reminderMessage: text("reminder_message").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCustomerReminderSchema = createInsertSchema(customerReminders).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+export type CustomerReminder = typeof customerReminders.$inferSelect;
+export type InsertCustomerReminder = z.infer<typeof insertCustomerReminderSchema>;
+
 // Jobs table for persistent storage
 export const jobs = pgTable("jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

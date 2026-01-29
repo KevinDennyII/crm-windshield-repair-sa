@@ -1,4 +1,4 @@
-import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, jobs, users } from "@shared/schema";
+import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, jobs, users, customerReminders } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, desc, sql, max } from "drizzle-orm";
@@ -16,6 +16,11 @@ export interface IStorage {
   addPaymentToJob(id: string, payment: PaymentHistoryEntry): Promise<Job | undefined>;
   deleteJob(id: string): Promise<boolean>;
   getNextJobNumber(): Promise<string>;
+  
+  // Customer reminders
+  getCustomerReminder(customerKey: string): Promise<CustomerReminder | undefined>;
+  upsertCustomerReminder(reminder: InsertCustomerReminder): Promise<CustomerReminder>;
+  deleteCustomerReminder(customerKey: string): Promise<boolean>;
 }
 
 function createDefaultPart(overrides: Partial<Part> = {}): Part {
@@ -270,6 +275,42 @@ export class DatabaseStorage implements IStorage {
 
   async deleteJob(id: string): Promise<boolean> {
     const result = await db.delete(jobs).where(eq(jobs.id, id));
+    return true;
+  }
+
+  // Customer reminder methods
+  async getCustomerReminder(customerKey: string): Promise<CustomerReminder | undefined> {
+    const normalizedKey = customerKey.toLowerCase().trim();
+    const result = await db.select().from(customerReminders).where(eq(customerReminders.customerKey, normalizedKey));
+    return result[0] ?? undefined;
+  }
+
+  async upsertCustomerReminder(reminder: InsertCustomerReminder): Promise<CustomerReminder> {
+    const normalizedKey = reminder.customerKey.toLowerCase().trim();
+    const existing = await this.getCustomerReminder(normalizedKey);
+    
+    if (existing) {
+      await db.update(customerReminders)
+        .set({ 
+          reminderMessage: reminder.reminderMessage,
+          updatedAt: new Date()
+        })
+        .where(eq(customerReminders.customerKey, normalizedKey));
+      return (await this.getCustomerReminder(normalizedKey))!;
+    } else {
+      const result = await db.insert(customerReminders)
+        .values({ 
+          customerKey: normalizedKey,
+          reminderMessage: reminder.reminderMessage
+        })
+        .returning();
+      return result[0];
+    }
+  }
+
+  async deleteCustomerReminder(customerKey: string): Promise<boolean> {
+    const normalizedKey = customerKey.toLowerCase().trim();
+    await db.delete(customerReminders).where(eq(customerReminders.customerKey, normalizedKey));
     return true;
   }
 }

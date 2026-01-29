@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured } from "./twilio";
@@ -675,6 +675,50 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error: any) {
       console.error("Place details error:", error);
       res.status(500).json({ message: error.message || "Failed to fetch place details" });
+    }
+  });
+
+  // Customer Reminders API
+  app.get("/api/customer-reminders/:customerKey", async (req, res) => {
+    try {
+      const customerKey = decodeURIComponent(req.params.customerKey);
+      const reminder = await storage.getCustomerReminder(customerKey);
+      if (!reminder) {
+        return res.status(404).json({ message: "No reminder found" });
+      }
+      res.json(reminder);
+    } catch (error: any) {
+      console.error("Get customer reminder error:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch reminder" });
+    }
+  });
+
+  app.post("/api/customer-reminders", async (req, res) => {
+    try {
+      const parsed = insertCustomerReminderSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid reminder data", 
+          errors: parsed.error.errors 
+        });
+      }
+      
+      const reminder = await storage.upsertCustomerReminder(parsed.data);
+      res.json(reminder);
+    } catch (error: any) {
+      console.error("Upsert customer reminder error:", error);
+      res.status(500).json({ message: error.message || "Failed to save reminder" });
+    }
+  });
+
+  app.delete("/api/customer-reminders/:customerKey", async (req, res) => {
+    try {
+      const customerKey = decodeURIComponent(req.params.customerKey);
+      await storage.deleteCustomerReminder(customerKey);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Delete customer reminder error:", error);
+      res.status(500).json({ message: error.message || "Failed to delete reminder" });
     }
   });
 }

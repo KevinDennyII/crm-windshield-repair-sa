@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -88,7 +89,11 @@ import {
 import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 import { EmailComposeModal } from "@/components/email-compose-modal";
+import { CustomerReminderPopup } from "@/components/customer-reminder-popup";
+import { SetReminderDialog } from "@/components/set-reminder-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { type CustomerReminder } from "@shared/schema";
+import { Bell } from "lucide-react";
 
 interface JobDetailModalProps {
   job: Job | null;
@@ -483,7 +488,41 @@ export function JobDetailModal({
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [receiptPreviewJob, setReceiptPreviewJob] = useState<Job | null>(null);
   const [decodingVin, setDecodingVin] = useState<string | null>(null);
+  const [showReminderPopup, setShowReminderPopup] = useState(false);
+  const [showSetReminderDialog, setShowSetReminderDialog] = useState(false);
+  const [reminderShownForKey, setReminderShownForKey] = useState<string>("");
   const { toast } = useToast();
+
+  const getCustomerKey = useCallback(() => {
+    if (formData.isBusiness && formData.businessName?.trim()) {
+      return formData.businessName.trim();
+    }
+    if (formData.firstName?.trim() && formData.lastName?.trim()) {
+      return `${formData.firstName.trim()} ${formData.lastName.trim()}`;
+    }
+    return "";
+  }, [formData.isBusiness, formData.businessName, formData.firstName, formData.lastName]);
+
+  const customerKey = getCustomerKey();
+
+  const { data: customerReminder } = useQuery<CustomerReminder | null>({
+    queryKey: ["/api/customer-reminders", customerKey],
+    queryFn: async () => {
+      if (!customerKey) return null;
+      const response = await fetch(`/api/customer-reminders/${encodeURIComponent(customerKey)}`);
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error("Failed to fetch reminder");
+      return response.json();
+    },
+    enabled: !!customerKey,
+  });
+
+  useEffect(() => {
+    if (customerReminder && customerKey && customerKey !== reminderShownForKey) {
+      setShowReminderPopup(true);
+      setReminderShownForKey(customerKey);
+    }
+  }, [customerReminder, customerKey, reminderShownForKey]);
 
   const jobTotal = calculateJobTotal(vehicles, formData.customerType);
 
@@ -511,6 +550,8 @@ export function JobDetailModal({
     setCalculatedMobileFee(null); // Reset mobile fee when modal opens/job changes
     setActiveTab("customer");
     setNewPayment({ source: "cash", amount: 0, notes: "" });
+    setReminderShownForKey(""); // Reset so reminder can show again for new job
+    setShowReminderPopup(false);
     if (job) {
       const hasInsuranceData = !!(job.insuranceCompany || job.claimNumber || job.policyNumber || job.dispatchNumber || job.dateOfLoss);
       setShowInsurance(hasInsuranceData);
@@ -993,6 +1034,27 @@ export function JobDetailModal({
                         />
                       </div>
                     </div>
+
+                    {customerKey && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowSetReminderDialog(true)}
+                          className={customerReminder ? "border-amber-500 text-amber-600 dark:text-amber-400" : ""}
+                          data-testid="button-set-reminder"
+                        >
+                          <Bell className="w-4 h-4 mr-2" />
+                          {customerReminder ? "Edit Reminder" : "Set Reminder"}
+                        </Button>
+                        {customerReminder && (
+                          <span className="text-xs text-amber-600 dark:text-amber-400">
+                            Reminder set for this customer
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="grid gap-2">
@@ -2604,6 +2666,23 @@ export function JobDetailModal({
           onOpenChange={setShowEmailModal}
         />
       )}
+
+      {customerReminder && (
+        <CustomerReminderPopup
+          isOpen={showReminderPopup}
+          onClose={() => setShowReminderPopup(false)}
+          customerKey={customerKey}
+          customerName={formData.isBusiness ? formData.businessName || "" : `${formData.firstName} ${formData.lastName}`}
+          reminderMessage={customerReminder.reminderMessage}
+        />
+      )}
+
+      <SetReminderDialog
+        isOpen={showSetReminderDialog}
+        onClose={() => setShowSetReminderDialog(false)}
+        customerKey={customerKey}
+        customerName={formData.isBusiness ? formData.businessName || "" : `${formData.firstName} ${formData.lastName}`}
+      />
     </Dialog>
   );
 }
