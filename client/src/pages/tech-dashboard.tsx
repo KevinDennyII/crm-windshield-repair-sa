@@ -55,6 +55,16 @@ function getStopLabel(index: number): string {
   return ordinals[index] || `${index + 1}th`;
 }
 
+function parseLocalDate(dateStr: string | null | undefined): Date | null {
+  if (!dateStr) return null;
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return null;
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  return new Date(year, month, day);
+}
+
 export default function TechDashboard() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
@@ -113,22 +123,22 @@ export default function TechDashboard() {
     switch (activeTab) {
       case "current":
         const currentWeekJobs = allJobs.filter(job => {
-          if (!job.installDate) return false;
-          const installDate = new Date(job.installDate);
+          const installDate = parseLocalDate(job.installDate);
+          if (!installDate) return false;
           return installDate >= startOfWeek && installDate < endOfWeek;
         });
         return sortJobsByRoute(currentWeekJobs);
       case "last":
         const lastWeekJobs = allJobs.filter(job => {
-          if (!job.installDate) return false;
-          const installDate = new Date(job.installDate);
+          const installDate = parseLocalDate(job.installDate);
+          if (!installDate) return false;
           return installDate >= startOfLastWeek && installDate < startOfWeek;
         });
         return sortJobsByRoute(lastWeekJobs);
       case "yearly":
         const yearlyJobs = allJobs.filter(job => {
-          if (!job.installDate) return false;
-          const installDate = new Date(job.installDate);
+          const installDate = parseLocalDate(job.installDate);
+          if (!installDate) return false;
           return installDate >= startOfYear;
         });
         return sortJobsByRoute(yearlyJobs);
@@ -143,8 +153,8 @@ export default function TechDashboard() {
 
   const todaysJobs = useMemo(() => {
     return scheduledJobs.filter(job => {
-      if (!job.installDate) return false;
-      const installDate = new Date(job.installDate);
+      const installDate = parseLocalDate(job.installDate);
+      if (!installDate) return false;
       return installDate.toDateString() === today.toDateString();
     });
   }, [scheduledJobs, today]);
@@ -194,8 +204,8 @@ export default function TechDashboard() {
   };
 
   const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "";
-    const date = new Date(dateStr);
+    const date = parseLocalDate(dateStr);
+    if (!date) return "";
     return date.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
   };
 
@@ -565,7 +575,8 @@ export default function TechDashboard() {
               // Pre-calculate stop numbers for today's incomplete jobs only
               const todaysIncompleteJobs = filteredJobs.filter(job => {
                 const isComplete = isJobComplete(job);
-                const isToday = job.installDate && new Date(job.installDate).toDateString() === today.toDateString();
+                const installDate = parseLocalDate(job.installDate);
+                const isToday = installDate && installDate.toDateString() === today.toDateString();
                 return isToday && !isComplete;
               });
               const stopIndexMap = new Map<string, number>();
@@ -575,7 +586,8 @@ export default function TechDashboard() {
               
               return filteredJobs.map((job) => {
                 const isComplete = isJobComplete(job);
-                const isToday = job.installDate && new Date(job.installDate).toDateString() === today.toDateString();
+                const installDate = parseLocalDate(job.installDate);
+                const isToday = installDate && installDate.toDateString() === today.toDateString();
                 const stopIndex = stopIndexMap.get(job.id);
                 
                 return (
