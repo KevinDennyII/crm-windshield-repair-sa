@@ -45,6 +45,7 @@ export function useAuth() {
   const isAdmin = user?.role === "admin";
   const isCsr = user?.role === "csr";
   const isTechnician = user?.role === "technician";
+  const isReports = user?.role === "reports";
 
   return {
     user,
@@ -56,6 +57,7 @@ export function useAuth() {
     isAdmin,
     isCsr,
     isTechnician,
+    isReports,
     role: user?.role as UserRole | undefined,
   };
 }

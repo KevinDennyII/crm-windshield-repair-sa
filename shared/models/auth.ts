@@ -14,7 +14,7 @@ export const sessions = pgTable(
 );
 
 // User roles for the CRM system
-export const userRoles = ["admin", "csr", "technician"] as const;
+export const userRoles = ["admin", "csr", "technician", "reports"] as const;
 export type UserRole = typeof userRoles[number];
 
 // User storage table.

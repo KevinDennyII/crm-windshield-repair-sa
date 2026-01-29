@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar, MobileHeader } from "@/components/app-sidebar";
+import { ReportsSidebar, ReportsMobileHeader } from "@/components/reports-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
@@ -104,6 +105,16 @@ function TechRouter() {
   );
 }
 
+function ReportsRouter() {
+  return (
+    <Switch>
+      <Route path="/" component={Reports} />
+      <Route path="/reporting" component={Reports} />
+      <Route component={Reports} />
+    </Switch>
+  );
+}
+
 function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -116,7 +127,7 @@ function LoadingScreen() {
 }
 
 function AuthenticatedApp() {
-  const { user, isLoading, isTechnician } = useAuth();
+  const { user, isLoading, isTechnician, isReports } = useAuth();
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3.5rem",
@@ -133,6 +144,27 @@ function AuthenticatedApp() {
   // Technicians get the mobile-optimized view
   if (isTechnician) {
     return <TechRouter />;
+  }
+
+  // Reports-only users get limited interface with just Reports
+  if (isReports) {
+    return (
+      <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+        <div className="flex h-screen w-full overflow-hidden">
+          <ReportsSidebar />
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <ReportsMobileHeader />
+            <header className="hidden md:flex items-center justify-between gap-4 h-12 px-4 border-b bg-background flex-shrink-0">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <ThemeToggle />
+            </header>
+            <main className="flex-1 overflow-auto bg-background">
+              <ReportsRouter />
+            </main>
+          </div>
+        </div>
+      </SidebarProvider>
+    );
   }
 
   // Admins and CSRs get the full desktop interface

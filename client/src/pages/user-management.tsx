@@ -14,12 +14,14 @@ const roleLabels: Record<UserRole, string> = {
   admin: "Administrator",
   csr: "Customer Service",
   technician: "Technician",
+  reports: "Reports Only",
 };
 
 const roleColors: Record<UserRole, string> = {
   admin: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
   csr: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
   technician: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
+  reports: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
 };
 
 export default function UserManagement() {
@@ -150,6 +152,7 @@ export default function UserManagement() {
                         <SelectItem value="admin">Administrator</SelectItem>
                         <SelectItem value="csr">Customer Service</SelectItem>
                         <SelectItem value="technician">Technician</SelectItem>
+                        <SelectItem value="reports">Reports Only</SelectItem>
                       </SelectContent>
                     </Select>
                   )}

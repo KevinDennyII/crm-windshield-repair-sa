@@ -42,6 +42,16 @@ export async function seedSampleUsers() {
       role: "technician" as const,
       isActive: "true",
     },
+    {
+      id: "reports-001",
+      username: "reports",
+      password: "reports123",
+      email: "reports@autoglasspro.com",
+      firstName: "Reports",
+      lastName: "Viewer",
+      role: "reports" as const,
+      isActive: "true",
+    },
   ];
 
   for (const user of sampleUsers) {

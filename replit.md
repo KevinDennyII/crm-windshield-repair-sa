@@ -41,11 +41,12 @@ Key server files:
 
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC-based)
-- **User Roles**: admin, csr (customer service), technician
+- **User Roles**: admin, csr (customer service), technician, reports
 - **Role-based Access**:
   - **Admin**: Full access to all features including user management
   - **CSR**: Pipeline access, scheduling, customer communication
   - **Technician**: Mobile-optimized interface for field work only
+  - **Reports**: Read-only access to Reports page only (no pipeline/job access)
 
 Authentication files:
 - `shared/models/auth.ts` - User schema with role definitions
