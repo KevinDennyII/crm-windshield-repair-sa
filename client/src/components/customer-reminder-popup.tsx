@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Bell, Pencil, X, Loader2, Save } from "lucide-react";
+import { Bell, Pencil, X, Loader2, Save, Trash2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -60,6 +60,27 @@ export function CustomerReminderPopup({
     },
   });
 
+  const deleteReminderMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/customer-reminders/${encodeURIComponent(customerKey)}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-reminders", customerKey] });
+      toast({
+        title: "Reminder Deleted",
+        description: `Reminder for ${customerName} has been removed.`,
+      });
+      onClose();
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete reminder.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSave = () => {
     if (editedMessage.trim()) {
       updateReminderMutation.mutate(editedMessage.trim());
@@ -74,6 +95,10 @@ export function CustomerReminderPopup({
   const handleCancelEdit = () => {
     setEditedMessage(reminderMessage);
     setIsEditing(false);
+  };
+
+  const handleDelete = () => {
+    deleteReminderMutation.mutate();
   };
 
   return (
@@ -117,6 +142,20 @@ export function CustomerReminderPopup({
         <DialogFooter className="gap-2 sm:gap-0">
           {isEditing ? (
             <>
+              <Button
+                variant="outline"
+                onClick={handleDelete}
+                disabled={deleteReminderMutation.isPending}
+                className="text-destructive border-destructive mr-auto"
+                data-testid="button-delete-reminder"
+              >
+                {deleteReminderMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-2" />
+                )}
+                Delete
+              </Button>
               <Button
                 variant="outline"
                 onClick={handleCancelEdit}
