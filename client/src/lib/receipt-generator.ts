@@ -142,6 +142,61 @@ async function loadImageAsBase64(url: string): Promise<string> {
   });
 }
 
+// Process signature image: convert white strokes on dark background to black strokes on transparent background
+async function processSignatureImage(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      // Draw the original image
+      ctx.drawImage(img, 0, 0);
+      
+      // Get image data
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      
+      // Process each pixel
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        
+        // Calculate brightness (0-255)
+        const brightness = (r + g + b) / 3;
+        
+        // If pixel is light (signature stroke - white/light colored), make it black
+        // If pixel is dark (background), make it transparent
+        if (brightness > 150) {
+          // Light pixel = signature stroke -> convert to black
+          data[i] = 0;     // R
+          data[i + 1] = 0; // G
+          data[i + 2] = 0; // B
+          data[i + 3] = 255; // Full opacity
+        } else {
+          // Dark pixel = background -> make transparent
+          data[i + 3] = 0; // Fully transparent
+        }
+      }
+      
+      // Put processed image back
+      ctx.putImageData(imageData, 0, 0);
+      
+      // Return as PNG to preserve transparency
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Failed to load signature image'));
+    img.src = dataUrl;
+  });
+}
+
 async function addCompanyHeader(doc: jsPDF, yPos: number): Promise<number> {
   try {
     const logoData = await loadImageAsBase64(logoImage);
@@ -304,7 +359,7 @@ function addPaymentInfo(doc: jsPDF, job: Job, yPos: number): number {
   return yPos + splitNotice.length * 4 + 5;
 }
 
-function addSignatureLine(doc: jsPDF, yPos: number, signatureImage?: string): number {
+async function addSignatureLine(doc: jsPDF, yPos: number, signatureImage?: string): Promise<number> {
   const pageHeight = 270; // Leave 10mm bottom margin
   const margin = 20;
   
@@ -328,19 +383,25 @@ function addSignatureLine(doc: jsPDF, yPos: number, signatureImage?: string): nu
   // If we have a signature image, display it instead of the blank line
   if (signatureImage) {
     try {
-      // Add signature image with background box
-      doc.setFillColor(30, 58, 95); // Navy background matching signature canvas
-      doc.rect(20, yPos - 5, 80, 25, 'F');
-      doc.addImage(signatureImage, 'PNG', 22, yPos - 3, 76, 21);
+      // Process the signature: convert white strokes on dark background to black on transparent
+      const processedSignature = await processSignatureImage(signatureImage);
+      
+      // Draw signature line first
+      doc.setDrawColor(100);
+      doc.line(20, yPos + 15, 100, yPos + 15);
+      
+      // Add processed signature image (black strokes on transparent background)
+      doc.addImage(processedSignature, 'PNG', 20, yPos - 2, 80, 18);
+      
       doc.setFontSize(8);
       doc.setTextColor(0, 0, 0);
-      doc.text('Customer Signature', 20, yPos + 25);
+      doc.text('Customer Signature', 20, yPos + 20);
       
       // Date field next to signature
       const signedDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       doc.text(`Date: ${signedDate}`, 120, yPos + 10);
       
-      return yPos + 35;
+      return yPos + 30;
     } catch (error) {
       console.error('Failed to add signature image to PDF:', error);
       // Fall through to blank signature line
@@ -610,7 +671,7 @@ export async function generateReceiptPreview(job: Job, options?: ReceiptOptions)
       doc.addPage();
       yPos = 20;
     }
-    yPos = addSignatureLine(doc, yPos + 10, options?.signatureImage);
+    yPos = await addSignatureLine(doc, yPos + 10, options?.signatureImage);
   }
   
   const customerName = job.isBusiness && job.businessName 
@@ -700,7 +761,7 @@ export async function generateReceiptBase64(job: Job, options?: ReceiptOptions):
       doc.addPage();
       yPos = 20;
     }
-    yPos = addSignatureLine(doc, yPos + 10, options?.signatureImage);
+    yPos = await addSignatureLine(doc, yPos + 10, options?.signatureImage);
   }
   
   const customerName = job.isBusiness && job.businessName 
