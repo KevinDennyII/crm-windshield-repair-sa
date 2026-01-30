@@ -207,6 +207,7 @@ export const partSchema = z.object({
   glassPartNumber: z.string().optional(),
   isAftermarket: z.boolean().default(true),
   distributor: z.string().optional(),
+  accessories: z.string().optional(), // Description of accessories needed (moldings, clips, etc.)
   glassOrderedDate: z.string().optional(),
   glassArrivalDate: z.string().optional(),
   calibrationType: z.enum(calibrationTypes).default("none"),

@@ -356,6 +356,7 @@ function createDefaultPart(): Part {
     glassPartNumber: "",
     isAftermarket: true,
     distributor: "",
+    accessories: "",
     glassOrderedDate: "",
     glassArrivalDate: "",
     calibrationType: "none",
@@ -1844,6 +1845,24 @@ export function JobDetailModal({
                                                   data-testid={`input-part-distributor-${part.id}`}
                                                 />
                                               </div>
+                                            </div>
+                                            
+                                            {/* Accessories field */}
+                                            <div className="grid gap-2">
+                                              <Label>Accessories</Label>
+                                              <Input
+                                                value={part.accessories || ""}
+                                                onChange={(e) =>
+                                                  handlePartChange(
+                                                    vehicle.id,
+                                                    part.id,
+                                                    "accessories",
+                                                    e.target.value
+                                                  )
+                                                }
+                                                placeholder="Moldings, clips, seals, etc."
+                                                data-testid={`input-part-accessories-${part.id}`}
+                                              />
                                             </div>
 
                                             <div className="grid sm:grid-cols-4 gap-4">
