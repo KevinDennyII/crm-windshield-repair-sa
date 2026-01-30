@@ -355,9 +355,9 @@ export default function TechJobDetail() {
                     </span>
                   </div>
                   <div className="px-4 py-3 flex justify-between">
-                    <span className="text-gray-600">Moldings</span>
+                    <span className="text-gray-600">Accessories</span>
                     <span className="font-semibold text-gray-900">
-                      Not Available
+                      {part?.accessories || "None"}
                     </span>
                   </div>
                   {partIndex === vehParts.length - 1 && (
