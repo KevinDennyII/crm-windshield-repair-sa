@@ -126,6 +126,7 @@ function dbRowToJob(row: any): Job {
     calibrationDeclined: row.calibrationDeclined ?? false,
     signatureImage: row.signatureImage ?? undefined,
     receiptSentAt: row.receiptSentAt ?? undefined,
+    completionPhotos: (row.completionPhotos as Record<string, string>) ?? undefined,
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
   };
 }
@@ -178,6 +179,7 @@ function jobToDbRow(job: Partial<InsertJob> & { jobNumber?: string }): any {
   if (job.calibrationDeclined !== undefined) row.calibrationDeclined = job.calibrationDeclined;
   if (job.signatureImage !== undefined) row.signatureImage = job.signatureImage;
   if (job.receiptSentAt !== undefined) row.receiptSentAt = job.receiptSentAt;
+  if (job.completionPhotos !== undefined) row.completionPhotos = job.completionPhotos;
   
   return row;
 }

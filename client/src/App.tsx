@@ -21,6 +21,7 @@ import TechSignature from "@/pages/tech-signature";
 import UserManagement from "@/pages/user-management";
 import { PlaceholderPage } from "@/pages/placeholder-page";
 import Reports from "@/pages/reports";
+import Contacts from "@/pages/contacts";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import {
@@ -50,13 +51,7 @@ function AdminCsrRouter() {
       </Route>
       <Route path="/conversations" component={Conversations} />
       <Route path="/calendar" component={CalendarPage} />
-      <Route path="/contacts">
-        <PlaceholderPage
-          title="Contacts"
-          description="Customer and vendor directory"
-          icon={Users}
-        />
-      </Route>
+      <Route path="/contacts" component={Contacts} />
       <Route path="/marketing">
         <PlaceholderPage
           title="Marketing"
