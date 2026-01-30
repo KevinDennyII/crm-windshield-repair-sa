@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Search,
   User,
@@ -20,10 +20,7 @@ import {
   Building2,
   Plus,
   RefreshCw,
-  MessageSquare,
-  Calendar,
   FileText,
-  ChevronRight,
   Image as ImageIcon,
   Briefcase,
   Truck,
@@ -33,6 +30,9 @@ import {
   Edit,
   Trash2,
   Car,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -69,14 +69,39 @@ const categoryIcons: Record<string, typeof User> = {
   other: MoreHorizontal,
 };
 
-const categoryColors: Record<string, string> = {
-  customer: "bg-blue-500/10 text-blue-500",
-  dealer: "bg-purple-500/10 text-purple-500",
-  fleet: "bg-green-500/10 text-green-500",
-  subcontractor: "bg-orange-500/10 text-orange-500",
-  vendor: "bg-cyan-500/10 text-cyan-500",
-  other: "bg-gray-500/10 text-gray-500",
+const avatarColors: string[] = [
+  "bg-blue-500",
+  "bg-purple-500",
+  "bg-green-500",
+  "bg-orange-500",
+  "bg-pink-500",
+  "bg-cyan-500",
+  "bg-red-500",
+  "bg-yellow-500",
+  "bg-indigo-500",
+  "bg-teal-500",
+];
+
+const categoryBadgeColors: Record<string, string> = {
+  customer: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  dealer: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  fleet: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  subcontractor: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  vendor: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
+  other: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
 };
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return avatarColors[Math.abs(hash) % avatarColors.length];
+}
+
+function getInitials(firstName: string, lastName: string): string {
+  return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "?";
+}
 
 function formatPhoneNumber(phone: string): string {
   const cleaned = phone.replace(/\D/g, "");
@@ -89,6 +114,8 @@ function formatPhoneNumber(phone: string): string {
   return phone;
 }
 
+const ITEMS_PER_PAGE = 25;
+
 export default function Contacts() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
@@ -97,6 +124,7 @@ export default function Contacts() {
   const [isAddingContact, setIsAddingContact] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: contacts, isLoading: loadingContacts, refetch: refetchContacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
@@ -184,18 +212,26 @@ export default function Contacts() {
     return matchesSearch && matchesCategory;
   });
 
-  const groupedContacts = filteredContacts.reduce((acc, contact) => {
-    const firstLetter = (contact.lastName || contact.firstName || "#")[0].toUpperCase();
-    if (!acc[firstLetter]) acc[firstLetter] = [];
-    acc[firstLetter].push(contact);
-    return acc;
-  }, {} as Record<string, Contact[]>);
+  const sortedContacts = [...filteredContacts].sort((a, b) => {
+    const nameA = `${a.lastName} ${a.firstName}`.toLowerCase();
+    const nameB = `${b.lastName} ${b.firstName}`.toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
 
-  const sortedLetters = Object.keys(groupedContacts).sort();
+  const totalPages = Math.ceil(sortedContacts.length / ITEMS_PER_PAGE);
+  const paginatedContacts = sortedContacts.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-4 border-b">
+    <div className="flex flex-col h-full bg-background">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b bg-card">
         <h1 className="text-2xl font-bold" data-testid="page-title">Contacts</h1>
         <div className="flex items-center gap-2">
           <Button
@@ -229,196 +265,311 @@ export default function Contacts() {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-[350px] border-r flex flex-col bg-sidebar">
-          <div className="p-3 border-b space-y-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search contacts..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-                data-testid="input-search-contacts"
-              />
-            </div>
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger data-testid="select-filter-category">
-                <SelectValue placeholder="Filter by category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {contactCategories.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 p-3 border-b bg-muted/30">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search contacts..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="pl-9 bg-background"
+            data-testid="input-search-contacts"
+          />
+        </div>
+        <Select value={filterCategory} onValueChange={(val) => {
+          setFilterCategory(val);
+          setCurrentPage(1);
+        }}>
+          <SelectTrigger className="w-[180px] bg-background" data-testid="select-filter-category">
+            <SelectValue placeholder="All Categories" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {contactCategories.map((cat) => (
+              <SelectItem key={cat} value={cat}>
+                {cat.charAt(0).toUpperCase() + cat.slice(1)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="ml-auto text-sm text-muted-foreground">
+          {filteredContacts.length} contact{filteredContacts.length !== 1 ? "s" : ""}
+        </div>
+      </div>
 
-          <ScrollArea className="flex-1">
+      {/* Main Content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Table */}
+        <div className={cn(
+          "flex-1 flex flex-col overflow-hidden transition-all",
+          selectedContact && "lg:flex-[2]"
+        )}>
+          <div className="flex-1 overflow-auto">
             {loadingContacts ? (
-              <div className="p-4 text-center text-muted-foreground">Loading contacts...</div>
+              <div className="p-8 text-center text-muted-foreground">Loading contacts...</div>
             ) : filteredContacts.length === 0 ? (
-              <div className="p-4 text-center text-muted-foreground">
-                {searchQuery || filterCategory !== "all" 
-                  ? "No contacts match your filters" 
-                  : "No contacts yet. Sync from jobs or add manually."}
+              <div className="p-8 text-center text-muted-foreground">
+                <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="font-medium">No contacts found</p>
+                <p className="text-sm mt-1">
+                  {searchQuery || filterCategory !== "all" 
+                    ? "Try adjusting your search or filters" 
+                    : "Sync from jobs or add a new contact"}
+                </p>
               </div>
             ) : (
-              <div className="p-2">
-                {sortedLetters.map((letter) => (
-                  <div key={letter}>
-                    <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 sticky top-0">
-                      {letter}
-                    </div>
-                    {groupedContacts[letter].map((contact) => {
-                      const CategoryIcon = categoryIcons[contact.category || "customer"];
-                      return (
-                        <button
-                          key={contact.id}
-                          onClick={() => {
-                            setSelectedContact(contact);
-                            setActiveTab("details");
-                          }}
-                          className={cn(
-                            "w-full flex items-center gap-3 p-3 rounded-md text-left hover-elevate",
-                            selectedContact?.id === contact.id && "bg-accent"
-                          )}
-                          data-testid={`contact-item-${contact.id}`}
-                        >
-                          <div className={cn("w-10 h-10 rounded-full flex items-center justify-center", categoryColors[contact.category || "customer"])}>
-                            <CategoryIcon className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">
-                              {contact.businessName || `${contact.firstName} ${contact.lastName}`}
+              <table className="w-full">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr className="text-left text-sm">
+                    <th className="px-4 py-3 font-medium text-muted-foreground w-[280px]">Name</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Phone</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Email</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Category</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">City</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {paginatedContacts.map((contact) => {
+                    const fullName = `${contact.firstName} ${contact.lastName}`;
+                    const displayName = contact.businessName || fullName;
+                    const avatarColor = getAvatarColor(displayName);
+                    const initials = getInitials(contact.firstName, contact.lastName);
+                    
+                    return (
+                      <tr
+                        key={contact.id}
+                        onClick={() => {
+                          setSelectedContact(contact);
+                          setActiveTab("details");
+                        }}
+                        className={cn(
+                          "cursor-pointer hover:bg-muted/50 transition-colors",
+                          selectedContact?.id === contact.id && "bg-accent"
+                        )}
+                        data-testid={`contact-item-${contact.id}`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-sm shrink-0",
+                              avatarColor
+                            )}>
+                              {initials}
                             </div>
-                            <div className="text-sm text-muted-foreground truncate">
-                              {formatPhoneNumber(contact.phone)}
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{displayName}</div>
+                              {contact.businessName && (
+                                <div className="text-sm text-muted-foreground truncate">{fullName}</div>
+                              )}
                             </div>
                           </div>
-                          {contact.autoSynced && (
-                            <Badge variant="outline" className="text-xs shrink-0">Synced</Badge>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
+                        </td>
+                        <td className="px-4 py-3 hidden md:table-cell">
+                          <span className="text-sm text-blue-600 dark:text-blue-400">
+                            {formatPhoneNumber(contact.phone)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 hidden lg:table-cell">
+                          <span className="text-sm text-muted-foreground truncate block max-w-[200px]">
+                            {contact.email || "-"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge 
+                            variant="secondary" 
+                            className={cn("capitalize text-xs", categoryBadgeColors[contact.category || "customer"])}
+                          >
+                            {contact.category || "customer"}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 hidden xl:table-cell">
+                          <span className="text-sm text-muted-foreground">
+                            {contact.city || "-"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
-          </ScrollArea>
-          
-          <div className="p-3 border-t text-sm text-muted-foreground">
-            {filteredContacts.length} contact{filteredContacts.length !== 1 ? "s" : ""}
           </div>
-        </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {selectedContact ? (
-            <>
-              <div className="p-4 border-b flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className={cn("w-14 h-14 rounded-full flex items-center justify-center", categoryColors[selectedContact.category || "customer"])}>
-                    {(() => {
-                      const Icon = categoryIcons[selectedContact.category || "customer"];
-                      return <Icon className="h-7 w-7" />;
-                    })()}
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-semibold" data-testid="contact-name">
-                      {selectedContact.businessName || `${selectedContact.firstName} ${selectedContact.lastName}`}
-                    </h2>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Badge variant="outline" className="capitalize">{selectedContact.category}</Badge>
-                      {selectedContact.autoSynced && <Badge variant="secondary">Auto-Synced</Badge>}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    size="icon" 
-                    variant="ghost" 
-                    onClick={() => window.open(`tel:${selectedContact.phone}`, "_blank")}
-                    data-testid="button-call-contact"
-                  >
-                    <Phone className="h-4 w-4" />
-                  </Button>
-                  {selectedContact.email && (
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      onClick={() => window.open(`mailto:${selectedContact.email}`, "_blank")}
-                      data-testid="button-email-contact"
-                    >
-                      <Mail className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <Button 
-                    size="icon" 
-                    variant="ghost"
-                    onClick={() => setIsEditing(true)}
-                    data-testid="button-edit-contact"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    size="icon" 
-                    variant="ghost"
-                    onClick={() => {
-                      if (confirm("Are you sure you want to delete this contact?")) {
-                        deleteMutation.mutate(selectedContact.id);
-                      }
-                    }}
-                    data-testid="button-delete-contact"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t bg-card">
+              <div className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, sortedContacts.length)} of {sortedContacts.length}
               </div>
-
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-                <TabsList className="mx-4 mt-2 w-fit">
-                  <TabsTrigger value="details" data-testid="tab-details">
-                    <User className="h-4 w-4 mr-2" />
-                    Details
-                  </TabsTrigger>
-                  <TabsTrigger value="jobs" data-testid="tab-jobs">
-                    <Briefcase className="h-4 w-4 mr-2" />
-                    Jobs
-                  </TabsTrigger>
-                  <TabsTrigger value="documents" data-testid="tab-documents">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Documents
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="details" className="flex-1 overflow-auto p-4 mt-0">
-                  <ContactDetails contact={selectedContact} />
-                </TabsContent>
-
-                <TabsContent value="jobs" className="flex-1 overflow-auto p-4 mt-0">
-                  <ContactJobs jobs={contactJobs} isLoading={loadingJobs} />
-                </TabsContent>
-
-                <TabsContent value="documents" className="flex-1 overflow-auto p-4 mt-0">
-                  <ContactDocuments jobs={contactJobs} isLoading={loadingJobs} />
-                </TabsContent>
-              </Tabs>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>Select a contact to view details</p>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  data-testid="button-prev-page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className="w-8 h-8"
+                      data-testid={`button-page-${pageNum}`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  data-testid="button-next-page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           )}
         </div>
+
+        {/* Detail Panel */}
+        {selectedContact && (
+          <div className="hidden lg:flex w-[400px] border-l flex-col bg-card overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold">Contact Details</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedContact(null)}
+                data-testid="button-close-details"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <div className="p-4 border-b">
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "w-16 h-16 rounded-full flex items-center justify-center text-white font-semibold text-xl",
+                  getAvatarColor(`${selectedContact.firstName} ${selectedContact.lastName}`)
+                )}>
+                  {getInitials(selectedContact.firstName, selectedContact.lastName)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg font-semibold truncate" data-testid="contact-name">
+                    {selectedContact.businessName || `${selectedContact.firstName} ${selectedContact.lastName}`}
+                  </h2>
+                  {selectedContact.businessName && (
+                    <p className="text-sm text-muted-foreground truncate">
+                      {selectedContact.firstName} {selectedContact.lastName}
+                    </p>
+                  )}
+                  <Badge 
+                    variant="secondary" 
+                    className={cn("capitalize text-xs mt-1", categoryBadgeColors[selectedContact.category || "customer"])}
+                  >
+                    {selectedContact.category || "customer"}
+                  </Badge>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 mt-4">
+                <Button 
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => window.open(`tel:${selectedContact.phone}`, "_blank")}
+                  data-testid="button-call-contact"
+                >
+                  <Phone className="h-4 w-4 mr-2" />
+                  Call
+                </Button>
+                {selectedContact.email && (
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => window.open(`mailto:${selectedContact.email}`, "_blank")}
+                    data-testid="button-email-contact"
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Email
+                  </Button>
+                )}
+                <Button 
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setIsEditing(true)}
+                  data-testid="button-edit-contact"
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button 
+                  size="icon"
+                  variant="outline"
+                  onClick={() => {
+                    if (confirm("Are you sure you want to delete this contact?")) {
+                      deleteMutation.mutate(selectedContact.id);
+                    }
+                  }}
+                  data-testid="button-delete-contact"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+              <TabsList className="mx-4 mt-3 w-fit">
+                <TabsTrigger value="details" data-testid="tab-details" className="text-xs">
+                  Details
+                </TabsTrigger>
+                <TabsTrigger value="jobs" data-testid="tab-jobs" className="text-xs">
+                  Jobs
+                </TabsTrigger>
+                <TabsTrigger value="documents" data-testid="tab-documents" className="text-xs">
+                  Documents
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="details" className="flex-1 overflow-auto p-4 mt-0">
+                <ContactDetails contact={selectedContact} />
+              </TabsContent>
+
+              <TabsContent value="jobs" className="flex-1 overflow-auto p-4 mt-0">
+                <ContactJobs jobs={contactJobs} isLoading={loadingJobs} />
+              </TabsContent>
+
+              <TabsContent value="documents" className="flex-1 overflow-auto p-4 mt-0">
+                <ContactDocuments jobs={contactJobs} isLoading={loadingJobs} />
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
       </div>
 
+      {/* Edit Dialog */}
       <Dialog open={isEditing} onOpenChange={setIsEditing}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -499,15 +650,15 @@ function ContactForm({
           control={form.control}
           name="isBusiness"
           render={({ field }) => (
-            <FormItem className="flex flex-row items-center gap-2">
+            <FormItem className="flex items-center gap-2 space-y-0">
               <FormControl>
-                <Checkbox 
-                  checked={field.value} 
+                <Checkbox
+                  checked={field.value}
                   onCheckedChange={field.onChange}
                   data-testid="checkbox-is-business"
                 />
               </FormControl>
-              <FormLabel className="!mt-0">This is a business</FormLabel>
+              <FormLabel className="font-normal">This is a business</FormLabel>
             </FormItem>
           )}
         />
@@ -520,7 +671,7 @@ function ContactForm({
               <FormItem>
                 <FormLabel>Business Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Company name" {...field} data-testid="input-business-name" />
+                  <Input {...field} data-testid="input-business-name" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -528,7 +679,7 @@ function ContactForm({
           />
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <FormField
             control={form.control}
             name="firstName"
@@ -536,7 +687,7 @@ function ContactForm({
               <FormItem>
                 <FormLabel>First Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="First name" {...field} data-testid="input-first-name" />
+                  <Input {...field} data-testid="input-first-name" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -549,7 +700,7 @@ function ContactForm({
               <FormItem>
                 <FormLabel>Last Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Last name" {...field} data-testid="input-last-name" />
+                  <Input {...field} data-testid="input-last-name" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -557,7 +708,7 @@ function ContactForm({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <FormField
             control={form.control}
             name="phone"
@@ -565,7 +716,7 @@ function ContactForm({
               <FormItem>
                 <FormLabel>Phone</FormLabel>
                 <FormControl>
-                  <Input placeholder="(555) 555-5555" {...field} data-testid="input-phone" />
+                  <Input {...field} data-testid="input-phone" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -578,7 +729,7 @@ function ContactForm({
               <FormItem>
                 <FormLabel>Email</FormLabel>
                 <FormControl>
-                  <Input placeholder="email@example.com" {...field} data-testid="input-email" />
+                  <Input type="email" {...field} data-testid="input-email" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -593,14 +744,14 @@ function ContactForm({
             <FormItem>
               <FormLabel>Street Address</FormLabel>
               <FormControl>
-                <Input placeholder="123 Main St" {...field} data-testid="input-street-address" />
+                <Input {...field} data-testid="input-street-address" />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-3">
           <FormField
             control={form.control}
             name="city"
@@ -608,7 +759,7 @@ function ContactForm({
               <FormItem>
                 <FormLabel>City</FormLabel>
                 <FormControl>
-                  <Input placeholder="City" {...field} data-testid="input-city" />
+                  <Input {...field} data-testid="input-city" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -621,7 +772,7 @@ function ContactForm({
               <FormItem>
                 <FormLabel>State</FormLabel>
                 <FormControl>
-                  <Input placeholder="TX" {...field} data-testid="input-state" />
+                  <Input {...field} data-testid="input-state" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -634,7 +785,7 @@ function ContactForm({
               <FormItem>
                 <FormLabel>ZIP</FormLabel>
                 <FormControl>
-                  <Input placeholder="78201" {...field} data-testid="input-zip" />
+                  <Input {...field} data-testid="input-zip" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -649,22 +800,18 @@ function ContactForm({
             <FormItem>
               <FormLabel>Notes</FormLabel>
               <FormControl>
-                <Textarea 
-                  placeholder="Additional notes about this contact..." 
-                  {...field} 
-                  data-testid="textarea-notes"
-                />
+                <Textarea {...field} rows={3} data-testid="textarea-notes" />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <DialogFooter>
+        <div className="flex justify-end gap-2 pt-2">
           <Button type="submit" disabled={isPending} data-testid="button-save-contact">
-            {isPending ? "Saving..." : contact ? "Update Contact" : "Create Contact"}
+            {isPending ? "Saving..." : contact ? "Update Contact" : "Add Contact"}
           </Button>
-        </DialogFooter>
+        </div>
       </form>
     </Form>
   );
@@ -672,78 +819,45 @@ function ContactForm({
 
 function ContactDetails({ contact }: { contact: Contact }) {
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Contact Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+    <div className="space-y-4">
+      <div className="space-y-3">
+        <div className="flex items-start gap-3">
+          <Phone className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+          <div>
+            <p className="text-sm text-muted-foreground">Phone</p>
+            <p className="font-medium">{formatPhoneNumber(contact.phone)}</p>
+          </div>
+        </div>
+        
+        {contact.email && (
+          <div className="flex items-start gap-3">
+            <Mail className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
             <div>
-              <Label className="text-muted-foreground text-xs">First Name</Label>
-              <div className="font-medium">{contact.firstName}</div>
-            </div>
-            <div>
-              <Label className="text-muted-foreground text-xs">Last Name</Label>
-              <div className="font-medium">{contact.lastName}</div>
+              <p className="text-sm text-muted-foreground">Email</p>
+              <p className="font-medium break-all">{contact.email}</p>
             </div>
           </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <Label className="text-muted-foreground text-xs">Phone</Label>
-                <div className="font-medium">{formatPhoneNumber(contact.phone)}</div>
-              </div>
+        )}
+        
+        {(contact.streetAddress || contact.city) && (
+          <div className="flex items-start gap-3">
+            <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-sm text-muted-foreground">Address</p>
+              <p className="font-medium">
+                {contact.streetAddress && <span>{contact.streetAddress}<br /></span>}
+                {contact.city && `${contact.city}, `}{contact.state} {contact.zipCode}
+              </p>
             </div>
-            {contact.email && (
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <Label className="text-muted-foreground text-xs">Email</Label>
-                  <div className="font-medium">{contact.email}</div>
-                </div>
-              </div>
-            )}
           </div>
-
-          {(contact.streetAddress || contact.city) && (
-            <div className="flex items-start gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-              <div>
-                <Label className="text-muted-foreground text-xs">Address</Label>
-                <div className="font-medium">
-                  {contact.streetAddress && <div>{contact.streetAddress}</div>}
-                  {(contact.city || contact.state || contact.zipCode) && (
-                    <div>{[contact.city, contact.state, contact.zipCode].filter(Boolean).join(", ")}</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {contact.isBusiness && contact.businessName && (
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <Label className="text-muted-foreground text-xs">Business Name</Label>
-                <div className="font-medium">{contact.businessName}</div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
+        )}
+      </div>
+      
       {contact.notes && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm whitespace-pre-wrap">{contact.notes}</p>
-          </CardContent>
-        </Card>
+        <div className="pt-3 border-t">
+          <p className="text-sm text-muted-foreground mb-1">Notes</p>
+          <p className="text-sm whitespace-pre-wrap">{contact.notes}</p>
+        </div>
       )}
     </div>
   );
@@ -751,152 +865,105 @@ function ContactDetails({ contact }: { contact: Contact }) {
 
 function ContactJobs({ jobs, isLoading }: { jobs?: Job[]; isLoading: boolean }) {
   if (isLoading) {
-    return <div className="text-center text-muted-foreground py-8">Loading jobs...</div>;
+    return <div className="text-center text-muted-foreground py-4">Loading jobs...</div>;
   }
-
+  
   if (!jobs || jobs.length === 0) {
     return (
-      <div className="text-center text-muted-foreground py-8">
-        <Briefcase className="h-10 w-10 mx-auto mb-2 opacity-50" />
-        <p>No jobs found for this contact</p>
+      <div className="text-center text-muted-foreground py-4">
+        <Briefcase className="h-8 w-8 mx-auto mb-2 opacity-50" />
+        <p className="text-sm">No jobs found for this contact</p>
       </div>
     );
   }
-
-  const stageColors: Record<string, string> = {
-    quote: "bg-yellow-500/10 text-yellow-600",
-    scheduled: "bg-blue-500/10 text-blue-600",
-    paid_completed: "bg-green-500/10 text-green-600",
-    lost_opportunity: "bg-red-500/10 text-red-600",
-  };
-
+  
   return (
-    <div className="space-y-3">
-      {jobs.map((job) => (
-        <Card key={job.id} className="hover-elevate cursor-pointer" data-testid={`job-card-${job.id}`}>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">{job.jobNumber}</div>
-                <div className="text-sm text-muted-foreground">
-                  {job.vehicles && (job.vehicles as any[]).length > 0 && (
-                    <span>{(job.vehicles as any[])[0].vehicleYear} {(job.vehicles as any[])[0].vehicleMake} {(job.vehicles as any[])[0].vehicleModel}</span>
+    <div className="space-y-2">
+      {jobs.map((job) => {
+        const vehicle = job.vehicles?.[0];
+        return (
+          <Card key={job.id} className="hover-elevate cursor-pointer">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">#{job.jobNumber}</p>
+                  {vehicle && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {vehicle.vehicleYear} {vehicle.vehicleMake} {vehicle.vehicleModel}
+                    </p>
                   )}
                 </div>
+                <div className="text-right shrink-0">
+                  <Badge variant="outline" className="text-xs capitalize">
+                    {job.pipelineStage?.replace(/_/g, " ")}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground mt-1">${job.totalDue}</p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge className={stageColors[job.pipelineStage || "quote"]} variant="secondary">
-                  {(job.pipelineStage || "quote").replace("_", " ")}
-                </Badge>
-                <span className="font-medium">${(job as any).totalAmount?.toFixed(2) || "0.00"}</span>
-              </div>
-            </div>
-            {job.installDate && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
-                <Calendar className="h-3 w-3" />
-                {new Date(job.installDate).toLocaleDateString()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
 
 function ContactDocuments({ jobs, isLoading }: { jobs?: Job[]; isLoading: boolean }) {
   if (isLoading) {
-    return <div className="text-center text-muted-foreground py-8">Loading documents...</div>;
+    return <div className="text-center text-muted-foreground py-4">Loading documents...</div>;
   }
-
-  const documents: { type: string; label: string; url: string; jobNumber: string; date: string }[] = [];
-
-  if (jobs) {
-    for (const job of jobs) {
-      if (job.signatureImage) {
-        documents.push({
-          type: "signature",
-          label: `Signature - ${job.jobNumber}`,
-          url: job.signatureImage,
-          jobNumber: job.jobNumber,
-          date: job.createdAt || "",
-        });
-      }
-
-      const photos = job.completionPhotos as Record<string, string> | undefined;
-      if (photos) {
-        if (photos.preInspection) {
+  
+  const documents: { jobNumber: string; type: string; url: string }[] = [];
+  
+  jobs?.forEach((job) => {
+    if (job.completionPhotos) {
+      const photos = job.completionPhotos as Record<string, string>;
+      Object.entries(photos).forEach(([key, url]) => {
+        if (url) {
           documents.push({
-            type: "photo",
-            label: `Pre-Inspection - ${job.jobNumber}`,
-            url: photos.preInspection,
             jobNumber: job.jobNumber,
-            date: job.createdAt || "",
+            type: key.replace(/([A-Z])/g, " $1").trim(),
+            url,
           });
         }
-        if (photos.vin) {
-          documents.push({
-            type: "photo",
-            label: `VIN Photo - ${job.jobNumber}`,
-            url: photos.vin,
-            jobNumber: job.jobNumber,
-            date: job.createdAt || "",
-          });
-        }
-        if (photos.partInstalled) {
-          documents.push({
-            type: "photo",
-            label: `Part Installed - ${job.jobNumber}`,
-            url: photos.partInstalled,
-            jobNumber: job.jobNumber,
-            date: job.createdAt || "",
-          });
-        }
-        if (photos.after) {
-          documents.push({
-            type: "photo",
-            label: `After Photo - ${job.jobNumber}`,
-            url: photos.after,
-            jobNumber: job.jobNumber,
-            date: job.createdAt || "",
-          });
-        }
-      }
+      });
     }
-  }
-
+    if (job.signatureImage) {
+      documents.push({
+        jobNumber: job.jobNumber,
+        type: "Signature",
+        url: job.signatureImage,
+      });
+    }
+  });
+  
   if (documents.length === 0) {
     return (
-      <div className="text-center text-muted-foreground py-8">
-        <FileText className="h-10 w-10 mx-auto mb-2 opacity-50" />
-        <p>No documents found for this contact</p>
+      <div className="text-center text-muted-foreground py-4">
+        <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+        <p className="text-sm">No documents found</p>
       </div>
     );
   }
-
+  
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-      {documents.map((doc, index) => (
-        <Card key={index} className="hover-elevate cursor-pointer overflow-hidden" data-testid={`document-${index}`}>
-          <div className="aspect-video bg-muted relative">
-            <img 
-              src={doc.url} 
-              alt={doc.label} 
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute top-2 right-2">
-              <Badge variant="secondary" className="text-xs">
-                {doc.type === "signature" ? "Signature" : "Photo"}
-              </Badge>
-            </div>
+    <div className="grid grid-cols-2 gap-2">
+      {documents.map((doc, idx) => (
+        <div
+          key={idx}
+          className="relative aspect-square rounded-md overflow-hidden border bg-muted cursor-pointer hover:opacity-80"
+          onClick={() => window.open(doc.url, "_blank")}
+        >
+          <img
+            src={doc.url}
+            alt={doc.type}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1.5">
+            <p className="truncate">#{doc.jobNumber}</p>
+            <p className="truncate text-white/80 capitalize">{doc.type}</p>
           </div>
-          <CardContent className="p-3">
-            <div className="text-sm font-medium truncate">{doc.label}</div>
-            <div className="text-xs text-muted-foreground">
-              {doc.date ? new Date(doc.date).toLocaleDateString() : ""}
-            </div>
-          </CardContent>
-        </Card>
+        </div>
       ))}
     </div>
   );
