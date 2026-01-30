@@ -33,7 +33,11 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  Download,
+  Receipt,
 } from "lucide-react";
+import { generateReceiptPreview, determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -909,35 +913,14 @@ function ContactJobs({ jobs, isLoading }: { jobs?: Job[]; isLoading: boolean }) 
 }
 
 function ContactDocuments({ jobs, isLoading }: { jobs?: Job[]; isLoading: boolean }) {
+  const { toast } = useToast();
+  const [generatingReceipt, setGeneratingReceipt] = useState<string | null>(null);
+  
   if (isLoading) {
     return <div className="text-center text-muted-foreground py-4">Loading documents...</div>;
   }
   
-  const documents: { jobNumber: string; type: string; url: string }[] = [];
-  
-  jobs?.forEach((job) => {
-    if (job.completionPhotos) {
-      const photos = job.completionPhotos as Record<string, string>;
-      Object.entries(photos).forEach(([key, url]) => {
-        if (url) {
-          documents.push({
-            jobNumber: job.jobNumber,
-            type: key.replace(/([A-Z])/g, " $1").trim(),
-            url,
-          });
-        }
-      });
-    }
-    if (job.signatureImage) {
-      documents.push({
-        jobNumber: job.jobNumber,
-        type: "Signature",
-        url: job.signatureImage,
-      });
-    }
-  });
-  
-  if (documents.length === 0) {
+  if (!jobs || jobs.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-4">
         <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -946,25 +929,122 @@ function ContactDocuments({ jobs, isLoading }: { jobs?: Job[]; isLoading: boolea
     );
   }
   
+  const handleViewReceipt = async (job: Job) => {
+    setGeneratingReceipt(job.id);
+    try {
+      const { blobUrl } = await generateReceiptPreview(job, {
+        signatureImage: job.signatureImage,
+      });
+      window.open(blobUrl, "_blank");
+    } catch (error) {
+      console.error("Failed to generate receipt:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate receipt",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingReceipt(null);
+    }
+  };
+  
+  // Collect photos for the gallery section
+  const photos: { jobNumber: string; type: string; url: string }[] = [];
+  jobs.forEach((job) => {
+    if (job.completionPhotos) {
+      const completionPhotos = job.completionPhotos as Record<string, string>;
+      Object.entries(completionPhotos).forEach(([key, url]) => {
+        if (url) {
+          photos.push({
+            jobNumber: job.jobNumber,
+            type: key.replace(/([A-Z])/g, " $1").trim(),
+            url,
+          });
+        }
+      });
+    }
+  });
+  
   return (
-    <div className="grid grid-cols-2 gap-2">
-      {documents.map((doc, idx) => (
-        <div
-          key={idx}
-          className="relative aspect-square rounded-md overflow-hidden border bg-muted cursor-pointer hover:opacity-80"
-          onClick={() => window.open(doc.url, "_blank")}
-        >
-          <img
-            src={doc.url}
-            alt={doc.type}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1.5">
-            <p className="truncate">#{doc.jobNumber}</p>
-            <p className="truncate text-white/80 capitalize">{doc.type}</p>
+    <div className="space-y-4">
+      {/* Receipt Documents */}
+      <div>
+        <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Receipts</h4>
+        <div className="space-y-2">
+          {jobs.map((job) => {
+            const vehicle = job.vehicles?.[0];
+            const receiptType = determineReceiptType(job);
+            const hasSignature = !!job.signatureImage;
+            
+            return (
+              <Card key={job.id} className="overflow-hidden">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                      <Receipt className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">Job #{job.jobNumber}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {getReceiptTypeLabel(receiptType)}
+                        {vehicle && ` - ${vehicle.vehicleYear} ${vehicle.vehicleMake}`}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {hasSignature && (
+                          <Badge variant="secondary" className="text-xs">Signed</Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">${job.totalDue}</span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleViewReceipt(job)}
+                      disabled={generatingReceipt === job.id}
+                      data-testid={`button-view-receipt-${job.id}`}
+                    >
+                      {generatingReceipt === job.id ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* Photos Gallery */}
+      {photos.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Photos</h4>
+          <div className="grid grid-cols-2 gap-2">
+            {photos.map((photo, idx) => (
+              <div
+                key={idx}
+                className="relative aspect-square rounded-md overflow-hidden border bg-muted cursor-pointer hover:opacity-80"
+                onClick={() => window.open(photo.url, "_blank")}
+              >
+                <img
+                  src={photo.url}
+                  alt={photo.type}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1.5">
+                  <p className="truncate">#{photo.jobNumber}</p>
+                  <p className="truncate text-white/80 capitalize">{photo.type}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }
