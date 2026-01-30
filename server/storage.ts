@@ -1,4 +1,4 @@
-import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, jobs, users, customerReminders } from "@shared/schema";
+import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, jobs, users, customerReminders, contacts } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, desc, sql, max } from "drizzle-orm";
@@ -21,6 +21,15 @@ export interface IStorage {
   getCustomerReminder(customerKey: string): Promise<CustomerReminder | undefined>;
   upsertCustomerReminder(reminder: InsertCustomerReminder): Promise<CustomerReminder>;
   deleteCustomerReminder(customerKey: string): Promise<boolean>;
+  
+  // Contacts
+  getAllContacts(): Promise<Contact[]>;
+  getContact(id: string): Promise<Contact | undefined>;
+  getContactByPhone(phone: string): Promise<Contact | undefined>;
+  createContact(contact: InsertContact): Promise<Contact>;
+  updateContact(id: string, contact: Partial<InsertContact>): Promise<Contact | undefined>;
+  deleteContact(id: string): Promise<boolean>;
+  syncContactFromJob(job: Job): Promise<Contact>;
 }
 
 function createDefaultPart(overrides: Partial<Part> = {}): Part {
@@ -312,6 +321,150 @@ export class DatabaseStorage implements IStorage {
     const normalizedKey = customerKey.toLowerCase().trim();
     await db.delete(customerReminders).where(eq(customerReminders.customerKey, normalizedKey));
     return true;
+  }
+
+  // Contact methods
+  async getAllContacts(): Promise<Contact[]> {
+    const rows = await db.select().from(contacts).orderBy(desc(contacts.createdAt));
+    return rows.map(row => ({
+      id: row.id,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      phone: row.phone,
+      email: row.email ?? undefined,
+      streetAddress: row.streetAddress ?? undefined,
+      city: row.city ?? undefined,
+      state: row.state ?? undefined,
+      zipCode: row.zipCode ?? undefined,
+      category: (row.category as Contact["category"]) ?? "customer",
+      isBusiness: row.isBusiness ?? false,
+      businessName: row.businessName ?? undefined,
+      notes: row.notes ?? undefined,
+      autoSynced: row.autoSynced ?? false,
+      createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+      updatedAt: row.updatedAt?.toISOString() ?? new Date().toISOString(),
+    }));
+  }
+
+  async getContact(id: string): Promise<Contact | undefined> {
+    const rows = await db.select().from(contacts).where(eq(contacts.id, id));
+    if (rows.length === 0) return undefined;
+    const row = rows[0];
+    return {
+      id: row.id,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      phone: row.phone,
+      email: row.email ?? undefined,
+      streetAddress: row.streetAddress ?? undefined,
+      city: row.city ?? undefined,
+      state: row.state ?? undefined,
+      zipCode: row.zipCode ?? undefined,
+      category: (row.category as Contact["category"]) ?? "customer",
+      isBusiness: row.isBusiness ?? false,
+      businessName: row.businessName ?? undefined,
+      notes: row.notes ?? undefined,
+      autoSynced: row.autoSynced ?? false,
+      createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+      updatedAt: row.updatedAt?.toISOString() ?? new Date().toISOString(),
+    };
+  }
+
+  async getContactByPhone(phone: string): Promise<Contact | undefined> {
+    const cleanPhone = phone.replace(/\D/g, "");
+    const allContacts = await this.getAllContacts();
+    return allContacts.find(c => c.phone.replace(/\D/g, "") === cleanPhone);
+  }
+
+  async createContact(contact: InsertContact): Promise<Contact> {
+    const id = randomUUID();
+    await db.insert(contacts).values({
+      id,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      phone: contact.phone,
+      email: contact.email || null,
+      streetAddress: contact.streetAddress || null,
+      city: contact.city || null,
+      state: contact.state || null,
+      zipCode: contact.zipCode || null,
+      category: contact.category || "customer",
+      isBusiness: contact.isBusiness || false,
+      businessName: contact.businessName || null,
+      notes: contact.notes || null,
+      autoSynced: contact.autoSynced || false,
+    });
+    return (await this.getContact(id))!;
+  }
+
+  async updateContact(id: string, contact: Partial<InsertContact>): Promise<Contact | undefined> {
+    const existing = await this.getContact(id);
+    if (!existing) return undefined;
+    
+    const updateData: any = { updatedAt: new Date() };
+    if (contact.firstName !== undefined) updateData.firstName = contact.firstName;
+    if (contact.lastName !== undefined) updateData.lastName = contact.lastName;
+    if (contact.phone !== undefined) updateData.phone = contact.phone;
+    if (contact.email !== undefined) updateData.email = contact.email || null;
+    if (contact.streetAddress !== undefined) updateData.streetAddress = contact.streetAddress || null;
+    if (contact.city !== undefined) updateData.city = contact.city || null;
+    if (contact.state !== undefined) updateData.state = contact.state || null;
+    if (contact.zipCode !== undefined) updateData.zipCode = contact.zipCode || null;
+    if (contact.category !== undefined) updateData.category = contact.category;
+    if (contact.isBusiness !== undefined) updateData.isBusiness = contact.isBusiness;
+    if (contact.businessName !== undefined) updateData.businessName = contact.businessName || null;
+    if (contact.notes !== undefined) updateData.notes = contact.notes || null;
+    if (contact.autoSynced !== undefined) updateData.autoSynced = contact.autoSynced;
+    
+    await db.update(contacts).set(updateData).where(eq(contacts.id, id));
+    return this.getContact(id);
+  }
+
+  async deleteContact(id: string): Promise<boolean> {
+    await db.delete(contacts).where(eq(contacts.id, id));
+    return true;
+  }
+
+  async syncContactFromJob(job: Job): Promise<Contact> {
+    const existingContact = await this.getContactByPhone(job.phone);
+    
+    const categoryMap: Record<string, Contact["category"]> = {
+      retail: "customer",
+      dealer: "dealer",
+      fleet: "fleet",
+      subcontractor: "subcontractor",
+    };
+    
+    if (existingContact) {
+      return (await this.updateContact(existingContact.id, {
+        firstName: job.firstName,
+        lastName: job.lastName,
+        email: job.email,
+        streetAddress: job.streetAddress,
+        city: job.city,
+        state: job.state,
+        zipCode: job.zipCode,
+        category: categoryMap[job.customerType] || "customer",
+        isBusiness: job.isBusiness,
+        businessName: job.businessName,
+        autoSynced: true,
+      }))!;
+    }
+    
+    return this.createContact({
+      firstName: job.firstName,
+      lastName: job.lastName,
+      phone: job.phone,
+      email: job.email,
+      streetAddress: job.streetAddress,
+      city: job.city,
+      state: job.state,
+      zipCode: job.zipCode,
+      category: categoryMap[job.customerType] || "customer",
+      isBusiness: job.isBusiness,
+      businessName: job.businessName,
+      autoSynced: true,
+    });
   }
 }
 

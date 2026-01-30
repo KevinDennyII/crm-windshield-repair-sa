@@ -326,3 +326,50 @@ export const insertJobSchema = jobSchema.omit({ id: true, jobNumber: true, creat
 
 export type Job = z.infer<typeof jobSchema>;
 export type InsertJob = z.infer<typeof insertJobSchema>;
+
+// Contacts table for manual and auto-synced contacts
+export const contacts = pgTable("contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  firstName: varchar("first_name").notNull(),
+  lastName: varchar("last_name").notNull(),
+  phone: varchar("phone").notNull(),
+  email: varchar("email"),
+  streetAddress: varchar("street_address"),
+  city: varchar("city"),
+  state: varchar("state"),
+  zipCode: varchar("zip_code"),
+  category: varchar("category").default("customer"), // customer, dealer, fleet, subcontractor, vendor, other
+  isBusiness: boolean("is_business").default(false),
+  businessName: varchar("business_name"),
+  notes: text("notes"),
+  autoSynced: boolean("auto_synced").default(false), // true if created from job
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const contactCategories = ["customer", "dealer", "fleet", "subcontractor", "vendor", "other"] as const;
+export type ContactCategory = typeof contactCategories[number];
+
+export const contactSchema = z.object({
+  id: z.string(),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  phone: z.string().min(1, "Phone is required"),
+  email: z.string().email("Valid email required").optional().or(z.literal("")),
+  streetAddress: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
+  category: z.enum(contactCategories).default("customer"),
+  isBusiness: z.boolean().default(false),
+  businessName: z.string().optional(),
+  notes: z.string().optional(),
+  autoSynced: z.boolean().default(false),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export const insertContactSchema = contactSchema.omit({ id: true, createdAt: true, updatedAt: true });
+
+export type Contact = z.infer<typeof contactSchema>;
+export type InsertContact = z.infer<typeof insertContactSchema>;

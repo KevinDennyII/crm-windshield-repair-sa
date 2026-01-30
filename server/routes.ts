@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber } from "./twilio";
@@ -722,6 +722,117 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error: any) {
       console.error("Delete customer reminder error:", error);
       res.status(500).json({ message: error.message || "Failed to delete reminder" });
+    }
+  });
+
+  // ============ CONTACTS ROUTES ============
+  
+  app.get("/api/contacts", async (req, res) => {
+    try {
+      const contacts = await storage.getAllContacts();
+      res.json(contacts);
+    } catch (error: any) {
+      console.error("Get contacts error:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch contacts" });
+    }
+  });
+
+  app.get("/api/contacts/:id", async (req, res) => {
+    try {
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      res.json(contact);
+    } catch (error: any) {
+      console.error("Get contact error:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch contact" });
+    }
+  });
+
+  app.post("/api/contacts", async (req, res) => {
+    try {
+      const parsed = insertContactSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid contact data", 
+          errors: parsed.error.errors 
+        });
+      }
+      const contact = await storage.createContact(parsed.data);
+      res.status(201).json(contact);
+    } catch (error: any) {
+      console.error("Create contact error:", error);
+      res.status(500).json({ message: error.message || "Failed to create contact" });
+    }
+  });
+
+  app.patch("/api/contacts/:id", async (req, res) => {
+    try {
+      const contact = await storage.updateContact(req.params.id, req.body);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      res.json(contact);
+    } catch (error: any) {
+      console.error("Update contact error:", error);
+      res.status(500).json({ message: error.message || "Failed to update contact" });
+    }
+  });
+
+  app.delete("/api/contacts/:id", async (req, res) => {
+    try {
+      await storage.deleteContact(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Delete contact error:", error);
+      res.status(500).json({ message: error.message || "Failed to delete contact" });
+    }
+  });
+
+  // Get jobs for a specific contact (by phone number match)
+  app.get("/api/contacts/:id/jobs", async (req, res) => {
+    try {
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      
+      const allJobs = await storage.getAllJobs();
+      const cleanContactPhone = contact.phone.replace(/\D/g, "");
+      
+      const contactJobs = allJobs.filter(job => {
+        const cleanJobPhone = job.phone.replace(/\D/g, "");
+        return cleanJobPhone === cleanContactPhone || 
+               cleanJobPhone.endsWith(cleanContactPhone.slice(-10)) || 
+               cleanContactPhone.endsWith(cleanJobPhone.slice(-10));
+      });
+      
+      res.json(contactJobs);
+    } catch (error: any) {
+      console.error("Get contact jobs error:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch contact jobs" });
+    }
+  });
+
+  // Sync contacts from all existing jobs
+  app.post("/api/contacts/sync-from-jobs", async (req, res) => {
+    try {
+      const allJobs = await storage.getAllJobs();
+      const syncedContacts = [];
+      
+      for (const job of allJobs) {
+        const contact = await storage.syncContactFromJob(job);
+        syncedContacts.push(contact);
+      }
+      
+      res.json({ 
+        message: `Synced ${syncedContacts.length} contacts from jobs`,
+        count: syncedContacts.length 
+      });
+    } catch (error: any) {
+      console.error("Sync contacts error:", error);
+      res.status(500).json({ message: error.message || "Failed to sync contacts" });
     }
   });
 }
