@@ -448,6 +448,11 @@ export default function TechDashboard() {
                             <p className="text-sm text-gray-600">
                               Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
                             </p>
+                            {item.part.accessories && (
+                              <p className="text-sm text-orange-600 font-medium">
+                                Accessories: {item.part.accessories}
+                              </p>
+                            )}
                             <p className="text-sm text-gray-500">
                               Customer: {item.job.firstName} {item.job.lastName}
                             </p>
@@ -505,6 +510,11 @@ export default function TechDashboard() {
                             <p className="text-sm text-gray-600">
                               Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
                             </p>
+                            {item.part.accessories && (
+                              <p className="text-sm text-orange-600 font-medium">
+                                Accessories: {item.part.accessories}
+                              </p>
+                            )}
                             <p className="text-sm text-gray-500">
                               Customer: {item.job.firstName} {item.job.lastName}
                             </p>
@@ -544,6 +554,11 @@ export default function TechDashboard() {
                           <p className="text-sm text-gray-600">
                             Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
                           </p>
+                          {item.part.accessories && (
+                            <p className="text-sm text-orange-600 font-medium">
+                              Accessories: {item.part.accessories}
+                            </p>
+                          )}
                           {item.job.customerType === "subcontractor" && item.job.businessName && (
                             <p className="text-sm font-medium text-purple-600">
                               For Subcontractor: {item.job.businessName}
