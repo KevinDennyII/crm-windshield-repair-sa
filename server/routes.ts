@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
-import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured } from "./twilio";
+import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber } from "./twilio";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
 import { decodeVIN } from "./vin-decoder";
 import { isPlacesConfigured, getAutocomplete, getPlaceDetails } from "./places";
@@ -454,7 +454,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   // Check if Twilio is configured
   app.get("/api/sms/status", async (req, res) => {
-    res.json({ configured: isTwilioConfigured() });
+    res.json({ 
+      configured: isTwilioConfigured(),
+      phoneNumber: getTwilioPhoneNumber()
+    });
   });
 
   // Get SMS conversations

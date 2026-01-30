@@ -28,6 +28,7 @@ import { type Job } from "@shared/schema";
 
 interface SmsStatus {
   configured: boolean;
+  phoneNumber: string | null;
 }
 
 interface SmsMessage {
@@ -310,8 +311,17 @@ export default function Conversations() {
 
             <TabsContent value="sms" className="flex-1 m-0">
               {smsStatus?.configured ? (
-                <ScrollArea className="h-full">
-                  <SmsConversationList
+                <div className="flex flex-col h-full">
+                  {smsStatus.phoneNumber && (
+                    <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2">
+                      <Phone className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        Business Line: <span className="font-medium text-foreground">{formatPhoneNumber(smsStatus.phoneNumber)}</span>
+                      </span>
+                    </div>
+                  )}
+                  <ScrollArea className="flex-1">
+                    <SmsConversationList
                     conversations={filteredSmsConversations}
                     selectedPhone={selectedSmsConversation?.phoneNumber}
                     onSelect={(conv) => {
@@ -320,10 +330,11 @@ export default function Conversations() {
                     }}
                     formatDate={formatDate}
                     formatPhoneNumber={formatPhoneNumber}
-                    findMatchingJob={findMatchingJobByPhone}
-                    isLoading={loadingSms}
-                  />
-                </ScrollArea>
+                      findMatchingJob={findMatchingJobByPhone}
+                      isLoading={loadingSms}
+                    />
+                  </ScrollArea>
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center p-4">
                   <MessageSquare className="h-12 w-12 text-muted-foreground/50 mb-3" />

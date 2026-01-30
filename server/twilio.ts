@@ -20,6 +20,10 @@ export function isTwilioConfigured(): boolean {
   return !!(accountSid && authToken && twilioPhoneNumber);
 }
 
+export function getTwilioPhoneNumber(): string | null {
+  return twilioPhoneNumber || null;
+}
+
 export interface SmsMessage {
   sid: string;
   to: string;
