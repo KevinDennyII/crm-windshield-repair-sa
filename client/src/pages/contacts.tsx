@@ -968,7 +968,12 @@ function ContactDocuments({ jobs, isLoading }: { jobs?: Job[]; isLoading: boolea
   const handleViewSentReceipt = (job: Job) => {
     if (!job.receiptPdf) return;
     
-    const binaryString = atob(job.receiptPdf);
+    let base64Data = job.receiptPdf;
+    if (base64Data.includes(',')) {
+      base64Data = base64Data.split(',')[1];
+    }
+    
+    const binaryString = atob(base64Data);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
@@ -1021,7 +1026,6 @@ function ContactDocuments({ jobs, isLoading }: { jobs?: Job[]; isLoading: boolea
                         size="sm"
                         variant="default"
                         onClick={() => handleViewSentReceipt(job)}
-                        className="bg-green-600 hover:bg-green-700"
                         data-testid={`button-view-sent-receipt-${job.id}`}
                       >
                         <FileText className="h-4 w-4 mr-1" />
