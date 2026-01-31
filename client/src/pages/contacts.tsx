@@ -965,60 +965,131 @@ function ContactDocuments({ jobs, isLoading }: { jobs?: Job[]; isLoading: boolea
     }
   });
   
+  const handleViewSentReceipt = (job: Job) => {
+    if (!job.receiptPdf) return;
+    
+    const binaryString = atob(job.receiptPdf);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
+  
+  const sentReceipts = jobs.filter((job) => job.receiptPdf && job.receiptSentAt);
+  const unsavedReceipts = jobs.filter((job) => !job.receiptPdf);
+  
   return (
     <div className="space-y-4">
-      {/* Receipt Documents */}
-      <div>
-        <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Receipts</h4>
-        <div className="space-y-2">
-          {jobs.map((job) => {
-            const vehicle = job.vehicles?.[0];
-            const receiptType = determineReceiptType(job);
-            const hasSignature = !!job.signatureImage;
-            
-            return (
-              <Card key={job.id} className="overflow-hidden">
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                      <Receipt className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm">Job #{job.jobNumber}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {getReceiptTypeLabel(receiptType)}
-                        {vehicle && ` - ${vehicle.vehicleYear} ${vehicle.vehicleMake}`}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        {hasSignature && (
-                          <Badge variant="secondary" className="text-xs">Signed</Badge>
-                        )}
-                        <span className="text-xs text-muted-foreground">${job.totalDue}</span>
+      {/* Sent Receipt Documents */}
+      {sentReceipts.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Sent Receipts</h4>
+          <div className="space-y-2">
+            {sentReceipts.map((job) => {
+              const vehicle = job.vehicles?.[0];
+              const receiptType = determineReceiptType(job);
+              const hasSignature = !!job.signatureImage;
+              const sentDate = job.receiptSentAt ? new Date(job.receiptSentAt).toLocaleDateString() : null;
+              
+              return (
+                <Card key={`sent-${job.id}`} className="overflow-hidden border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+                        <Receipt className="h-5 w-5 text-green-600 dark:text-green-400" />
                       </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">Job #{job.jobNumber}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {getReceiptTypeLabel(receiptType)}
+                          {vehicle && ` - ${vehicle.vehicleYear} ${vehicle.vehicleMake}`}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <Badge variant="secondary" className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300">
+                            Sent {sentDate}
+                          </Badge>
+                          {hasSignature && (
+                            <Badge variant="secondary" className="text-xs">Signed</Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground">${job.totalDue}</span>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => handleViewSentReceipt(job)}
+                        className="bg-green-600 hover:bg-green-700"
+                        data-testid={`button-view-sent-receipt-${job.id}`}
+                      >
+                        <FileText className="h-4 w-4 mr-1" />
+                        PDF
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleViewReceipt(job)}
-                      disabled={generatingReceipt === job.id}
-                      data-testid={`button-view-receipt-${job.id}`}
-                    >
-                      {generatingReceipt === job.id ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
+      
+      {/* Unsent Receipt Documents - can be generated on-the-fly */}
+      {unsavedReceipts.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Available Receipts</h4>
+          <div className="space-y-2">
+            {unsavedReceipts.map((job) => {
+              const vehicle = job.vehicles?.[0];
+              const receiptType = determineReceiptType(job);
+              const hasSignature = !!job.signatureImage;
+              
+              return (
+                <Card key={job.id} className="overflow-hidden">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                        <Receipt className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">Job #{job.jobNumber}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {getReceiptTypeLabel(receiptType)}
+                          {vehicle && ` - ${vehicle.vehicleYear} ${vehicle.vehicleMake}`}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {hasSignature && (
+                            <Badge variant="secondary" className="text-xs">Signed</Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground">${job.totalDue}</span>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleViewReceipt(job)}
+                        disabled={generatingReceipt === job.id}
+                        data-testid={`button-view-receipt-${job.id}`}
+                      >
+                        {generatingReceipt === job.id ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
       
       {/* Photos Gallery */}
       {photos.length > 0 && (

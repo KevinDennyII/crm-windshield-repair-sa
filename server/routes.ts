@@ -404,9 +404,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         }
       );
 
-      // Update job with receipt sent timestamp
+      // Update job with receipt sent timestamp and store the PDF
       await storage.updateJob(job.id, {
-        receiptSentAt: new Date().toISOString()
+        receiptSentAt: new Date().toISOString(),
+        receiptPdf: parsed.data.pdfBase64
       });
 
       res.json({ message: "Receipt sent successfully" });

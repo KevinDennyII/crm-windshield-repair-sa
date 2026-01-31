@@ -91,6 +91,7 @@ export const jobs = pgTable("jobs", {
   // Signature capture
   signatureImage: text("signature_image"),
   receiptSentAt: varchar("receipt_sent_at"),
+  receiptPdf: text("receipt_pdf"),
   
   // Completion photos (optional)
   completionPhotos: jsonb("completion_photos").default({}),
@@ -316,6 +317,7 @@ export const jobSchema = z.object({
   // Signature capture
   signatureImage: z.string().optional(),
   receiptSentAt: z.string().optional(),
+  receiptPdf: z.string().optional(),
   
   // Completion photos (optional)
   completionPhotos: z.record(z.string()).optional(),
