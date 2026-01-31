@@ -944,9 +944,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
-  // Start lead polling when Bluehost is configured
-  if (isBluehostConfigured()) {
-    startLeadPolling(60000); // Check every 60 seconds
-    console.log("Lead polling started - checking for new website leads every 60 seconds");
-  }
+  // Lead polling DISABLED - was sending duplicate messages to already-contacted customers
+  // To re-enable, uncomment the lines below after implementing proper deduplication
+  // if (isBluehostConfigured()) {
+  //   startLeadPolling(60000); // Check every 60 seconds
+  //   console.log("Lead polling started - checking for new website leads every 60 seconds");
+  // }
 }
