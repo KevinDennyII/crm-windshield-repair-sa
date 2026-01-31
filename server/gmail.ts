@@ -255,13 +255,32 @@ function extractBody(payload: any): string {
 export async function getInboxThreads(maxResults: number = 20): Promise<EmailThread[]> {
   const gmail = await getUncachableGmailClient();
   
-  const threadsResponse = await gmail.users.threads.list({
-    userId: 'me',
-    maxResults,
-    labelIds: ['INBOX'],
-  });
+  // Fetch both INBOX and SENT threads to show all conversations including sent receipts
+  const [inboxResponse, sentResponse] = await Promise.all([
+    gmail.users.threads.list({
+      userId: 'me',
+      maxResults,
+      labelIds: ['INBOX'],
+    }),
+    gmail.users.threads.list({
+      userId: 'me',
+      maxResults,
+      labelIds: ['SENT'],
+    }),
+  ]);
   
-  const threads = threadsResponse.data.threads || [];
+  // Combine and deduplicate threads by ID
+  const inboxThreads = inboxResponse.data.threads || [];
+  const sentThreads = sentResponse.data.threads || [];
+  const threadMap = new Map<string, any>();
+  
+  for (const thread of [...inboxThreads, ...sentThreads]) {
+    if (thread.id && !threadMap.has(thread.id)) {
+      threadMap.set(thread.id, thread);
+    }
+  }
+  
+  const threads = Array.from(threadMap.values());
   const result: EmailThread[] = [];
   
   for (const thread of threads.slice(0, maxResults)) {
