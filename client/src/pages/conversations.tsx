@@ -353,7 +353,7 @@ export default function Conversations() {
             </TabsList>
 
             <TabsContent value="all" className="flex-1 m-0 overflow-hidden">
-              <ScrollArea className="h-full">
+              <div className="h-full overflow-y-auto">
                 <ConversationList
                   threads={filteredThreads}
                   selectedId={selectedConversation?.id}
@@ -362,11 +362,11 @@ export default function Conversations() {
                   findMatchingJob={findMatchingJob}
                   isLoading={loadingEmails}
                 />
-              </ScrollArea>
+              </div>
             </TabsContent>
 
             <TabsContent value="gmail" className="flex-1 m-0 overflow-hidden">
-              <ScrollArea className="h-full">
+              <div className="h-full overflow-y-auto">
                 <ConversationList
                   threads={filteredThreads}
                   selectedId={selectedConversation?.id}
@@ -379,21 +379,21 @@ export default function Conversations() {
                   findMatchingJob={findMatchingJob}
                   isLoading={loadingEmails}
                 />
-              </ScrollArea>
+              </div>
             </TabsContent>
 
             <TabsContent value="bluehost" className="flex-1 m-0 overflow-hidden">
               {bluehostStatus?.configured ? (
                 <div className="flex flex-col h-full overflow-hidden">
                   {bluehostStatus.email && (
-                    <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2">
+                    <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2 flex-shrink-0">
                       <Mail className="h-3 w-3 text-muted-foreground" />
                       <span className="text-xs text-muted-foreground">
                         Business: <span className="font-medium text-foreground">{bluehostStatus.email}</span>
                       </span>
                     </div>
                   )}
-                  <ScrollArea className="flex-1">
+                  <div className="flex-1 overflow-y-auto min-h-0">
                     <BluehostConversationList
                       threads={filteredBluehostThreads}
                       selectedId={selectedBluehostConversation?.id}
@@ -406,7 +406,7 @@ export default function Conversations() {
                       findMatchingJob={findMatchingJob}
                       isLoading={loadingBluehost}
                     />
-                  </ScrollArea>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center p-4">
@@ -424,14 +424,14 @@ export default function Conversations() {
               {smsStatus?.configured ? (
                 <div className="flex flex-col h-full overflow-hidden">
                   {smsStatus.phoneNumber && (
-                    <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2">
+                    <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2 flex-shrink-0">
                       <Phone className="h-3 w-3 text-muted-foreground" />
                       <span className="text-xs text-muted-foreground">
                         Business Line: <span className="font-medium text-foreground">{formatPhoneNumber(smsStatus.phoneNumber)}</span>
                       </span>
                     </div>
                   )}
-                  <ScrollArea className="flex-1">
+                  <div className="flex-1 overflow-y-auto min-h-0">
                     <SmsConversationList
                     conversations={filteredSmsConversations}
                     selectedPhone={selectedSmsConversation?.phoneNumber}
@@ -444,7 +444,7 @@ export default function Conversations() {
                       findMatchingJob={findMatchingJobByPhone}
                       isLoading={loadingSms}
                     />
-                  </ScrollArea>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center p-4">
