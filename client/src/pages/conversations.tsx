@@ -70,6 +70,22 @@ interface EmailMessage {
   isFromMe: boolean;
 }
 
+interface BluehostStatus {
+  configured: boolean;
+  email: string | null;
+}
+
+interface BluehostThread {
+  id: string;
+  from: string;
+  fromEmail: string;
+  subject: string;
+  snippet: string;
+  date: string;
+  isUnread: boolean;
+  messages: EmailMessage[];
+}
+
 interface ConversationContact {
   id: string;
   name: string;
@@ -91,6 +107,9 @@ export default function Conversations() {
   const [replyText, setReplyText] = useState("");
   const [smsText, setSmsText] = useState("");
 
+  const [selectedBluehostConversation, setSelectedBluehostConversation] = useState<BluehostThread | null>(null);
+  const [bluehostReplyText, setBluehostReplyText] = useState("");
+
   const { data: emailThreads, isLoading: loadingEmails, refetch: refetchEmails } = useQuery<EmailThread[]>({
     queryKey: ["/api/emails/inbox"],
   });
@@ -102,6 +121,15 @@ export default function Conversations() {
   const { data: smsConversations, isLoading: loadingSms, refetch: refetchSms } = useQuery<SmsConversation[]>({
     queryKey: ["/api/sms/conversations"],
     enabled: smsStatus?.configured === true,
+  });
+
+  const { data: bluehostStatus } = useQuery<BluehostStatus>({
+    queryKey: ["/api/bluehost/status"],
+  });
+
+  const { data: bluehostThreads, isLoading: loadingBluehost, refetch: refetchBluehost } = useQuery<BluehostThread[]>({
+    queryKey: ["/api/bluehost/threads"],
+    enabled: bluehostStatus?.configured === true,
   });
 
   const { data: jobs } = useQuery<Job[]>({
@@ -133,6 +161,20 @@ export default function Conversations() {
     },
     onError: () => {
       toast({ title: "Failed to send SMS", variant: "destructive" });
+    },
+  });
+
+  const sendBluehostReplyMutation = useMutation({
+    mutationFn: async ({ to, subject, body }: { to: string; subject: string; body: string }) => {
+      return apiRequest("POST", "/api/bluehost/reply", { to, subject, body });
+    },
+    onSuccess: () => {
+      toast({ title: "Reply sent successfully" });
+      setBluehostReplyText("");
+      refetchBluehost();
+    },
+    onError: () => {
+      toast({ title: "Failed to send reply", variant: "destructive" });
     },
   });
 
@@ -176,6 +218,16 @@ export default function Conversations() {
     sendSmsMutation.mutate({
       to: selectedSmsConversation.phoneNumber,
       body: smsText,
+    });
+  };
+
+  const handleSendBluehostReply = () => {
+    if (!selectedBluehostConversation || !bluehostReplyText.trim()) return;
+    
+    sendBluehostReplyMutation.mutate({
+      to: selectedBluehostConversation.fromEmail,
+      subject: selectedBluehostConversation.subject,
+      body: bluehostReplyText,
     });
   };
 
@@ -224,6 +276,18 @@ export default function Conversations() {
     return true;
   }) || [];
 
+  const filteredBluehostThreads = bluehostThreads?.filter(thread => {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        thread.from.toLowerCase().includes(query) ||
+        thread.subject.toLowerCase().includes(query) ||
+        thread.snippet.toLowerCase().includes(query)
+      );
+    }
+    return true;
+  }) || [];
+
   return (
     <div className="flex-1 flex flex-col h-full">
       <div className="flex items-center justify-between gap-4 p-4 border-b bg-background flex-shrink-0">
@@ -239,11 +303,12 @@ export default function Conversations() {
           onClick={() => {
             refetchEmails();
             if (smsStatus?.configured) refetchSms();
+            if (bluehostStatus?.configured) refetchBluehost();
           }}
-          disabled={loadingEmails || loadingSms}
+          disabled={loadingEmails || loadingSms || loadingBluehost}
           data-testid="button-refresh-conversations"
         >
-          <RefreshCw className={cn("h-4 w-4 mr-2", (loadingEmails || loadingSms) && "animate-spin")} />
+          <RefreshCw className={cn("h-4 w-4 mr-2", (loadingEmails || loadingSms || loadingBluehost) && "animate-spin")} />
           Refresh
         </Button>
       </div>
@@ -264,14 +329,18 @@ export default function Conversations() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-            <TabsList className="grid w-full grid-cols-4 px-2 pt-2">
+            <TabsList className="grid w-full grid-cols-5 px-2 pt-2">
               <TabsTrigger value="all" className="text-xs" data-testid="tab-all">
                 <Inbox className="h-3 w-3 mr-1" />
                 All
               </TabsTrigger>
-              <TabsTrigger value="email" className="text-xs" data-testid="tab-email">
+              <TabsTrigger value="gmail" className="text-xs" data-testid="tab-gmail">
                 <Mail className="h-3 w-3 mr-1" />
-                Email
+                Gmail
+              </TabsTrigger>
+              <TabsTrigger value="bluehost" className="text-xs" data-testid="tab-bluehost">
+                <Mail className="h-3 w-3 mr-1" />
+                Info
               </TabsTrigger>
               <TabsTrigger value="sms" className="text-xs" data-testid="tab-sms">
                 <MessageSquare className="h-3 w-3 mr-1" />
@@ -296,17 +365,59 @@ export default function Conversations() {
               </ScrollArea>
             </TabsContent>
 
-            <TabsContent value="email" className="flex-1 m-0">
+            <TabsContent value="gmail" className="flex-1 m-0">
               <ScrollArea className="h-full">
                 <ConversationList
                   threads={filteredThreads}
                   selectedId={selectedConversation?.id}
-                  onSelect={setSelectedConversation}
+                  onSelect={(thread) => {
+                    setSelectedConversation(thread);
+                    setSelectedSmsConversation(null);
+                    setSelectedBluehostConversation(null);
+                  }}
                   formatDate={formatDate}
                   findMatchingJob={findMatchingJob}
                   isLoading={loadingEmails}
                 />
               </ScrollArea>
+            </TabsContent>
+
+            <TabsContent value="bluehost" className="flex-1 m-0">
+              {bluehostStatus?.configured ? (
+                <div className="flex flex-col h-full">
+                  {bluehostStatus.email && (
+                    <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2">
+                      <Mail className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        Business: <span className="font-medium text-foreground">{bluehostStatus.email}</span>
+                      </span>
+                    </div>
+                  )}
+                  <ScrollArea className="flex-1">
+                    <BluehostConversationList
+                      threads={filteredBluehostThreads}
+                      selectedId={selectedBluehostConversation?.id}
+                      onSelect={(thread) => {
+                        setSelectedBluehostConversation(thread);
+                        setSelectedConversation(null);
+                        setSelectedSmsConversation(null);
+                      }}
+                      formatDate={formatDate}
+                      findMatchingJob={findMatchingJob}
+                      isLoading={loadingBluehost}
+                    />
+                  </ScrollArea>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                  <Mail className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                  <h3 className="font-medium text-muted-foreground">Bluehost Email Not Connected</h3>
+                  <p className="text-sm text-muted-foreground/70 mt-1">
+                    Configure IMAP credentials to access info@windshieldrepairsa.com
+                  </p>
+                  <Badge variant="secondary" className="mt-3">Setup Required</Badge>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="sms" className="flex-1 m-0">
@@ -538,6 +649,88 @@ export default function Conversations() {
                 </div>
               </div>
             </>
+          ) : selectedBluehostConversation ? (
+            <>
+              <div className="p-4 border-b bg-background flex-shrink-0">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10 text-blue-600 flex-shrink-0">
+                      <Mail className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h2 className="font-semibold">{selectedBluehostConversation.from}</h2>
+                      <p className="text-sm text-muted-foreground">{selectedBluehostConversation.fromEmail}</p>
+                    </div>
+                  </div>
+                  {findMatchingJob(selectedBluehostConversation.fromEmail) && (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      Job #{findMatchingJob(selectedBluehostConversation.fromEmail)?.jobNumber}
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-2">
+                  <h3 className="text-sm font-medium">{selectedBluehostConversation.subject}</h3>
+                </div>
+              </div>
+
+              <ScrollArea className="flex-1 p-4">
+                <div className="space-y-4">
+                  {selectedBluehostConversation.messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={cn(
+                        "flex",
+                        message.isFromMe ? "justify-end" : "justify-start"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "max-w-[80%] rounded-lg p-3",
+                          message.isFromMe
+                            ? "bg-blue-600 text-white"
+                            : "bg-muted"
+                        )}
+                      >
+                        <div className="text-sm whitespace-pre-wrap">
+                          {message.body}
+                        </div>
+                        <div
+                          className={cn(
+                            "text-xs mt-2",
+                            message.isFromMe
+                              ? "text-white/70"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {formatDate(message.date)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+
+              <div className="p-4 border-t bg-background flex-shrink-0">
+                <div className="flex gap-2">
+                  <Textarea
+                    placeholder="Type your reply..."
+                    value={bluehostReplyText}
+                    onChange={(e) => setBluehostReplyText(e.target.value)}
+                    className="resize-none"
+                    rows={3}
+                    data-testid="input-bluehost-reply-message"
+                  />
+                  <Button
+                    onClick={handleSendBluehostReply}
+                    disabled={!bluehostReplyText.trim() || sendBluehostReplyMutation.isPending}
+                    className="self-end bg-blue-600 hover:bg-blue-700"
+                    data-testid="button-send-bluehost-reply"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </>
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
@@ -728,6 +921,98 @@ function SmsConversationList({
                 </p>
                 <p className="text-xs text-muted-foreground/70 truncate mt-0.5">
                   {conv.lastMessage.body}
+                </p>
+                {matchingJob && (
+                  <Badge variant="outline" className="text-xs mt-1">
+                    Job #{matchingJob.jobNumber}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface BluehostConversationListProps {
+  threads: BluehostThread[];
+  selectedId?: string;
+  onSelect: (thread: BluehostThread) => void;
+  formatDate: (date: string) => string;
+  findMatchingJob: (email: string) => Job | undefined;
+  isLoading: boolean;
+}
+
+function BluehostConversationList({
+  threads,
+  selectedId,
+  onSelect,
+  formatDate,
+  findMatchingJob,
+  isLoading,
+}: BluehostConversationListProps) {
+  if (isLoading) {
+    return (
+      <div className="p-4 space-y-3">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex gap-3 animate-pulse">
+            <div className="h-10 w-10 rounded-full bg-muted" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-muted rounded w-3/4" />
+              <div className="h-3 bg-muted rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (threads.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <Inbox className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
+        <p className="text-sm text-muted-foreground">No Bluehost emails found</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y">
+      {threads.map((thread) => {
+        const matchingJob = findMatchingJob(thread.fromEmail);
+        return (
+          <button
+            key={thread.id}
+            onClick={() => onSelect(thread)}
+            className={cn(
+              "w-full p-3 text-left hover-elevate transition-colors",
+              selectedId === thread.id && "bg-accent"
+            )}
+            data-testid={`bluehost-conversation-item-${thread.id}`}
+          >
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10 text-blue-600 flex-shrink-0">
+                <Mail className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={cn(
+                    "font-medium truncate text-sm",
+                    thread.isUnread && "font-semibold"
+                  )}>
+                    {thread.from}
+                  </span>
+                  <span className="text-xs text-muted-foreground flex-shrink-0">
+                    {formatDate(thread.date)}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground truncate">
+                  {thread.subject}
+                </p>
+                <p className="text-xs text-muted-foreground/70 truncate mt-0.5">
+                  {thread.snippet}
                 </p>
                 {matchingJob && (
                   <Badge variant="outline" className="text-xs mt-1">

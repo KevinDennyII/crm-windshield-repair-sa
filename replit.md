@@ -34,7 +34,8 @@ Key server files:
 - `server/index.ts` - Express app setup and middleware configuration
 - `server/routes.ts` - API route definitions for job CRUD operations
 - `server/storage.ts` - Data access layer with in-memory storage (interface ready for database)
-- `server/gmail.ts` - Gmail API integration for sending emails, fetching inbox, and replying to threads
+- `server/gmail.ts` - Gmail API integration for sending emails, fetching inbox (including SENT), and replying to threads
+- `server/bluehost.ts` - Bluehost email integration via IMAP/SMTP for info@windshieldrepairsa.com
 - `server/vite.ts` - Development server with Vite HMR integration
 - `server/static.ts` - Production static file serving
 - `server/replit_integrations/auth/` - Replit Auth integration for OIDC authentication
@@ -159,6 +160,16 @@ The application supports fleet companies with multiple vehicles per job, each wi
 - Enables direct customer communication from job cards and job detail modal
 - **Conversations page**: Unified inbox showing all email threads with reply functionality
 - Automatically links emails to jobs when sender matches customer email
+- Gmail now fetches both INBOX and SENT folders to show all conversations including sent receipts
+
+### Bluehost Email Integration
+- **Bluehost IMAP/SMTP**: Connected for info@windshieldrepairsa.com business email
+- **imap**: Node.js IMAP library for fetching emails from Bluehost
+- **nodemailer**: SMTP client for sending and replying to emails
+- **mailparser**: Email parsing library for processing IMAP messages
+- Separate "Info" tab in Conversations page for Bluehost emails
+- Requires secrets: BLUEHOST_EMAIL, BLUEHOST_PASSWORD, BLUEHOST_IMAP_SERVER, BLUEHOST_SMTP_SERVER
+- API endpoints: GET /api/bluehost/status, GET /api/bluehost/threads, POST /api/bluehost/send, POST /api/bluehost/reply
 
 ### SMS Integration
 - **Twilio**: Connected for SMS messaging (requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER secrets)

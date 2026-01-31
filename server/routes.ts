@@ -5,6 +5,7 @@ import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerRe
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber } from "./twilio";
+import { isBluehostConfigured, getBluehostEmail, getBluehostEmails, sendBluehostEmail, replyToBluehostEmail } from "./bluehost";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
 import { decodeVIN } from "./vin-decoder";
 import { isPlacesConfigured, getAutocomplete, getPlaceDetails } from "./places";
@@ -549,6 +550,83 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error: any) {
       console.error("Failed to send SMS:", error);
       res.status(500).json({ message: error.message || "Failed to send SMS" });
+    }
+  });
+
+  // Bluehost email endpoints
+  app.get("/api/bluehost/status", async (req, res) => {
+    res.json({ 
+      configured: isBluehostConfigured(),
+      email: getBluehostEmail()
+    });
+  });
+
+  app.get("/api/bluehost/threads", async (req, res) => {
+    try {
+      if (!isBluehostConfigured()) {
+        return res.status(400).json({ message: "Bluehost email is not configured" });
+      }
+      const threads = await getBluehostEmails(30);
+      res.json(threads);
+    } catch (error: any) {
+      console.error("Failed to fetch Bluehost emails:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch Bluehost emails" });
+    }
+  });
+
+  app.post("/api/bluehost/send", async (req, res) => {
+    try {
+      if (!isBluehostConfigured()) {
+        return res.status(400).json({ message: "Bluehost email is not configured" });
+      }
+      
+      const emailSchema = z.object({
+        to: z.string().email("Invalid email address"),
+        subject: z.string().min(1, "Subject is required"),
+        body: z.string().min(1, "Message body is required"),
+      });
+      
+      const parsed = emailSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid email data", 
+          errors: parsed.error.errors 
+        });
+      }
+
+      await sendBluehostEmail(parsed.data.to, parsed.data.subject, parsed.data.body);
+      res.json({ message: "Email sent successfully" });
+    } catch (error: any) {
+      console.error("Failed to send Bluehost email:", error);
+      res.status(500).json({ message: error.message || "Failed to send email" });
+    }
+  });
+
+  app.post("/api/bluehost/reply", async (req, res) => {
+    try {
+      if (!isBluehostConfigured()) {
+        return res.status(400).json({ message: "Bluehost email is not configured" });
+      }
+      
+      const replySchema = z.object({
+        to: z.string().email("Invalid email address"),
+        subject: z.string().min(1, "Subject is required"),
+        body: z.string().min(1, "Message body is required"),
+      });
+      
+      const parsed = replySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid reply data", 
+          errors: parsed.error.errors 
+        });
+      }
+
+      await replyToBluehostEmail(parsed.data.to, parsed.data.subject, parsed.data.body);
+      res.json({ message: "Reply sent successfully" });
+    } catch (error: any) {
+      console.error("Failed to send Bluehost reply:", error);
+      res.status(500).json({ message: error.message || "Failed to send reply" });
     }
   });
 
