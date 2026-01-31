@@ -100,6 +100,7 @@ export const jobs = pgTable("jobs", {
 });
 
 export const pipelineStages = [
+  "new_lead",
   "quote",
   "scheduled",
   "paid_completed",

@@ -20,6 +20,11 @@ const stageConfig: Record<
   PipelineStage,
   { label: string; color: string; bgColor: string }
 > = {
+  new_lead: {
+    label: "New Lead",
+    color: "text-purple-600 dark:text-purple-400",
+    bgColor: "bg-purple-50 dark:bg-purple-950/30",
+  },
   quote: {
     label: "Quote",
     color: "text-amber-600 dark:text-amber-400",
