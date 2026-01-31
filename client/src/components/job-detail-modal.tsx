@@ -106,6 +106,7 @@ interface JobDetailModalProps {
 }
 
 const stageLabels: Record<string, string> = {
+  new_lead: "New Lead",
   quote: "Quote",
   scheduled: "Scheduled",
   paid_completed: "Paid/Completed",

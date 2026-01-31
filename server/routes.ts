@@ -14,6 +14,7 @@ import { db } from "./db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { COMPANY_LOGO_BASE64 } from "./logo";
+import { processNewLeads, startLeadPolling, stopLeadPolling } from "./lead-processor";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Setup authentication BEFORE other routes
@@ -914,4 +915,38 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       res.status(500).json({ message: error.message || "Failed to sync contacts" });
     }
   });
+
+  // Lead Processing Routes
+  app.get("/api/leads/status", async (req, res) => {
+    res.json({
+      configured: isBluehostConfigured(),
+      message: isBluehostConfigured() 
+        ? "Lead processing is active. Checking Bluehost for new leads every 60 seconds." 
+        : "Bluehost email not configured. Lead processing is disabled.",
+    });
+  });
+
+  app.post("/api/leads/process", async (req, res) => {
+    try {
+      if (!isBluehostConfigured()) {
+        return res.status(400).json({ message: "Bluehost email not configured" });
+      }
+      
+      const result = await processNewLeads();
+      res.json({
+        message: `Processed ${result.processed} new leads`,
+        processed: result.processed,
+        errors: result.errors,
+      });
+    } catch (error: any) {
+      console.error("Lead processing error:", error);
+      res.status(500).json({ message: error.message || "Failed to process leads" });
+    }
+  });
+
+  // Start lead polling when Bluehost is configured
+  if (isBluehostConfigured()) {
+    startLeadPolling(60000); // Check every 60 seconds
+    console.log("Lead polling started - checking for new website leads every 60 seconds");
+  }
 }
