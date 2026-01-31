@@ -23,6 +23,10 @@ export interface ParsedLead {
 
 const processedLeadIds = new Set<string>();
 
+// SAFETY: Only process emails received after this date to avoid sending to already-contacted customers
+// This was set on Jan 31, 2026 after discovering old emails were being processed
+const LEAD_PROCESSING_CUTOFF_DATE = new Date('2026-01-31T12:00:00Z'); // Noon UTC on Jan 31, 2026
+
 export function isLeadEmail(email: BluehostEmail): boolean {
   return email.subject.includes('New WRSA Quote Request');
 }
@@ -327,6 +331,13 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
         }
 
         if (!isLeadEmail(email)) {
+          continue;
+        }
+
+        // SAFETY: Skip emails received before the cutoff date
+        const emailDate = new Date(email.date);
+        if (emailDate < LEAD_PROCESSING_CUTOFF_DATE) {
+          processedLeadIds.add(email.id); // Mark as processed so we don't check again
           continue;
         }
 

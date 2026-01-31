@@ -944,10 +944,9 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
-  // Lead polling DISABLED - was sending duplicate messages to already-contacted customers
-  // To re-enable, uncomment the lines below after implementing proper deduplication
-  // if (isBluehostConfigured()) {
-  //   startLeadPolling(60000); // Check every 60 seconds
-  //   console.log("Lead polling started - checking for new website leads every 60 seconds");
-  // }
+  // Lead polling with date cutoff safeguard - only processes emails after Jan 31, 2026 noon UTC
+  if (isBluehostConfigured()) {
+    startLeadPolling(60000); // Check every 60 seconds
+    console.log("Lead polling started - only processing NEW leads (after Jan 31, 2026 cutoff)");
+  }
 }
