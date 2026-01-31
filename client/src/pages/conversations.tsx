@@ -352,7 +352,7 @@ export default function Conversations() {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="all" className="flex-1 m-0">
+            <TabsContent value="all" className="flex-1 m-0 overflow-hidden">
               <ScrollArea className="h-full">
                 <ConversationList
                   threads={filteredThreads}
@@ -365,7 +365,7 @@ export default function Conversations() {
               </ScrollArea>
             </TabsContent>
 
-            <TabsContent value="gmail" className="flex-1 m-0">
+            <TabsContent value="gmail" className="flex-1 m-0 overflow-hidden">
               <ScrollArea className="h-full">
                 <ConversationList
                   threads={filteredThreads}
@@ -382,9 +382,9 @@ export default function Conversations() {
               </ScrollArea>
             </TabsContent>
 
-            <TabsContent value="bluehost" className="flex-1 m-0">
+            <TabsContent value="bluehost" className="flex-1 m-0 overflow-hidden">
               {bluehostStatus?.configured ? (
-                <div className="flex flex-col h-full">
+                <div className="flex flex-col h-full overflow-hidden">
                   {bluehostStatus.email && (
                     <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2">
                       <Mail className="h-3 w-3 text-muted-foreground" />
@@ -420,9 +420,9 @@ export default function Conversations() {
               )}
             </TabsContent>
 
-            <TabsContent value="sms" className="flex-1 m-0">
+            <TabsContent value="sms" className="flex-1 m-0 overflow-hidden">
               {smsStatus?.configured ? (
-                <div className="flex flex-col h-full">
+                <div className="flex flex-col h-full overflow-hidden">
                   {smsStatus.phoneNumber && (
                     <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2">
                       <Phone className="h-3 w-3 text-muted-foreground" />
