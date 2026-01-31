@@ -314,8 +314,8 @@ export default function Conversations() {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-80 border-r flex flex-col bg-muted/30">
-          <div className="p-3 border-b">
+        <div className="w-80 border-r flex flex-col bg-muted/30 overflow-hidden">
+          <div className="p-3 border-b flex-shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -328,8 +328,8 @@ export default function Conversations() {
             </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-            <TabsList className="grid w-full grid-cols-5 px-2 pt-2">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <TabsList className="grid w-full grid-cols-5 px-2 pt-2 flex-shrink-0">
               <TabsTrigger value="all" className="text-xs" data-testid="tab-all">
                 <Inbox className="h-3 w-3 mr-1" />
                 All
@@ -352,7 +352,7 @@ export default function Conversations() {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="all" className="flex-1 m-0 overflow-hidden">
+            <TabsContent value="all" className="flex-1 m-0 overflow-hidden min-h-0">
               <div className="h-full overflow-y-auto">
                 <ConversationList
                   threads={filteredThreads}
@@ -365,7 +365,7 @@ export default function Conversations() {
               </div>
             </TabsContent>
 
-            <TabsContent value="gmail" className="flex-1 m-0 overflow-hidden">
+            <TabsContent value="gmail" className="flex-1 m-0 overflow-hidden min-h-0">
               <div className="h-full overflow-y-auto">
                 <ConversationList
                   threads={filteredThreads}
@@ -382,7 +382,7 @@ export default function Conversations() {
               </div>
             </TabsContent>
 
-            <TabsContent value="bluehost" className="flex-1 m-0 overflow-hidden">
+            <TabsContent value="bluehost" className="flex-1 m-0 overflow-hidden min-h-0">
               {bluehostStatus?.configured ? (
                 <div className="flex flex-col h-full overflow-hidden">
                   {bluehostStatus.email && (
@@ -420,7 +420,7 @@ export default function Conversations() {
               )}
             </TabsContent>
 
-            <TabsContent value="sms" className="flex-1 m-0 overflow-hidden">
+            <TabsContent value="sms" className="flex-1 m-0 overflow-hidden min-h-0">
               {smsStatus?.configured ? (
                 <div className="flex flex-col h-full overflow-hidden">
                   {smsStatus.phoneNumber && (
