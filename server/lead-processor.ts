@@ -301,7 +301,7 @@ export async function sendLeadConfirmationSms(lead: ParsedLead): Promise<void> {
     formattedPhone = '+' + formattedPhone;
   }
 
-  const message = `Hi ${firstName}! Thank you for your quote request. Windshield Repair SA has received your inquiry for your ${lead.vehicleYear} ${lead.vehicleMake} and will contact you shortly with a quote. Questions? Call us at (210) 890-0210.`;
+  const message = `Hi ${firstName}! Thank you for your quote request. Windshield Repair SA has received your inquiry for your ${lead.vehicleYear} ${lead.vehicleMake} and will contact you shortly with a quote.`;
 
   try {
     await sendSms(formattedPhone, message);
