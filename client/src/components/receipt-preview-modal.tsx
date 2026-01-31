@@ -30,7 +30,9 @@ export function ReceiptPreviewModal({ job, isOpen, onClose }: ReceiptPreviewModa
     setError(null);
 
     try {
-      const { blobUrl, filename: fn } = await generateReceiptPreview(job);
+      const { blobUrl, filename: fn } = await generateReceiptPreview(job, {
+        signatureImage: job.signatureImage || undefined,
+      });
       setPdfUrl(blobUrl);
       setFilename(fn);
     } catch (err) {
@@ -57,7 +59,9 @@ export function ReceiptPreviewModal({ job, isOpen, onClose }: ReceiptPreviewModa
     setError(null);
 
     try {
-      const { blobUrl, filename: fn } = await generateReceiptPreview(job);
+      const { blobUrl, filename: fn } = await generateReceiptPreview(job, {
+        signatureImage: job.signatureImage || undefined,
+      });
       setPdfUrl(blobUrl);
       setFilename(fn);
       window.open(blobUrl, '_blank');
@@ -75,7 +79,9 @@ export function ReceiptPreviewModal({ job, isOpen, onClose }: ReceiptPreviewModa
     } else if (job) {
       setIsLoading(true);
       try {
-        const { blobUrl, filename: fn } = await generateReceiptPreview(job);
+        const { blobUrl, filename: fn } = await generateReceiptPreview(job, {
+          signatureImage: job.signatureImage || undefined,
+        });
         setPdfUrl(blobUrl);
         setFilename(fn);
         downloadReceipt(blobUrl, fn);
