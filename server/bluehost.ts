@@ -53,16 +53,19 @@ async function fetchFolder(folderName: string): Promise<BluehostEmail[]> {
       return reject(new Error('Bluehost email not configured'));
     }
 
+    const rejectUnauthorized = process.env.BLUEHOST_TLS_STRICT !== 'false';
+    
     const imap = new Imap({
       user: email,
       password: password,
       host: imapServer,
       port: 993,
       tls: true,
-      tlsOptions: { rejectUnauthorized: false },
+      tlsOptions: { rejectUnauthorized },
     });
 
     const emails: BluehostEmail[] = [];
+    const parsePromises: Promise<void>[] = [];
 
     imap.once('ready', () => {
       imap.openBox(folderName, true, (err: Error | null, box: Box) => {
@@ -94,33 +97,37 @@ async function fetchFolder(folderName: string): Promise<BluehostEmail[]> {
             });
           });
 
-          msg.once('end', async () => {
-            try {
-              const parsed: ParsedMail = await simpleParser(buffer);
-              const fromHeader = parsed.from?.text || '';
-              const { name, email: fromEmail } = parseEmailAddress(fromHeader);
-              const isFromMe = folderName.toLowerCase().includes('sent') || 
-                               fromEmail.toLowerCase() === (process.env.BLUEHOST_EMAIL || '').toLowerCase();
+          const parsePromise = new Promise<void>((resolveMsg) => {
+            msg.once('end', async () => {
+              try {
+                const parsed: ParsedMail = await simpleParser(buffer);
+                const fromHeader = parsed.from?.text || '';
+                const { name, email: fromEmail } = parseEmailAddress(fromHeader);
+                const isFromMe = folderName.toLowerCase().includes('sent') || 
+                                 fromEmail.toLowerCase() === (process.env.BLUEHOST_EMAIL || '').toLowerCase();
 
-              const toField = parsed.to;
-              const toText = Array.isArray(toField) ? toField.map(t => t.text).join(', ') : toField?.text || '';
-              const htmlContent = parsed.html;
-              const bodyText = parsed.text || (typeof htmlContent === 'string' ? htmlContent.replace(/<[^>]*>/g, '') : '') || '';
-              
-              emails.push({
-                id: `bluehost-${folderName}-${seqno}`,
-                from: name || fromEmail,
-                fromEmail,
-                to: toText,
-                subject: parsed.subject || '(No Subject)',
-                body: bodyText,
-                date: parsed.date?.toISOString() || new Date().toISOString(),
-                isFromMe,
-              });
-            } catch (parseErr) {
-              console.error('Error parsing email:', parseErr);
-            }
+                const toField = parsed.to;
+                const toText = Array.isArray(toField) ? toField.map(t => t.text).join(', ') : toField?.text || '';
+                const htmlContent = parsed.html;
+                const bodyText = parsed.text || (typeof htmlContent === 'string' ? htmlContent.replace(/<[^>]*>/g, '') : '') || '';
+                
+                emails.push({
+                  id: `bluehost-${folderName}-${seqno}`,
+                  from: name || fromEmail,
+                  fromEmail,
+                  to: toText,
+                  subject: parsed.subject || '(No Subject)',
+                  body: bodyText,
+                  date: parsed.date?.toISOString() || new Date().toISOString(),
+                  isFromMe,
+                });
+              } catch (parseErr) {
+                console.error('Error parsing email:', parseErr);
+              }
+              resolveMsg();
+            });
           });
+          parsePromises.push(parsePromise);
         });
 
         fetch.once('error', (err) => {
@@ -128,7 +135,8 @@ async function fetchFolder(folderName: string): Promise<BluehostEmail[]> {
           reject(err);
         });
 
-        fetch.once('end', () => {
+        fetch.once('end', async () => {
+          await Promise.all(parsePromises);
           imap.end();
           resolve(emails);
         });

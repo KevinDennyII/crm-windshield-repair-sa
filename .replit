@@ -40,3 +40,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["google-mail:1.0.0", "google-calendar:1.0.0", "javascript_log_in_with_replit:2.0.0"]
+
+[userenv]
+
+[userenv.shared]
+BLUEHOST_TLS_STRICT = "false"
