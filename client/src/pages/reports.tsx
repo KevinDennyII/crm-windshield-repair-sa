@@ -4,6 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   BarChart,
   Bar,
@@ -33,10 +37,16 @@ import {
   User,
   ArrowUpRight,
   ArrowDownRight,
+  CreditCard,
+  Clock,
+  Car,
+  Package,
+  UserCheck,
+  FileText,
 } from "lucide-react";
 import { type Job } from "@shared/schema";
 
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"];
+const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658", "#ff7c7c"];
 
 const stageLabels: Record<string, string> = {
   quote: "Quote",
@@ -65,6 +75,26 @@ const customerTypeLabels: Record<string, string> = {
   fleet: "Fleet",
 };
 
+const paymentMethodLabels: Record<string, string> = {
+  cash: "Cash",
+  card: "Card",
+  check: "Check",
+  insurance: "Insurance",
+  fleet: "Fleet Account",
+  dealer: "Dealer Account",
+  financing: "Financing",
+};
+
+const glassTypeLabels: Record<string, string> = {
+  windshield: "Windshield",
+  door_glass: "Door Glass",
+  back_glass: "Back Glass",
+  back_glass_powerslide: "Back Glass (Powerslide)",
+  quarter_glass: "Quarter Glass",
+  sunroof: "Sunroof",
+  side_mirror: "Side Mirror",
+};
+
 function formatUSD(amount: number): string {
   return amount.toLocaleString("en-US", {
     style: "currency",
@@ -72,6 +102,17 @@ function formatUSD(amount: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
+}
+
+function getDayBounds(): { start: Date; end: Date } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  start.setHours(0, 0, 0, 0);
+  
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+  
+  return { start, end };
 }
 
 function getWeekBounds(): { start: Date; end: Date } {
@@ -84,7 +125,7 @@ function getWeekBounds(): { start: Date; end: Date } {
   start.setHours(0, 0, 0, 0);
   
   const end = new Date(start);
-  end.setDate(start.getDate() + 5);
+  end.setDate(start.getDate() + 6); // Monday to Sunday = 6 days
   end.setHours(23, 59, 59, 999);
   
   return { start, end };
@@ -127,10 +168,23 @@ function isInRange(dateStr: string | undefined, start: Date, end: Date): boolean
   return date >= start && date <= end;
 }
 
-type TimePeriod = "week" | "month" | "year" | "all";
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "N/A";
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function daysBetween(date1: Date, date2: Date): number {
+  const oneDay = 24 * 60 * 60 * 1000;
+  return Math.floor((date2.getTime() - date1.getTime()) / oneDay);
+}
+
+type TimePeriod = "day" | "week" | "month" | "custom" | "year" | "all";
 
 export default function Reports() {
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("month");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
   
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -139,21 +193,32 @@ export default function Reports() {
   const filteredJobs = useMemo(() => {
     if (timePeriod === "all") return jobs;
     
-    const bounds = timePeriod === "week" 
-      ? getWeekBounds() 
-      : timePeriod === "month" 
-        ? getMonthBounds() 
-        : getYearBounds();
+    let bounds: { start: Date; end: Date };
+    
+    if (timePeriod === "custom") {
+      if (!customStartDate || !customEndDate) return jobs;
+      bounds = {
+        start: new Date(customStartDate + "T00:00:00"),
+        end: new Date(customEndDate + "T23:59:59"),
+      };
+    } else {
+      bounds = timePeriod === "day" 
+        ? getDayBounds()
+        : timePeriod === "week" 
+          ? getWeekBounds() 
+          : timePeriod === "month" 
+            ? getMonthBounds() 
+            : getYearBounds();
+    }
     
     return jobs.filter(job => {
-      // For completed jobs, prefer installDate but fallback to createdAt
       const dateToCheck = job.pipelineStage === "paid_completed" 
         ? (job.installDate || job.createdAt) 
         : job.createdAt;
       if (!dateToCheck) return false;
       return isInRange(dateToCheck.split('T')[0], bounds.start, bounds.end);
     });
-  }, [jobs, timePeriod]);
+  }, [jobs, timePeriod, customStartDate, customEndDate]);
 
   const completedJobs = useMemo(() => 
     filteredJobs.filter(job => job.pipelineStage === "paid_completed"),
@@ -211,6 +276,204 @@ export default function Reports() {
     };
   }, [completedJobs]);
 
+  // Daily sales data for chart
+  const dailySalesData = useMemo(() => {
+    const salesByDate: Record<string, number> = {};
+    
+    completedJobs.forEach(job => {
+      const dateStr = job.installDate || job.createdAt?.split('T')[0];
+      if (dateStr) {
+        const shortDate = dateStr.split('T')[0];
+        salesByDate[shortDate] = (salesByDate[shortDate] || 0) + job.totalDue;
+      }
+    });
+    
+    return Object.entries(salesByDate)
+      .map(([date, amount]) => ({
+        date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        fullDate: date,
+        amount,
+      }))
+      .sort((a, b) => a.fullDate.localeCompare(b.fullDate))
+      .slice(-30); // Last 30 days
+  }, [completedJobs]);
+
+  // A/R Aging Report
+  const arAgingData = useMemo(() => {
+    const today = new Date();
+    const buckets = {
+      current: { label: "0-30 Days", amount: 0, count: 0 },
+      thirtyPlus: { label: "31-60 Days", amount: 0, count: 0 },
+      sixtyPlus: { label: "61-90 Days", amount: 0, count: 0 },
+      ninetyPlus: { label: "90+ Days", amount: 0, count: 0 },
+    };
+    
+    // Include all jobs with outstanding balance, not just filtered ones
+    jobs.forEach(job => {
+      const outstanding = job.totalDue - job.amountPaid;
+      if (outstanding <= 0) return;
+      
+      const jobDate = parseLocalDate(job.installDate || job.createdAt?.split('T')[0]);
+      if (!jobDate) return;
+      
+      const daysOld = daysBetween(jobDate, today);
+      
+      if (daysOld <= 30) {
+        buckets.current.amount += outstanding;
+        buckets.current.count += 1;
+      } else if (daysOld <= 60) {
+        buckets.thirtyPlus.amount += outstanding;
+        buckets.thirtyPlus.count += 1;
+      } else if (daysOld <= 90) {
+        buckets.sixtyPlus.amount += outstanding;
+        buckets.sixtyPlus.count += 1;
+      } else {
+        buckets.ninetyPlus.amount += outstanding;
+        buckets.ninetyPlus.count += 1;
+      }
+    });
+    
+    return Object.values(buckets);
+  }, [jobs]);
+
+  // Sales by payment method
+  const salesByPaymentMethod = useMemo(() => {
+    const methodTotals: Record<string, number> = {};
+    
+    completedJobs.forEach(job => {
+      const methods = job.paymentMethod || ["cash"];
+      const amountPerMethod = job.totalDue / methods.length;
+      
+      methods.forEach(method => {
+        methodTotals[method] = (methodTotals[method] || 0) + amountPerMethod;
+      });
+    });
+    
+    return Object.entries(methodTotals)
+      .map(([method, amount]) => ({
+        name: paymentMethodLabels[method] || method,
+        value: amount,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [completedJobs]);
+
+  // Jobs by CSR - using leadSource as proxy since createdBy isn't tracked on jobs
+  // TODO: Track who created each job in the schema
+  const jobsByCSR = useMemo(() => {
+    const csrStats: Record<string, { jobs: number; revenue: number; name: string }> = {};
+    
+    completedJobs.forEach(job => {
+      // Use lead source as a proxy for CSR performance tracking
+      const source = leadSourceLabels[job.leadSource || "other"] || "Other";
+      if (!csrStats[source]) {
+        csrStats[source] = { jobs: 0, revenue: 0, name: source };
+      }
+      csrStats[source].jobs += 1;
+      csrStats[source].revenue += job.totalDue;
+    });
+    
+    return Object.values(csrStats).sort((a, b) => b.jobs - a.jobs);
+  }, [completedJobs]);
+
+  // Technician performance (jobs per installer)
+  const technicianPerformance = useMemo(() => {
+    const techStats: Record<string, { jobs: number; revenue: number; name: string }> = {};
+    completedJobs.forEach(job => {
+      const techId = job.installedBy || "unassigned";
+      const techName = job.installedBy || "Unassigned";
+      if (!techStats[techId]) {
+        techStats[techId] = { jobs: 0, revenue: 0, name: techName };
+      }
+      techStats[techId].jobs += 1;
+      techStats[techId].revenue += job.totalDue;
+    });
+    return Object.values(techStats).sort((a, b) => b.jobs - a.jobs);
+  }, [completedJobs]);
+
+  // Purchases by distributor
+  const purchasesByDistributor = useMemo(() => {
+    const distributorTotals: Record<string, { parts: number; cost: number }> = {};
+    
+    completedJobs.forEach(job => {
+      job.vehicles.forEach(vehicle => {
+        vehicle.parts.forEach(part => {
+          const distributor = part.distributor || "Unknown";
+          if (!distributorTotals[distributor]) {
+            distributorTotals[distributor] = { parts: 0, cost: 0 };
+          }
+          distributorTotals[distributor].parts += 1;
+          distributorTotals[distributor].cost += part.partPrice || 0;
+        });
+      });
+    });
+    
+    return Object.entries(distributorTotals)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.cost - a.cost);
+  }, [completedJobs]);
+
+  // Customer detail report (completed jobs)
+  const customerDetailData = useMemo(() => {
+    return completedJobs.map(job => ({
+      jobNumber: job.jobNumber,
+      customerName: job.isBusiness && job.businessName 
+        ? job.businessName 
+        : `${job.firstName} ${job.lastName}`,
+      phone: job.phone || "N/A",
+      email: job.email || "N/A",
+      vehicle: job.vehicles?.[0] 
+        ? `${job.vehicles[0].vehicleYear || ""} ${job.vehicles[0].vehicleMake || ""} ${job.vehicles[0].vehicleModel || ""}`.trim()
+        : "N/A",
+      service: job.vehicles?.[0]?.parts?.[0]?.glassType 
+        ? glassTypeLabels[job.vehicles[0].parts[0].glassType] || job.vehicles[0].parts[0].glassType
+        : "N/A",
+      completedDate: formatDate(job.installDate),
+      total: job.totalDue,
+      paid: job.amountPaid,
+    })).slice(0, 50); // Limit to 50 for performance
+  }, [completedJobs]);
+
+  // Most popular glass parts
+  const popularGlassParts = useMemo(() => {
+    const partCounts: Record<string, number> = {};
+    
+    completedJobs.forEach(job => {
+      job.vehicles.forEach(vehicle => {
+        vehicle.parts.forEach(part => {
+          const glassType = part.glassType || "unknown";
+          partCounts[glassType] = (partCounts[glassType] || 0) + 1;
+        });
+      });
+    });
+    
+    return Object.entries(partCounts)
+      .map(([type, count]) => ({
+        name: glassTypeLabels[type] || type,
+        value: count,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [completedJobs]);
+
+  // Most popular vehicles
+  const popularVehicles = useMemo(() => {
+    const vehicleCounts: Record<string, number> = {};
+    
+    completedJobs.forEach(job => {
+      job.vehicles.forEach(vehicle => {
+        const makeModel = `${vehicle.vehicleMake || "Unknown"} ${vehicle.vehicleModel || ""}`.trim();
+        vehicleCounts[makeModel] = (vehicleCounts[makeModel] || 0) + 1;
+      });
+    });
+    
+    return Object.entries(vehicleCounts)
+      .map(([vehicle, count]) => ({
+        name: vehicle,
+        value: count,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [completedJobs]);
+
   // Jobs by lead source
   const jobsByLeadSource = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -260,21 +523,6 @@ export default function Reports() {
       name: customerTypeLabels[name] || name,
       value,
     })).sort((a, b) => b.value - a.value);
-  }, [completedJobs]);
-
-  // Technician performance
-  const technicianPerformance = useMemo(() => {
-    const techStats: Record<string, { jobs: number; revenue: number; name: string }> = {};
-    completedJobs.forEach(job => {
-      const techId = job.installedBy || "unassigned";
-      const techName = job.installedBy || "Unassigned";
-      if (!techStats[techId]) {
-        techStats[techId] = { jobs: 0, revenue: 0, name: techName };
-      }
-      techStats[techId].jobs += 1;
-      techStats[techId].revenue += job.totalDue;
-    });
-    return Object.values(techStats).sort((a, b) => b.jobs - a.jobs);
   }, [completedJobs]);
 
   // Top customers by revenue
@@ -347,9 +595,11 @@ export default function Reports() {
     );
   }
 
-  const timePeriodLabel = timePeriod === "week" ? "This Week" 
+  const timePeriodLabel = timePeriod === "day" ? "Today"
+    : timePeriod === "week" ? "This Week" 
     : timePeriod === "month" ? "This Month" 
-    : timePeriod === "year" ? "This Year" 
+    : timePeriod === "year" ? "This Year"
+    : timePeriod === "custom" ? "Custom Range"
     : "All Time";
 
   return (
@@ -361,29 +611,55 @@ export default function Reports() {
             Business analytics and insights
           </p>
         </div>
-        <Select value={timePeriod} onValueChange={(v) => setTimePeriod(v as TimePeriod)}>
-          <SelectTrigger className="w-[180px]" data-testid="select-time-period">
-            <SelectValue placeholder="Select period" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="week">This Week</SelectItem>
-            <SelectItem value="month">This Month</SelectItem>
-            <SelectItem value="year">This Year</SelectItem>
-            <SelectItem value="all">All Time</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={timePeriod} onValueChange={(v) => setTimePeriod(v as TimePeriod)}>
+            <SelectTrigger className="w-[160px]" data-testid="select-time-period">
+              <SelectValue placeholder="Select period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="day">Today</SelectItem>
+              <SelectItem value="week">This Week</SelectItem>
+              <SelectItem value="month">This Month</SelectItem>
+              <SelectItem value="year">This Year</SelectItem>
+              <SelectItem value="custom">Custom Range</SelectItem>
+              <SelectItem value="all">All Time</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          {timePeriod === "custom" && (
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="w-[140px]"
+                data-testid="input-start-date"
+              />
+              <span className="text-muted-foreground">to</span>
+              <Input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="w-[140px]"
+                data-testid="input-end-date"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      <Tabs defaultValue="financial" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-flex">
-          <TabsTrigger value="financial" data-testid="tab-financial">Financial</TabsTrigger>
-          <TabsTrigger value="jobs" data-testid="tab-jobs">Jobs</TabsTrigger>
-          <TabsTrigger value="technicians" data-testid="tab-technicians">Technicians</TabsTrigger>
-          <TabsTrigger value="customers" data-testid="tab-customers">Customers</TabsTrigger>
+      <Tabs defaultValue="sales" className="space-y-4">
+        <TabsList className="flex flex-wrap w-full gap-1 h-auto p-1">
+          <TabsTrigger value="sales" data-testid="tab-sales" className="text-xs sm:text-sm">Sales</TabsTrigger>
+          <TabsTrigger value="ar" data-testid="tab-ar" className="text-xs sm:text-sm">A/R Aging</TabsTrigger>
+          <TabsTrigger value="jobs" data-testid="tab-jobs" className="text-xs sm:text-sm">Jobs</TabsTrigger>
+          <TabsTrigger value="team" data-testid="tab-team" className="text-xs sm:text-sm">Team</TabsTrigger>
+          <TabsTrigger value="inventory" data-testid="tab-inventory" className="text-xs sm:text-sm">Inventory</TabsTrigger>
+          <TabsTrigger value="customers" data-testid="tab-customers" className="text-xs sm:text-sm">Customers</TabsTrigger>
         </TabsList>
 
-        {/* Financial Tab */}
-        <TabsContent value="financial" className="space-y-6">
+        {/* Sales Tab */}
+        <TabsContent value="sales" className="space-y-6">
           <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
@@ -413,35 +689,98 @@ export default function Reports() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Materials Cost</CardTitle>
-                <Briefcase className="h-4 w-4 text-orange-500" />
+                <CardTitle className="text-sm font-medium">Jobs Completed</CardTitle>
+                <Briefcase className="h-4 w-4 text-blue-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-materials-cost">
-                  {formatUSD(financialMetrics.materialsCost)}
+                <div className="text-2xl font-bold" data-testid="text-jobs-count">
+                  {financialMetrics.jobCount}
                 </div>
-                <p className="text-xs text-muted-foreground">Parts + accessories</p>
+                <p className="text-xs text-muted-foreground">Avg: {formatUSD(financialMetrics.avgJobValue)}</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Calibration Profit</CardTitle>
-                <Focus className="h-4 w-4 text-purple-500" />
+                <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
+                <Clock className="h-4 w-4 text-amber-500" />
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${financialMetrics.calibrationProfit >= 0 ? 'text-purple-600 dark:text-purple-400' : 'text-red-600 dark:text-red-400'}`} data-testid="text-calibration-profit">
-                  {formatUSD(financialMetrics.calibrationProfit)}
+                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-outstanding">
+                  {formatUSD(financialMetrics.outstanding)}
                 </div>
-                <p className="text-xs text-muted-foreground">{financialMetrics.calibrationCount} calibrations</p>
+                <p className="text-xs text-muted-foreground">Unpaid balance</p>
               </CardContent>
             </Card>
           </div>
 
+          {/* Daily Sales Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Daily Sales ({timePeriodLabel})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                {dailySalesData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dailySalesData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(value: number) => formatUSD(value)} />
+                      <Bar dataKey="amount" fill="#0088FE" name="Sales" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    No sales data for this period
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-4 md:grid-cols-2">
+            {/* Sales by Payment Method */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Revenue by Customer Type</CardTitle>
+                <CardTitle className="text-sm font-medium">Sales by Payment Method</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  {salesByPaymentMethod.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={salesByPaymentMethod}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          dataKey="value"
+                          nameKey="name"
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {salesByPaymentMethod.map((_, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value: number) => formatUSD(value)} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-muted-foreground">
+                      No data for this period
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Revenue by Customer Type */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Sales by Billing Type</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-[300px]">
@@ -473,41 +812,123 @@ export default function Reports() {
                 </div>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Financial Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Jobs Completed</span>
-                    <span className="font-medium">{financialMetrics.jobCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Average Job Value</span>
-                    <span className="font-medium">{formatUSD(financialMetrics.avgJobValue)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Total Collected</span>
-                    <span className="font-medium text-green-600">{formatUSD(financialMetrics.totalCollected)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Outstanding</span>
-                    <span className="font-medium text-amber-600">{formatUSD(financialMetrics.outstanding)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Labor Revenue</span>
-                    <span className="font-medium">{formatUSD(financialMetrics.laborRevenue)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Calibration Revenue</span>
-                    <span className="font-medium">{formatUSD(financialMetrics.calibrationProfit + (financialMetrics.calibrationCount * 100))}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
+
+          {/* Sales Trend Line */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Sales Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[250px]">
+                {dailySalesData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dailySalesData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(value: number) => formatUSD(value)} />
+                      <Line type="monotone" dataKey="amount" stroke="#8884d8" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    No trend data for this period
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* A/R Aging Tab */}
+        <TabsContent value="ar" className="space-y-6">
+          <p className="text-sm text-muted-foreground">
+            Shows all outstanding balances regardless of date filter
+          </p>
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+            {arAgingData.map((bucket, index) => (
+              <Card key={bucket.label}>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">{bucket.label}</CardTitle>
+                  <Clock className={`h-4 w-4 ${
+                    index === 0 ? "text-green-500" : 
+                    index === 1 ? "text-yellow-500" : 
+                    index === 2 ? "text-orange-500" : "text-red-500"
+                  }`} />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${
+                    index === 0 ? "text-green-600 dark:text-green-400" : 
+                    index === 1 ? "text-yellow-600 dark:text-yellow-400" : 
+                    index === 2 ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"
+                  }`}>
+                    {formatUSD(bucket.amount)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{bucket.count} invoice{bucket.count !== 1 ? 's' : ''}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">A/R Aging Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                {arAgingData.some(b => b.amount > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={arAgingData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="label" />
+                      <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(value: number) => formatUSD(value)} />
+                      <Bar dataKey="amount" name="Outstanding">
+                        {arAgingData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={
+                            index === 0 ? "#22c55e" : 
+                            index === 1 ? "#eab308" : 
+                            index === 2 ? "#f97316" : "#ef4444"
+                          } />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    No outstanding balances
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Total Outstanding: {formatUSD(arAgingData.reduce((sum, b) => sum + b.amount, 0))}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {arAgingData.map((bucket, index) => (
+                  <div key={bucket.label} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${
+                        index === 0 ? "bg-green-500" : 
+                        index === 1 ? "bg-yellow-500" : 
+                        index === 2 ? "bg-orange-500" : "bg-red-500"
+                      }`} />
+                      <span className="text-sm">{bucket.label}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-medium">{formatUSD(bucket.amount)}</span>
+                      <span className="text-muted-foreground text-sm ml-2">({bucket.count})</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Jobs Tab */}
@@ -566,6 +987,60 @@ export default function Reports() {
                   {filteredJobs.filter(j => j.pipelineStage === "lost_opportunity").length}
                 </div>
                 <p className="text-xs text-muted-foreground">Lost opportunities</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Most Popular Glass Parts */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Most Popular Glass Parts</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  {popularGlassParts.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={popularGlassParts} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" />
+                        <YAxis dataKey="name" type="category" width={120} />
+                        <Tooltip />
+                        <Bar dataKey="value" fill="#8884d8" name="Jobs" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-muted-foreground">
+                      No data for this period
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Most Popular Vehicles */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Most Popular Vehicles</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  {popularVehicles.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={popularVehicles} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" />
+                        <YAxis dataKey="name" type="category" width={120} />
+                        <Tooltip />
+                        <Bar dataKey="value" fill="#00C49F" name="Jobs" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-muted-foreground">
+                      No data for this period
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -631,110 +1106,170 @@ export default function Reports() {
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Jobs by Customer Type</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[250px]">
-                {jobsByCustomerType.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={jobsByCustomerType}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#00C49F" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-muted-foreground">
-                    No data for this period
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
-        {/* Technicians Tab */}
-        <TabsContent value="technicians" className="space-y-6">
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-3">
+        {/* Team Tab (CSR + Technicians) */}
+        <TabsContent value="team" className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Jobs by Lead Source (proxy for CSR performance) */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Completed</CardTitle>
-                <Truck className="h-4 w-4 text-blue-500" />
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Jobs by Lead Source</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-tech-total">
-                  {completedJobs.length}
-                </div>
-                <p className="text-xs text-muted-foreground">{timePeriodLabel}</p>
+                {jobsByCSR.length > 0 ? (
+                  <div className="space-y-4">
+                    {jobsByCSR.map((csr, index) => (
+                      <div key={csr.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/10 text-blue-500 font-medium text-sm">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <div className="font-medium">{csr.name}</div>
+                            <div className="text-sm text-muted-foreground">{csr.jobs} jobs sold</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-medium text-green-600 dark:text-green-400">
+                            {formatUSD(csr.revenue)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Avg: {formatUSD(csr.revenue / csr.jobs)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-muted-foreground">
+                    No CSR data for this period
+                  </div>
+                )}
               </CardContent>
             </Card>
 
+            {/* Jobs per Installer */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Active Technicians</CardTitle>
-                <Users className="h-4 w-4 text-green-500" />
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Jobs per Installer</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {technicianPerformance.filter(t => t.name !== "Unassigned").length}
-                </div>
-                <p className="text-xs text-muted-foreground">With completed jobs</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Avg per Tech</CardTitle>
-                <TrendingUp className="h-4 w-4 text-purple-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {technicianPerformance.filter(t => t.name !== "Unassigned").length > 0 
-                    ? (completedJobs.length / technicianPerformance.filter(t => t.name !== "Unassigned").length).toFixed(1)
-                    : "0"}
-                </div>
-                <p className="text-xs text-muted-foreground">Jobs per technician</p>
+                {technicianPerformance.length > 0 ? (
+                  <div className="space-y-4">
+                    {technicianPerformance.map((tech, index) => (
+                      <div key={tech.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-500/10 text-purple-500 font-medium text-sm">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <div className="font-medium">{tech.name}</div>
+                            <div className="text-sm text-muted-foreground">{tech.jobs} jobs installed</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-medium text-green-600 dark:text-green-400">
+                            {formatUSD(tech.revenue)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Avg: {formatUSD(tech.revenue / tech.jobs)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-muted-foreground">
+                    No installer data for this period
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Jobs by Lead Source Chart</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  {jobsByCSR.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={jobsByCSR}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="jobs" fill="#0088FE" name="Jobs Sold" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-muted-foreground">
+                      No data for this period
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Installer Performance Chart</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  {technicianPerformance.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={technicianPerformance}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="jobs" fill="#8884d8" name="Jobs Installed" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-muted-foreground">
+                      No data for this period
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Inventory Tab */}
+        <TabsContent value="inventory" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Technician Performance</CardTitle>
+              <CardTitle className="text-sm font-medium">Purchases by Distributor</CardTitle>
             </CardHeader>
             <CardContent>
-              {technicianPerformance.length > 0 ? (
+              {purchasesByDistributor.length > 0 ? (
                 <div className="space-y-4">
-                  {technicianPerformance.map((tech, index) => (
-                    <div key={tech.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  {purchasesByDistributor.map((dist, index) => (
+                    <div key={dist.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-medium text-sm">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/10 text-orange-500 font-medium text-sm">
                           {index + 1}
                         </div>
                         <div>
-                          <div className="font-medium">{tech.name}</div>
-                          <div className="text-sm text-muted-foreground">{tech.jobs} jobs completed</div>
+                          <div className="font-medium">{dist.name}</div>
+                          <div className="text-sm text-muted-foreground">{dist.parts} parts ordered</div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-medium text-green-600 dark:text-green-400">
-                          {formatUSD(tech.revenue)}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Avg: {formatUSD(tech.revenue / tech.jobs)}
-                        </div>
+                      <div className="font-medium text-orange-600 dark:text-orange-400">
+                        {formatUSD(dist.cost)}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="py-8 text-center text-muted-foreground">
-                  No technician data for this period
+                  No distributor data for this period
                 </div>
               )}
             </CardContent>
@@ -742,18 +1277,18 @@ export default function Reports() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Jobs by Technician</CardTitle>
+              <CardTitle className="text-sm font-medium">Purchases by Distributor Chart</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-[300px]">
-                {technicianPerformance.length > 0 ? (
+                {purchasesByDistributor.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={technicianPerformance}>
+                    <BarChart data={purchasesByDistributor} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="jobs" fill="#8884d8" name="Jobs" />
+                      <XAxis type="number" tickFormatter={(value) => formatUSD(value)} />
+                      <YAxis dataKey="name" type="category" width={120} />
+                      <Tooltip formatter={(value: number) => formatUSD(value)} />
+                      <Bar dataKey="cost" fill="#f97316" name="Total Cost" />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -854,28 +1389,50 @@ export default function Reports() {
             </CardContent>
           </Card>
 
+          {/* Customer Detail Report */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Revenue by Top Customers</CardTitle>
+              <CardTitle className="text-sm font-medium">Customer Detail Report (Completed Jobs)</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px]">
-                {topCustomers.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topCustomers.slice(0, 5)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" tickFormatter={(value) => formatUSD(value)} />
-                      <YAxis dataKey="name" type="category" width={120} />
-                      <Tooltip formatter={(value: number) => formatUSD(value)} />
-                      <Bar dataKey="revenue" fill="#00C49F" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-muted-foreground">
-                    No data for this period
-                  </div>
-                )}
-              </div>
+              {customerDetailData.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Job #</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Vehicle</TableHead>
+                        <TableHead>Service</TableHead>
+                        <TableHead>Completed</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">Paid</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {customerDetailData.map((row) => (
+                        <TableRow key={row.jobNumber}>
+                          <TableCell className="font-medium">{row.jobNumber}</TableCell>
+                          <TableCell>{row.customerName}</TableCell>
+                          <TableCell>{row.phone}</TableCell>
+                          <TableCell>{row.vehicle}</TableCell>
+                          <TableCell>{row.service}</TableCell>
+                          <TableCell>{row.completedDate}</TableCell>
+                          <TableCell className="text-right">{formatUSD(row.total)}</TableCell>
+                          <TableCell className={`text-right ${row.paid < row.total ? 'text-amber-600' : 'text-green-600'}`}>
+                            {formatUSD(row.paid)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  No completed jobs for this period
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
