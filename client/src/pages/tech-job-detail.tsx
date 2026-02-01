@@ -121,7 +121,8 @@ export default function TechJobDetail() {
       );
     }
     
-    if (glassTypes.hasBackGlass) {
+    // Only show back glass instructions if there's no windshield (to avoid confusing the customer)
+    if (glassTypes.hasBackGlass && !glassTypes.hasWindshield) {
       instructions.push(
         "If possible, could you please:\n" +
         "-Park in an area where both rear can be fully opened\n\n" +
