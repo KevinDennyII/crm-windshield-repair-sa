@@ -89,6 +89,7 @@ import {
 import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 import { EmailComposeModal } from "@/components/email-compose-modal";
+import { QuoteSendModal } from "@/components/quote-send-modal";
 import { CustomerReminderPopup } from "@/components/customer-reminder-popup";
 import { SetReminderDialog } from "@/components/set-reminder-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -489,6 +490,7 @@ export function JobDetailModal({
   const [showInsurance, setShowInsurance] = useState(false);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [receiptPreviewJob, setReceiptPreviewJob] = useState<Job | null>(null);
   const [decodingVin, setDecodingVin] = useState<string | null>(null);
   const [showReminderPopup, setShowReminderPopup] = useState(false);
@@ -2681,7 +2683,12 @@ export function JobDetailModal({
             <div className="flex items-center gap-2 flex-wrap">
               {!isNew && job && (
                 <>
-                  <Button type="button" variant="outline" data-testid="button-send-quote">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setShowQuoteModal(true)}
+                    data-testid="button-send-quote"
+                  >
                     <Send className="h-4 w-4 mr-2" />
                     Send Quote
                   </Button>
@@ -2738,6 +2745,14 @@ export function JobDetailModal({
           job={job}
           open={showEmailModal}
           onOpenChange={setShowEmailModal}
+        />
+      )}
+
+      {job && (
+        <QuoteSendModal
+          job={job}
+          open={showQuoteModal}
+          onOpenChange={setShowQuoteModal}
         />
       )}
 

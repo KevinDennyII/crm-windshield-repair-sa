@@ -1089,6 +1089,100 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  // Quote sending endpoints
+  app.post("/api/quote/send-email", async (req, res) => {
+    try {
+      const quoteSchema = z.object({
+        jobId: z.string(),
+        to: z.string().email(),
+        content: z.string(),
+      });
+      
+      const parsed = quoteSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request", errors: parsed.error.issues });
+      }
+      
+      const job = await storage.getJob(parsed.data.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const vehicle = job.vehicles?.[0];
+      const vehicleInfo = vehicle 
+        ? `${vehicle.vehicleYear || ""} ${vehicle.vehicleMake || ""} ${vehicle.vehicleModel || ""}`.trim()
+        : "Your Vehicle";
+      
+      const subject = `Your Quote from Windshield Repair SA - ${vehicleInfo}`;
+      
+      await sendEmail(parsed.data.to, subject, parsed.data.content);
+      
+      // Log activity
+      const currentUser = await getCurrentUser(req as any);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'email_sent',
+          'communications',
+          parsed.data.jobId,
+          `Sent quote email to ${parsed.data.to}`
+        );
+      }
+      
+      res.json({ message: "Quote email sent successfully" });
+    } catch (error: any) {
+      console.error("Failed to send quote email:", error);
+      res.status(500).json({ message: error.message || "Failed to send quote email" });
+    }
+  });
+
+  app.post("/api/quote/send-sms", async (req, res) => {
+    try {
+      if (!isTwilioConfigured()) {
+        return res.status(400).json({ message: "Twilio is not configured" });
+      }
+      
+      const quoteSchema = z.object({
+        jobId: z.string(),
+        to: z.string(),
+        content: z.string(),
+      });
+      
+      const parsed = quoteSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request", errors: parsed.error.issues });
+      }
+      
+      const job = await storage.getJob(parsed.data.jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      await sendSms(parsed.data.to, parsed.data.content);
+      
+      // Log activity
+      const currentUser = await getCurrentUser(req as any);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'sms_sent',
+          'communications',
+          parsed.data.jobId,
+          `Sent quote SMS to ${parsed.data.to}`
+        );
+      }
+      
+      res.json({ message: "Quote SMS sent successfully" });
+    } catch (error: any) {
+      console.error("Failed to send quote SMS:", error);
+      res.status(500).json({ message: error.message || "Failed to send quote SMS" });
+    }
+  });
+
   // Bluehost email endpoints
   app.get("/api/bluehost/status", async (req, res) => {
     res.json({ 
