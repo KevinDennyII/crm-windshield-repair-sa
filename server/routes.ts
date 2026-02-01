@@ -455,6 +455,69 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  // Send invoice email to dealer (requires authentication)
+  app.post("/api/email/send-invoice", isAuthenticated, async (req, res) => {
+    try {
+      const invoiceSchema = z.object({
+        jobId: z.string().min(1, "Job ID is required"),
+        toEmail: z.string().email("Valid email is required"),
+        pdfBase64: z.string().min(1, "PDF content is required"),
+        filename: z.string().min(1, "Filename is required"),
+      });
+      
+      const parsed = invoiceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          message: "Invalid invoice data", 
+          errors: parsed.error.errors 
+        });
+      }
+
+      const { jobId, toEmail, pdfBase64, filename } = parsed.data;
+      
+      // Get job details for the email
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      const customerName = job.isBusiness && job.businessName 
+        ? job.businessName 
+        : `${job.firstName} ${job.lastName}`;
+      
+      const subject = `Invoice #${job.jobNumber} - Windshield Repair SA`;
+      
+      const body = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #29ABE2;">Invoice from Windshield Repair SA</h2>
+          <p>Dear ${customerName},</p>
+          <p>Please find attached the invoice for Job #${job.jobNumber}.</p>
+          <p><strong>Total Due:</strong> $${job.totalDue.toFixed(2)}</p>
+          ${job.balanceDue > 0 ? `<p><strong>Balance Due:</strong> $${job.balanceDue.toFixed(2)}</p>` : ''}
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p style="color: #666; font-size: 12px;">
+            Windshield Repair SA<br />
+            901 SE Military Hwy #C051<br />
+            San Antonio, TX 78214<br />
+            Phone: (210) 890-0210<br />
+            Email: windshieldrepairsa@gmail.com
+          </p>
+        </div>
+      `;
+
+      await sendEmailWithAttachment(toEmail, subject, body, {
+        filename,
+        base64: pdfBase64,
+        mimeType: 'application/pdf'
+      });
+
+      res.json({ message: "Invoice sent successfully" });
+    } catch (error: any) {
+      console.error("Failed to send invoice:", error);
+      res.status(500).json({ message: error.message || "Failed to send invoice" });
+    }
+  });
+
   // Check if Twilio is configured
   app.get("/api/sms/status", async (req, res) => {
     res.json({ 

@@ -3,8 +3,9 @@ import { useRoute, Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mail, Check } from "lucide-react";
 import type { Job } from "@shared/schema";
+import { generateReceiptPreview } from "@/lib/receipt-generator";
 
 export default function TechSignature() {
   const [, params] = useRoute("/tech/job/:id/signature");
@@ -14,6 +15,8 @@ export default function TechSignature() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
+  const [isSendingInvoice, setIsSendingInvoice] = useState(false);
+  const [invoiceSent, setInvoiceSent] = useState(false);
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -132,16 +135,86 @@ export default function TechSignature() {
     if (!job) return;
     
     const canvas = canvasRef.current;
-    if (!canvas) return;
     
-    // Get signature as base64 image
-    const signatureImage = canvas.toDataURL("image/png");
+    // For dealer jobs, signature is optional
+    const isDealer = job.customerType === 'dealer';
+    
+    // Get signature as base64 image (if signature exists)
+    let signatureImage: string | undefined;
+    if (canvas && hasSignature) {
+      signatureImage = canvas.toDataURL("image/png");
+    }
     
     completeJobMutation.mutate({
       pipelineStage: "paid_completed",
-      paymentStatus: "paid",
-      signatureImage: signatureImage,
+      paymentStatus: isDealer ? job.paymentStatus : "paid",
+      ...(signatureImage && { signatureImage }),
     });
+  };
+
+  const handleSendInvoice = async () => {
+    if (!job || !job.email) {
+      toast({
+        title: "No Email",
+        description: "This dealer does not have an email address on file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSendingInvoice(true);
+    try {
+      // Generate the PDF receipt/invoice
+      const canvas = canvasRef.current;
+      let signatureImage: string | undefined;
+      if (canvas && hasSignature) {
+        signatureImage = canvas.toDataURL("image/png");
+      }
+      
+      const receipt = await generateReceiptPreview(job, { signatureImage });
+      
+      // Convert blob URL to base64
+      const response = await fetch(receipt.blobUrl);
+      const blob = await response.blob();
+      const reader = new FileReader();
+      
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onloadend = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          resolve(base64);
+        };
+        reader.readAsDataURL(blob);
+      });
+      
+      const pdfBase64 = await base64Promise;
+      
+      // Send the invoice via email
+      const sendResponse = await apiRequest("POST", "/api/email/send-invoice", {
+        jobId: job.id,
+        toEmail: job.email,
+        pdfBase64,
+        filename: receipt.filename,
+      });
+      
+      if (!sendResponse.ok) {
+        throw new Error("Failed to send invoice");
+      }
+      
+      setInvoiceSent(true);
+      toast({
+        title: "Invoice Sent",
+        description: `Invoice sent to ${job.email}`,
+      });
+    } catch (error) {
+      console.error("Failed to send invoice:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send invoice. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingInvoice(false);
+    }
   };
 
   const handleCancel = () => {
@@ -164,22 +237,67 @@ export default function TechSignature() {
     );
   }
 
+  const isDealer = job.customerType === 'dealer';
+  const canComplete = isDealer || hasSignature;
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <main className="flex-1 flex items-center justify-center p-4">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full border border-gray-200 touch-none"
-          style={{ minHeight: "400px", backgroundColor: "#1E3A5F" }}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
-          data-testid="canvas-signature"
-        />
+      {/* Header for dealer jobs */}
+      {isDealer && (
+        <div className="px-4 py-3" style={{ backgroundColor: "#29ABE2" }}>
+          <p className="text-white text-center font-medium">
+            Dealer Job - Signature Optional
+          </p>
+        </div>
+      )}
+
+      <main className="flex-1 flex flex-col p-4">
+        {/* Signature canvas */}
+        <div className="flex-1 flex items-center justify-center">
+          <canvas
+            ref={canvasRef}
+            className="w-full h-full border border-gray-200 touch-none"
+            style={{ minHeight: "300px", backgroundColor: "#1E3A5F" }}
+            onMouseDown={startDrawing}
+            onMouseMove={draw}
+            onMouseUp={stopDrawing}
+            onMouseLeave={stopDrawing}
+            onTouchStart={startDrawing}
+            onTouchMove={draw}
+            onTouchEnd={stopDrawing}
+            data-testid="canvas-signature"
+          />
+        </div>
+
+        {/* Send Invoice button for dealer jobs */}
+        {isDealer && job.email && (
+          <div className="mt-4">
+            <button
+              onClick={handleSendInvoice}
+              disabled={isSendingInvoice || invoiceSent}
+              className="w-full py-4 rounded-lg text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
+              style={{ backgroundColor: invoiceSent ? "#22C55E" : "#6366F1" }}
+              data-testid="button-send-invoice"
+            >
+              {isSendingInvoice ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Sending Invoice...
+                </>
+              ) : invoiceSent ? (
+                <>
+                  <Check className="w-5 h-5" />
+                  Invoice Sent to {job.email}
+                </>
+              ) : (
+                <>
+                  <Mail className="w-5 h-5" />
+                  Send Invoice to Dealer
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </main>
 
       <footer className="grid grid-cols-3">
@@ -201,7 +319,7 @@ export default function TechSignature() {
         </button>
         <button
           onClick={handleDone}
-          disabled={!hasSignature || completeJobMutation.isPending}
+          disabled={!canComplete || completeJobMutation.isPending}
           className="py-4 text-center font-semibold disabled:opacity-50"
           style={{ backgroundColor: "#22C55E", color: "white" }}
           data-testid="button-done"
