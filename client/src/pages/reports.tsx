@@ -457,6 +457,22 @@ export default function Reports() {
     return Object.values(techStats).sort((a, b) => b.jobs - a.jobs);
   }, [completedJobs]);
 
+  // Normalize distributor name (consolidate variations of Mygrant)
+  const normalizeDistributor = (distributor: string | undefined): string => {
+    if (!distributor) return "Unknown";
+    const normalized = distributor.trim().toLowerCase();
+    if (normalized === "myg" || normalized === "mygrant") {
+      return "Mygrant";
+    }
+    if (normalized === "pgw") {
+      return "PGW";
+    }
+    if (normalized === "" || normalized === "n/a") {
+      return "Unknown";
+    }
+    return distributor; // Return original if not matching known distributors
+  };
+
   // Purchases by distributor
   const purchasesByDistributor = useMemo(() => {
     const distributorTotals: Record<string, { parts: number; cost: number }> = {};
@@ -464,7 +480,7 @@ export default function Reports() {
     completedJobs.forEach(job => {
       job.vehicles.forEach(vehicle => {
         vehicle.parts.forEach(part => {
-          const distributor = part.distributor || "Unknown";
+          const distributor = normalizeDistributor(part.distributor);
           if (!distributorTotals[distributor]) {
             distributorTotals[distributor] = { parts: 0, cost: 0 };
           }

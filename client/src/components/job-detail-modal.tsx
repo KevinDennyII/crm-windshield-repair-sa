@@ -1834,19 +1834,25 @@ export function JobDetailModal({
                                               </div>
                                               <div className="grid gap-2">
                                                 <Label>Distributor</Label>
-                                                <Input
-                                                  value={part.distributor}
-                                                  onChange={(e) =>
+                                                <Select
+                                                  value={part.distributor || ""}
+                                                  onValueChange={(value) =>
                                                     handlePartChange(
                                                       vehicle.id,
                                                       part.id,
                                                       "distributor",
-                                                      e.target.value
+                                                      value
                                                     )
                                                   }
-                                                  placeholder="Pilkington"
-                                                  data-testid={`input-part-distributor-${part.id}`}
-                                                />
+                                                >
+                                                  <SelectTrigger data-testid={`select-part-distributor-${part.id}`}>
+                                                    <SelectValue placeholder="Select distributor" />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    <SelectItem value="Mygrant">Mygrant</SelectItem>
+                                                    <SelectItem value="PGW">PGW</SelectItem>
+                                                  </SelectContent>
+                                                </Select>
                                               </div>
                                             </div>
                                             
