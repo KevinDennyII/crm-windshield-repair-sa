@@ -23,8 +23,22 @@ Preferred communication style: Simple, everyday language.
 - **Production**: Static file serving
 
 ### Authentication & Authorization
-- **Auth Provider**: Replit Auth (OIDC)
-- **User Roles**: Admin, CSR, Technician, Reports with role-based access control.
+- **Auth Provider**: Replit Auth (OIDC) and username/password authentication for staff accounts
+- **User Roles**: Admin, CSR, Technician, Reports with role-based access control
+- **Password Security**: bcrypt hashing with 10 rounds for staff passwords
+
+### Staff Account Management (Admin Only)
+- **Staff Accounts page** (`/staff`): Admin interface to create, edit, and disable staff accounts
+- **Fields**: Username (min 3 chars), password (min 6 chars, bcrypt hashed), first/last name, email, role
+- **Status**: Active/disabled toggle to control account access
+
+### CSR Activity Tracking & Reporting (Admin Only)
+- **Activity Logs table**: Tracks all user actions with timestamps
+- **Tracked Actions**: login, logout, job_created, job_stage_changed, payment_recorded, email_sent, email_replied, sms_sent, calendar_event_created, contact_created
+- **CSR Activity Report** (`/csr-activity`): Admin dashboard with:
+  - Date range filtering (last 7 days default)
+  - User summary cards: total actions, jobs created, stage changes, emails/SMS sent, login count
+  - Detailed activity log table with action details and timestamps
 
 ### Technician Mobile Portal
 A mobile-optimized interface for field technicians featuring:
