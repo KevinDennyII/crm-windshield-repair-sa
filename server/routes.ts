@@ -610,7 +610,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         );
       }
       
-      // Auto-create Google Calendar event when stage changes to "scheduled"
+      // Auto-create Google Calendar event when stage changes to "scheduled" (only if dates are set)
       if (parsed.data.pipelineStage === 'scheduled' && 
           previousStage !== 'scheduled' &&
           job.installDate && job.installTime) {
@@ -639,6 +639,110 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
           }
         } catch (calendarError: any) {
           console.error("Failed to create calendar event:", calendarError.message);
+        }
+      }
+      
+      // Send appointment confirmation email and SMS when stage changes to "scheduled"
+      if (parsed.data.pipelineStage === 'scheduled' && previousStage !== 'scheduled') {
+        // Send appointment confirmation email and SMS
+        try {
+          const vehicle = job.vehicles?.[0];
+          const vehicleInfo = vehicle 
+            ? `${vehicle.vehicleYear || ""} ${vehicle.vehicleMake || ""} ${vehicle.vehicleModel || ""}`.trim()
+            : "Your Vehicle";
+          
+          // Get service type and glass type from parts
+          const parts = vehicle?.parts || [];
+          const serviceTypes = Array.from(new Set(parts.map(p => p.serviceType === 'repair' ? 'Repair' : p.serviceType === 'replace' ? 'Replacement' : 'Calibration')));
+          const glassTypes = Array.from(new Set(parts.map(p => {
+            const glassMap: Record<string, string> = {
+              'windshield': 'Windshield',
+              'door_glass': 'Door Glass',
+              'back_glass': 'Back Glass',
+              'back_glass_powerslide': 'Back Glass (Powerslide)',
+              'quarter_glass': 'Quarter Glass',
+              'sunroof': 'Sunroof',
+              'side_mirror': 'Side Mirror'
+            };
+            return glassMap[p.glassType] || p.glassType;
+          })));
+          
+          // Format date nicely
+          const formatDate = (dateStr: string) => {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+          };
+          
+          // Format time frame
+          const timeFrameMap: Record<string, string> = {
+            'am': 'Morning (8am-12pm)',
+            'pm': 'Afternoon (12pm-5pm)',
+            'anytime': 'Anytime'
+          };
+          
+          const confirmationMessage = `Thank you for scheduling your auto glass service with Windshield Repair SA! If all information is correct can you reply with "confirm".
+
+Service day: ${job.installDate ? formatDate(job.installDate) : 'TBD'}
+Time frame: ${job.installTime ? timeFrameMap[job.installTime] || job.installTime : 'TBD'}
+Vehicle: ${vehicleInfo}
+Service: ${serviceTypes.join(', ') || 'Auto Glass Service'}
+Glass: ${glassTypes.join(', ') || 'TBD'}
+Address: ${job.streetAddress || 'TBD'}
+Total price: $${Number(job.totalDue || 0).toFixed(2)}
+Payment method: ${job.paymentMethod || 'TBD'}
+
+Please be sure to be onsite so we can take payment before start work and please keep in mind that our technician do not have change on hand (if paying cash)
+
+Please let us know of any changes.`;
+
+          // Send email if customer has email
+          if (job.email) {
+            try {
+              const subject = `Appointment Confirmation - Windshield Repair SA - ${vehicleInfo}`;
+              await sendEmail(job.email, subject, confirmationMessage);
+              
+              if (currentUser) {
+                await logActivity(
+                  currentUser.id,
+                  currentUser.username,
+                  currentUser.role,
+                  'email_sent',
+                  'communications',
+                  job.id,
+                  job.jobNumber,
+                  { type: 'appointment_confirmation', to: job.email }
+                );
+              }
+              console.log("Sent appointment confirmation email to:", job.email);
+            } catch (emailError: any) {
+              console.error("Failed to send confirmation email:", emailError.message);
+            }
+          }
+          
+          // Send SMS if customer has phone and Twilio is configured
+          if (job.phone && isTwilioConfigured()) {
+            try {
+              await sendSms(job.phone, confirmationMessage);
+              
+              if (currentUser) {
+                await logActivity(
+                  currentUser.id,
+                  currentUser.username,
+                  currentUser.role,
+                  'sms_sent',
+                  'communications',
+                  job.id,
+                  job.jobNumber,
+                  { type: 'appointment_confirmation', to: job.phone }
+                );
+              }
+              console.log("Sent appointment confirmation SMS to:", job.phone);
+            } catch (smsError: any) {
+              console.error("Failed to send confirmation SMS:", smsError.message);
+            }
+          }
+        } catch (confirmationError: any) {
+          console.error("Failed to send appointment confirmation:", confirmationError.message);
         }
       }
       
