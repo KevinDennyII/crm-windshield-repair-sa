@@ -71,6 +71,105 @@ export default function TechJobDetail() {
     },
   });
 
+  // Helper function to detect glass types from job parts
+  const getGlassTypes = (job: Job): { hasWindshield: boolean; hasDoorGlass: boolean; hasBackGlass: boolean } => {
+    const result = { hasWindshield: false, hasDoorGlass: false, hasBackGlass: false };
+    
+    for (const vehicle of job.vehicles || []) {
+      for (const part of vehicle.parts || []) {
+        const glassType = part.glassType?.toLowerCase() || "";
+        if (glassType === "windshield") {
+          result.hasWindshield = true;
+        } else if (glassType === "door_glass") {
+          result.hasDoorGlass = true;
+        } else if (glassType === "back_glass" || glassType === "back_glass_powerslide") {
+          result.hasBackGlass = true;
+        }
+      }
+    }
+    
+    return result;
+  };
+
+  // Build "On My Way" message based on glass types
+  const buildOnMyWayMessage = (job: Job): string => {
+    const customerName = job.firstName || "there";
+    const glassTypes = getGlassTypes(job);
+    
+    // Start message
+    let message = `Hi ${customerName}, Good news, your technician is on the way!\n\n`;
+    
+    // Add glass-specific instructions
+    const instructions: string[] = [];
+    
+    if (glassTypes.hasWindshield) {
+      instructions.push(
+        "If possible, could you please:\n" +
+        "-Park in an area where both front doors can be fully opened\n\n" +
+        "-If parked in a driveway, preferably park facing the street. If it's a 2 car driveway, preferably have the spot next to your vehicle available\n\n" +
+        "-Remove any stickers you'd like to keep from the current windshield, as well as personal belongings from the dashboard area and front seats"
+      );
+    }
+    
+    if (glassTypes.hasDoorGlass) {
+      instructions.push(
+        "If possible, could you please:\n" +
+        "-Park in an area where the door can be fully opened\n" +
+        "-Park near an outlet so we can vacuum as much glass as we can (We do have an extension cord). If no outlet is available, we may not be able to vacuum glass debris\n" +
+        "-Be present on-site with the vehicle keys, so we can make sure the door elevator is functioning.\n\n" +
+        "In some cases, broken glass may affect the window elevator inside the door. If this happens, your technician will let you know and that part will have to be repaired by a mechanic."
+      );
+    }
+    
+    if (glassTypes.hasBackGlass) {
+      instructions.push(
+        "If possible, could you please:\n" +
+        "-Park in an area where both rear can be fully opened\n\n" +
+        "-If parked in a driveway, preferably park facing the house/building. If it's a 2 car driveway, preferably have the spot next to your vehicle available\n\n" +
+        "-Remove any stickers you'd like to keep from the current glass, as well as personal belongings from the trunk (or truck bed) area and back seats."
+      );
+    }
+    
+    // Join all instructions with spacing
+    if (instructions.length > 0) {
+      message += instructions.join("\n\n") + "\n\n";
+    }
+    
+    // End message
+    message += "As a reminder, we process payment at the beginning of the appointment. If you're paying cash, please have exact change as our technicians do not carry any change.\n\n";
+    message += "Thank you, see you soon!";
+    
+    return message;
+  };
+
+  // Send "On My Way" SMS mutation
+  const sendOnMyWayMutation = useMutation({
+    mutationFn: async () => {
+      if (!job) throw new Error("Job not found");
+      if (!job.phone) throw new Error("Customer has no phone number");
+      
+      const message = buildOnMyWayMessage(job);
+      
+      const response = await apiRequest("POST", `/api/sms/jobs/${jobId}/send`, {
+        body: message
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Message Sent",
+        description: "On My Way notification sent to customer.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send notification",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#29ABE2" }}>
@@ -130,7 +229,21 @@ export default function TechJobDetail() {
   };
 
   const toggleTask = (task: keyof typeof taskStatus) => {
-    setTaskStatus(prev => ({ ...prev, [task]: !prev[task] }));
+    const newValue = !taskStatus[task];
+    setTaskStatus(prev => ({ ...prev, [task]: newValue }));
+    
+    // Send "On My Way" SMS when the task is toggled ON
+    if (task === "onMyWay" && newValue) {
+      if (!job?.phone) {
+        toast({
+          title: "Cannot Send Notification",
+          description: "Customer has no phone number on file.",
+          variant: "destructive",
+        });
+      } else {
+        sendOnMyWayMutation.mutate();
+      }
+    }
   };
 
   const calculateTax = () => {
