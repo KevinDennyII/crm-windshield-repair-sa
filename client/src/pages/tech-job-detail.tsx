@@ -150,7 +150,7 @@ export default function TechJobDetail() {
       
       const message = buildOnMyWayMessage(job);
       
-      const response = await apiRequest("POST", `/api/sms/jobs/${jobId}/send`, {
+      const response = await apiRequest("POST", `/api/jobs/${jobId}/sms`, {
         body: message
       });
       return response.json();
