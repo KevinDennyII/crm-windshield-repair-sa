@@ -45,6 +45,11 @@ A mobile-optimized interface for field technicians featuring:
 - **Dashboard**: Job summaries.
 - **Job Details**: Customer info, vehicle info, task checklist.
 - **Job Completion**: Photo capture, signature, payment collection.
+- **On My Way SMS**: When technician clicks "On My Way" task, an SMS is automatically sent to the customer with glass-type-specific preparation instructions:
+  - **Windshield**: Park with front doors accessible, face street, remove stickers from dashboard
+  - **Door Glass**: Park near outlet for vacuuming, be present with keys, warning about window elevator
+  - **Back Glass**: Park facing house/building, clear trunk/bed area
+  - All messages include payment reminder about cash/exact change
 - **Design**: Blue header theme (#29ABE2), large touch-friendly buttons.
 
 ### Data Layer
