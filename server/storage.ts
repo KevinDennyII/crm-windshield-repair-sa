@@ -1,7 +1,7 @@
-import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, jobs, users, customerReminders, contacts } from "@shared/schema";
+import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, type ActivityLog, type InsertActivityLog, jobs, users, customerReminders, contacts, activityLogs } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, sql, max } from "drizzle-orm";
+import { eq, desc, sql, max, and, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -30,6 +30,15 @@ export interface IStorage {
   updateContact(id: string, contact: Partial<InsertContact>): Promise<Contact | undefined>;
   deleteContact(id: string): Promise<boolean>;
   syncContactFromJob(job: Job): Promise<Contact>;
+  
+  // Activity logs
+  createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
+  getActivityLogs(filters?: { userId?: string; startDate?: Date; endDate?: Date; actionType?: string }): Promise<ActivityLog[]>;
+  getActivityLogsByUser(userId: string, limit?: number): Promise<ActivityLog[]>;
+  
+  // User management
+  getAllUsers(): Promise<User[]>;
+  updateUser(id: string, updates: Partial<UpsertUser>): Promise<User | undefined>;
 }
 
 function createDefaultPart(overrides: Partial<Part> = {}): Part {
@@ -469,6 +478,115 @@ export class DatabaseStorage implements IStorage {
       businessName: job.businessName,
       autoSynced: true,
     });
+  }
+
+  // Activity log methods
+  async createActivityLog(log: InsertActivityLog): Promise<ActivityLog> {
+    const id = randomUUID();
+    await db.insert(activityLogs).values({
+      id,
+      userId: log.userId,
+      username: log.username,
+      userRole: log.userRole || null,
+      actionType: log.actionType,
+      actionCategory: log.actionCategory,
+      jobId: log.jobId || null,
+      jobNumber: log.jobNumber || null,
+      details: log.details || {},
+    });
+    
+    const result = await db.select().from(activityLogs).where(eq(activityLogs.id, id));
+    const row = result[0];
+    return {
+      id: row.id,
+      userId: row.userId,
+      username: row.username,
+      userRole: row.userRole ?? undefined,
+      actionType: row.actionType,
+      actionCategory: row.actionCategory,
+      jobId: row.jobId ?? undefined,
+      jobNumber: row.jobNumber ?? undefined,
+      details: (row.details as Record<string, any>) ?? undefined,
+      createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+    };
+  }
+
+  async getActivityLogs(filters?: { userId?: string; startDate?: Date; endDate?: Date; actionType?: string }): Promise<ActivityLog[]> {
+    const conditions = [];
+    
+    if (filters?.userId) {
+      conditions.push(eq(activityLogs.userId, filters.userId));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(activityLogs.createdAt, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(activityLogs.createdAt, filters.endDate));
+    }
+    if (filters?.actionType) {
+      conditions.push(eq(activityLogs.actionType, filters.actionType));
+    }
+    
+    const rows = conditions.length > 0
+      ? await db.select().from(activityLogs).where(and(...conditions)).orderBy(desc(activityLogs.createdAt))
+      : await db.select().from(activityLogs).orderBy(desc(activityLogs.createdAt));
+    
+    return rows.map(row => ({
+      id: row.id,
+      userId: row.userId,
+      username: row.username,
+      userRole: row.userRole ?? undefined,
+      actionType: row.actionType,
+      actionCategory: row.actionCategory,
+      jobId: row.jobId ?? undefined,
+      jobNumber: row.jobNumber ?? undefined,
+      details: (row.details as Record<string, any>) ?? undefined,
+      createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+    }));
+  }
+
+  async getActivityLogsByUser(userId: string, limit: number = 100): Promise<ActivityLog[]> {
+    const rows = await db.select().from(activityLogs)
+      .where(eq(activityLogs.userId, userId))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(limit);
+    
+    return rows.map(row => ({
+      id: row.id,
+      userId: row.userId,
+      username: row.username,
+      userRole: row.userRole ?? undefined,
+      actionType: row.actionType,
+      actionCategory: row.actionCategory,
+      jobId: row.jobId ?? undefined,
+      jobNumber: row.jobNumber ?? undefined,
+      details: (row.details as Record<string, any>) ?? undefined,
+      createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+    }));
+  }
+
+  // User management methods
+  async getAllUsers(): Promise<User[]> {
+    const rows = await db.select().from(users).orderBy(desc(users.createdAt));
+    return rows as User[];
+  }
+
+  async updateUser(id: string, updates: Partial<UpsertUser>): Promise<User | undefined> {
+    const existing = await this.getUser(id);
+    if (!existing) return undefined;
+    
+    const updateData: any = { updatedAt: new Date() };
+    if (updates.username !== undefined) updateData.username = updates.username;
+    if (updates.password !== undefined) updateData.password = updates.password;
+    if (updates.email !== undefined) updateData.email = updates.email;
+    if (updates.firstName !== undefined) updateData.firstName = updates.firstName;
+    if (updates.lastName !== undefined) updateData.lastName = updates.lastName;
+    if (updates.role !== undefined) updateData.role = updates.role;
+    if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
+    if (updates.profileImageUrl !== undefined) updateData.profileImageUrl = updates.profileImageUrl;
+    
+    await db.update(users).set(updateData).where(eq(users.id, id));
+    return this.getUser(id);
   }
 }
 

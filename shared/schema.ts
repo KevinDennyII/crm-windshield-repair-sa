@@ -377,3 +377,57 @@ export const insertContactSchema = contactSchema.omit({ id: true, createdAt: tru
 
 export type Contact = z.infer<typeof contactSchema>;
 export type InsertContact = z.infer<typeof insertContactSchema>;
+
+// Activity logs for tracking user actions (CSR accountability)
+export const activityLogs = pgTable("activity_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  username: varchar("username").notNull(),
+  userRole: varchar("user_role"),
+  actionType: varchar("action_type").notNull(), // job_created, job_stage_changed, email_sent, sms_sent, note_added, etc.
+  actionCategory: varchar("action_category").notNull(), // jobs, conversations, calendar, other
+  jobId: varchar("job_id"), // Reference to job if applicable
+  jobNumber: varchar("job_number"), // Job number for display
+  details: jsonb("details").default({}), // Additional details (from/to stage, message preview, etc.)
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const activityActionTypes = [
+  "login",
+  "logout",
+  "job_created",
+  "job_updated",
+  "job_stage_changed",
+  "job_deleted",
+  "email_sent",
+  "email_replied",
+  "sms_sent",
+  "note_added",
+  "calendar_event_created",
+  "calendar_event_updated",
+  "payment_recorded",
+  "contact_created",
+  "contact_updated"
+] as const;
+export type ActivityActionType = typeof activityActionTypes[number];
+
+export const activityCategories = ["jobs", "conversations", "calendar", "contacts", "auth", "other"] as const;
+export type ActivityCategory = typeof activityCategories[number];
+
+export const activityLogSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  username: z.string(),
+  userRole: z.string().optional(),
+  actionType: z.string(),
+  actionCategory: z.string(),
+  jobId: z.string().optional(),
+  jobNumber: z.string().optional(),
+  details: z.record(z.any()).optional(),
+  createdAt: z.string().optional(),
+});
+
+export const insertActivityLogSchema = activityLogSchema.omit({ id: true, createdAt: true });
+
+export type ActivityLog = z.infer<typeof activityLogSchema>;
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
