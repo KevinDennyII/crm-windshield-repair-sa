@@ -35,7 +35,8 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+// Full nav items for admin and technician roles
+const allNavItems = [
   { title: "Launchpad", url: "/launchpad", icon: Rocket },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Conversations", url: "/conversations", icon: MessageSquare },
@@ -50,11 +51,29 @@ const navItems = [
   { title: "Reporting", url: "/reporting", icon: BarChart3 },
 ];
 
+// CSR-only nav items (restricted access)
+const csrNavItems = [
+  { title: "Conversations", url: "/conversations", icon: MessageSquare },
+  { title: "Opportunities", url: "/", icon: Kanban },
+  { title: "Calendar", url: "/calendar", icon: Calendar },
+  { title: "Marketing", url: "/marketing", icon: Megaphone },
+  { title: "Reputation", url: "/reputation", icon: Star },
+];
+
+// Reports-only nav items (restricted access)
+const reportsNavItems = [
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Reporting", url: "/reporting", icon: BarChart3 },
+];
+
 export function AppSidebar() {
   const [location] = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isCsr, isReports, logout } = useAuth();
+
+  // Determine which nav items to show based on role
+  const navItems = isCsr ? csrNavItems : isReports ? reportsNavItems : allNavItems;
 
   const getInitials = (firstName?: string | null, lastName?: string | null) => {
     const first = firstName?.charAt(0) || "";

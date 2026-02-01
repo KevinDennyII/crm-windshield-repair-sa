@@ -810,7 +810,7 @@ export function JobDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="w-full max-w-4xl max-h-[95vh] md:max-h-[90vh] overflow-hidden flex flex-col p-4 md:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             {isNew ? (

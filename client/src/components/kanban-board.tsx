@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Plus,
   Phone,
@@ -11,39 +11,51 @@ import {
   GripVertical,
   MessageSquare,
   Mail,
+  ChevronRight,
 } from "lucide-react";
 import { type Job, type PipelineStage, pipelineStages } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { EmailComposeModal } from "./email-compose-modal";
+import { useIsMobile } from "@/hooks/use-media-query";
 
 const stageConfig: Record<
   PipelineStage,
-  { label: string; color: string; bgColor: string }
+  { label: string; shortLabel: string; color: string; bgColor: string; tabColor: string }
 > = {
   new_lead: {
     label: "New Lead",
+    shortLabel: "Lead",
     color: "text-purple-600 dark:text-purple-400",
     bgColor: "bg-purple-50 dark:bg-purple-950/30",
+    tabColor: "bg-purple-500",
   },
   quote: {
     label: "Quote",
+    shortLabel: "Quote",
     color: "text-amber-600 dark:text-amber-400",
     bgColor: "bg-amber-50 dark:bg-amber-950/30",
+    tabColor: "bg-amber-500",
   },
   scheduled: {
     label: "Scheduled",
+    shortLabel: "Sched",
     color: "text-cyan-600 dark:text-cyan-400",
     bgColor: "bg-cyan-50 dark:bg-cyan-950/30",
+    tabColor: "bg-cyan-500",
   },
   paid_completed: {
     label: "Paid/Completed",
+    shortLabel: "Done",
     color: "text-green-600 dark:text-green-400",
     bgColor: "bg-green-50 dark:bg-green-950/30",
+    tabColor: "bg-green-500",
   },
   lost_opportunity: {
     label: "Lost Opportunity",
+    shortLabel: "Lost",
     color: "text-gray-600 dark:text-gray-400",
     bgColor: "bg-red-100 dark:bg-red-950/40",
+    tabColor: "bg-gray-500",
   },
 };
 
@@ -60,12 +72,12 @@ export function KanbanBoard({
   onAddJob,
   onMoveJob,
 }: KanbanBoardProps) {
+  const isMobile = useIsMobile();
   const [draggedJob, setDraggedJob] = useState<Job | null>(null);
-  const [dragOverStage, setDragOverStage] = useState<PipelineStage | null>(
-    null
-  );
+  const [dragOverStage, setDragOverStage] = useState<PipelineStage | null>(null);
   const [emailJob, setEmailJob] = useState<Job | null>(null);
   const [hideLostOpportunity, setHideLostOpportunity] = useState(false);
+  const [activeStage, setActiveStage] = useState<PipelineStage>("new_lead");
 
   const activeJobsCount = hideLostOpportunity 
     ? jobs.filter(job => job.pipelineStage !== "lost_opportunity").length 
@@ -136,6 +148,275 @@ export function KanbanBoard({
     return `${job.firstName} ${job.lastName}`;
   };
 
+  // Mobile compact card component
+  const MobileJobCard = ({ job }: { job: Job }) => (
+    <Card
+      onClick={() => onJobClick(job)}
+      className="p-3 cursor-pointer hover-elevate active-elevate-2 transition-all"
+      data-testid={`job-card-${job.id}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs text-muted-foreground font-mono">#{job.jobNumber}</span>
+            <span className="font-medium text-sm truncate">{getCustomerName(job)}</span>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <DollarSign className="h-3 w-3" />
+              ${job.totalDue.toFixed(0)}
+            </span>
+            {job.vehicles && job.vehicles.length > 0 && (
+              <span className="truncate">
+                {job.vehicles[0].vehicleYear} {job.vehicles[0].vehicleMake}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {getPaymentBadge(job)}
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              asChild
+              onClick={(e) => e.stopPropagation()}
+            >
+              <a href={`tel:${job.phone}`} data-testid={`button-call-${job.id}`}>
+                <Phone className="h-4 w-4 text-green-600" />
+              </a>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              asChild
+              onClick={(e) => e.stopPropagation()}
+            >
+              <a href={`sms:${job.phone}`} data-testid={`button-text-${job.id}`}>
+                <MessageSquare className="h-4 w-4 text-blue-600" />
+              </a>
+            </Button>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </div>
+    </Card>
+  );
+
+  // Desktop card component
+  const DesktopJobCard = ({ job }: { job: Job }) => (
+    <Card
+      draggable
+      onDragStart={(e) => handleDragStart(e, job)}
+      onClick={() => onJobClick(job)}
+      className={cn(
+        "p-3 cursor-pointer hover-elevate active-elevate-2 transition-all",
+        draggedJob?.id === job.id && "opacity-50"
+      )}
+      data-testid={`job-card-${job.id}`}
+    >
+      <div className="flex items-start gap-2">
+        <GripVertical className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0 cursor-grab" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs text-muted-foreground">#{job.jobNumber}</span>
+              <span className="font-medium text-sm truncate">
+                {getCustomerName(job)}
+              </span>
+            </div>
+            {getPaymentBadge(job)}
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Phone className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{job.phone}</span>
+            </div>
+            {job.vehicles && job.vehicles.length > 0 && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Car className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate">
+                  {job.vehicles[0].vehicleYear} {job.vehicles[0].vehicleMake}{" "}
+                  {job.vehicles[0].vehicleModel}
+                  {job.vehicles.length > 1 && ` (+${job.vehicles.length - 1} more)`}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <DollarSign className="h-3 w-3 flex-shrink-0" />
+              <span>${job.totalDue.toFixed(2)}</span>
+              {job.balanceDue > 0 && job.balanceDue < job.totalDue && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  (${job.balanceDue.toFixed(2)} due)
+                </span>
+              )}
+            </div>
+          </div>
+
+          {job.phone && (
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                onClick={(e) => e.stopPropagation()}
+              >
+                <a
+                  href={`tel:${job.phone}`}
+                  data-testid={`button-call-${job.id}`}
+                >
+                  <Phone className="h-3 w-3 mr-1" />
+                  Call
+                </a>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                onClick={(e) => e.stopPropagation()}
+              >
+                <a
+                  href={`sms:${job.phone}`}
+                  data-testid={`button-text-${job.id}`}
+                >
+                  <MessageSquare className="h-3 w-3 mr-1" />
+                  Text
+                </a>
+              </Button>
+              {job.email && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEmailJob(job);
+                  }}
+                  data-testid={`button-email-${job.id}`}
+                >
+                  <Mail className="h-3 w-3 mr-1" />
+                  Email
+                </Button>
+              )}
+            </div>
+          )}
+
+          {job.vehicles && job.vehicles.length > 0 && job.vehicles[0].parts && job.vehicles[0].parts.length > 0 && job.vehicles[0].parts[0].glassPartNumber && (
+            <div className="mt-2">
+              <Badge variant="outline" className="text-xs">
+                {job.vehicles[0].parts[0].glassPartNumber}
+              </Badge>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+
+  // Mobile view with horizontal stage tabs
+  if (isMobile) {
+    const stageJobs = getJobsByStage(activeStage);
+    const config = stageConfig[activeStage];
+
+    return (
+      <div className="flex flex-col h-full">
+        {/* Mobile header */}
+        <div className="flex items-center justify-between p-3 border-b">
+          <div>
+            <h1 className="text-lg font-semibold">Opportunities</h1>
+            <p className="text-xs text-muted-foreground">
+              {activeJobsCount} jobs
+            </p>
+          </div>
+          <Button size="sm" onClick={onAddJob} data-testid="button-add-job">
+            <Plus className="h-4 w-4 mr-1" />
+            New
+          </Button>
+        </div>
+
+        {/* Horizontal scrolling stage tabs */}
+        <div className="border-b bg-muted/30">
+          <ScrollArea className="w-full">
+            <div className="flex p-2 gap-2">
+              {pipelineStages.map((stage) => {
+                const stageConf = stageConfig[stage];
+                const count = getJobsByStage(stage).length;
+                const isActive = activeStage === stage;
+
+                return (
+                  <Button
+                    key={stage}
+                    variant={isActive ? "secondary" : "ghost"}
+                    size="sm"
+                    onClick={() => setActiveStage(stage)}
+                    className={cn(
+                      "gap-1.5 whitespace-nowrap",
+                      isActive && `${stageConf.bgColor} ${stageConf.color} ring-2 ring-offset-1 ring-primary/20`
+                    )}
+                    data-testid={`tab-${stage}`}
+                  >
+                    <span
+                      className={cn(
+                        "w-2 h-2 rounded-full",
+                        stageConf.tabColor
+                      )}
+                    />
+                    {stageConf.shortLabel}
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "text-xs h-5 px-1.5",
+                        isActive ? "bg-background/60" : "bg-muted"
+                      )}
+                    >
+                      {count}
+                    </Badge>
+                  </Button>
+                );
+              })}
+            </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </div>
+
+        {/* Job list for active stage */}
+        <ScrollArea className="flex-1">
+          <div className={cn("p-3 space-y-2 min-h-full", config.bgColor)}>
+            {stageJobs.map((job) => (
+              <MobileJobCard key={job.id} job={job} />
+            ))}
+
+            {stageJobs.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="text-muted-foreground text-sm">
+                  No jobs in {config.label}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={onAddJob}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add New Job
+                </Button>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+
+        {emailJob && (
+          <EmailComposeModal
+            job={emailJob}
+            open={!!emailJob}
+            onOpenChange={(open) => !open && setEmailJob(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Desktop view - original kanban columns
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-4 border-b">
@@ -199,113 +480,7 @@ export function KanbanBoard({
 
                 <div className="flex-1 p-2 space-y-2 kanban-column overflow-y-auto scrollbar-thin">
                   {stageJobs.map((job) => (
-                    <Card
-                      key={job.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, job)}
-                      onClick={() => onJobClick(job)}
-                      className={cn(
-                        "p-3 cursor-pointer hover-elevate active-elevate-2 transition-all",
-                        draggedJob?.id === job.id && "opacity-50"
-                      )}
-                      data-testid={`job-card-${job.id}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <GripVertical className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0 cursor-grab" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-xs text-muted-foreground">#{job.jobNumber}</span>
-                              <span className="font-medium text-sm truncate">
-                                {getCustomerName(job)}
-                              </span>
-                            </div>
-                            {getPaymentBadge(job)}
-                          </div>
-
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <Phone className="h-3 w-3 flex-shrink-0" />
-                              <span className="truncate">{job.phone}</span>
-                            </div>
-                            {job.vehicles && job.vehicles.length > 0 && (
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Car className="h-3 w-3 flex-shrink-0" />
-                                <span className="truncate">
-                                  {job.vehicles[0].vehicleYear} {job.vehicles[0].vehicleMake}{" "}
-                                  {job.vehicles[0].vehicleModel}
-                                  {job.vehicles.length > 1 && ` (+${job.vehicles.length - 1} more)`}
-                                </span>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <DollarSign className="h-3 w-3 flex-shrink-0" />
-                              <span>${job.totalDue.toFixed(2)}</span>
-                              {job.balanceDue > 0 && job.balanceDue < job.totalDue && (
-                                <span className="text-amber-600 dark:text-amber-400">
-                                  (${job.balanceDue.toFixed(2)} due)
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {job.phone && (
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <a
-                                  href={`tel:${job.phone}`}
-                                  data-testid={`button-call-${job.id}`}
-                                >
-                                  <Phone className="h-3 w-3 mr-1" />
-                                  Call
-                                </a>
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <a
-                                  href={`sms:${job.phone}`}
-                                  data-testid={`button-text-${job.id}`}
-                                >
-                                  <MessageSquare className="h-3 w-3 mr-1" />
-                                  Text
-                                </a>
-                              </Button>
-                              {job.email && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEmailJob(job);
-                                  }}
-                                  data-testid={`button-email-${job.id}`}
-                                >
-                                  <Mail className="h-3 w-3 mr-1" />
-                                  Email
-                                </Button>
-                              )}
-                            </div>
-                          )}
-
-                          {job.vehicles && job.vehicles.length > 0 && job.vehicles[0].parts && job.vehicles[0].parts.length > 0 && job.vehicles[0].parts[0].glassPartNumber && (
-                            <div className="mt-2">
-                              <Badge variant="outline" className="text-xs">
-                                {job.vehicles[0].parts[0].glassPartNumber}
-                              </Badge>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
+                    <DesktopJobCard key={job.id} job={job} />
                   ))}
 
                   {stageJobs.length === 0 && (
