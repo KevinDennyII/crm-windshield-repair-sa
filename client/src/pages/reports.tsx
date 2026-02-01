@@ -500,7 +500,7 @@ export default function Reports() {
     })).slice(0, 50); // Limit to 50 for performance
   }, [completedJobs]);
 
-  // Most popular glass parts
+  // Most popular glass parts (by glass type)
   const popularGlassParts = useMemo(() => {
     const partCounts: Record<string, number> = {};
     
@@ -519,6 +519,35 @@ export default function Reports() {
         value: count,
       }))
       .sort((a, b) => b.value - a.value);
+  }, [completedJobs]);
+
+  // Most popular parts by Part Number
+  const popularPartNumbers = useMemo(() => {
+    const partCounts: Record<string, { count: number; glassType: string }> = {};
+    
+    completedJobs.forEach(job => {
+      job.vehicles.forEach(vehicle => {
+        vehicle.parts.forEach(part => {
+          const partNumber = part.glassPartNumber?.trim();
+          if (partNumber) {
+            if (!partCounts[partNumber]) {
+              partCounts[partNumber] = { count: 0, glassType: part.glassType || "unknown" };
+            }
+            partCounts[partNumber].count += 1;
+          }
+        });
+      });
+    });
+    
+    return Object.entries(partCounts)
+      .map(([partNum, data]) => ({
+        partNumber: partNum,
+        name: partNum,
+        glassType: glassTypeLabels[data.glassType] || data.glassType,
+        value: data.count,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 15); // Top 15 part numbers
   }, [completedJobs]);
 
   // Most popular vehicles
@@ -1101,11 +1130,50 @@ export default function Reports() {
             </Card>
           </div>
 
+          {/* Most Popular Part Numbers Table */}
+          <Card data-testid="card-popular-part-numbers">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium" data-testid="title-popular-parts">Most Popular Parts by Part # ({timePeriodLabel})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {popularPartNumbers.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table data-testid="table-popular-parts">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-center w-12">#</TableHead>
+                        <TableHead>Glass Part #</TableHead>
+                        <TableHead>Glass Type</TableHead>
+                        <TableHead className="text-right">Installs</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {popularPartNumbers.map((part, index) => (
+                        <TableRow key={part.partNumber} data-testid={`row-part-${index}`}>
+                          <TableCell className="text-center font-medium text-muted-foreground">{index + 1}</TableCell>
+                          <TableCell className="font-mono font-medium" data-testid={`text-part-number-${index}`}>{part.partNumber}</TableCell>
+                          <TableCell data-testid={`text-glass-type-${index}`}>{part.glassType}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="secondary" data-testid={`badge-install-count-${index}`}>{part.value}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground" data-testid="text-no-parts">
+                  No part numbers recorded for this period
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid gap-4 md:grid-cols-2">
             {/* Most Popular Glass Parts */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Most Popular Glass Parts</CardTitle>
+                <CardTitle className="text-sm font-medium">Most Popular Glass Types</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-[300px]">
