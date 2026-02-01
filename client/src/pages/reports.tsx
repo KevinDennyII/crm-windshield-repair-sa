@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import {
   BarChart,
   Bar,
@@ -115,6 +118,17 @@ function getDayBounds(): { start: Date; end: Date } {
   return { start, end };
 }
 
+function getYesterdayBounds(): { start: Date; end: Date } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  start.setHours(0, 0, 0, 0);
+  
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+  
+  return { start, end };
+}
+
 function getWeekBounds(): { start: Date; end: Date } {
   const now = new Date();
   const dayOfWeek = now.getDay();
@@ -131,12 +145,39 @@ function getWeekBounds(): { start: Date; end: Date } {
   return { start, end };
 }
 
+function getLastWeekBounds(): { start: Date; end: Date } {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  
+  const start = new Date(now);
+  start.setDate(now.getDate() - daysSinceMonday - 7); // Previous Monday
+  start.setHours(0, 0, 0, 0);
+  
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6); // Previous Sunday
+  end.setHours(23, 59, 59, 999);
+  
+  return { start, end };
+}
+
 function getMonthBounds(): { start: Date; end: Date } {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   start.setHours(0, 0, 0, 0);
   
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  end.setHours(23, 59, 59, 999);
+  
+  return { start, end };
+}
+
+function getLastMonthBounds(): { start: Date; end: Date } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  start.setHours(0, 0, 0, 0);
+  
+  const end = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of previous month
   end.setHours(23, 59, 59, 999);
   
   return { start, end };
@@ -179,16 +220,35 @@ function daysBetween(date1: Date, date2: Date): number {
   return Math.floor((date2.getTime() - date1.getTime()) / oneDay);
 }
 
-type TimePeriod = "day" | "week" | "month" | "custom" | "year" | "all";
+type TimePeriod = "day" | "yesterday" | "week" | "lastWeek" | "month" | "lastMonth" | "custom" | "year" | "all";
+
+interface JobListModalState {
+  isOpen: boolean;
+  title: string;
+  jobs: Job[];
+}
 
 export default function Reports() {
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("month");
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
+  const [jobListModal, setJobListModal] = useState<JobListModalState>({
+    isOpen: false,
+    title: "",
+    jobs: [],
+  });
   
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
+
+  const openJobListModal = (title: string, jobList: Job[]) => {
+    setJobListModal({ isOpen: true, title, jobs: jobList });
+  };
+
+  const closeJobListModal = () => {
+    setJobListModal({ isOpen: false, title: "", jobs: [] });
+  };
 
   const filteredJobs = useMemo(() => {
     if (timePeriod === "all") return jobs;
@@ -202,13 +262,16 @@ export default function Reports() {
         end: new Date(customEndDate + "T23:59:59"),
       };
     } else {
-      bounds = timePeriod === "day" 
-        ? getDayBounds()
-        : timePeriod === "week" 
-          ? getWeekBounds() 
-          : timePeriod === "month" 
-            ? getMonthBounds() 
-            : getYearBounds();
+      switch (timePeriod) {
+        case "day": bounds = getDayBounds(); break;
+        case "yesterday": bounds = getYesterdayBounds(); break;
+        case "week": bounds = getWeekBounds(); break;
+        case "lastWeek": bounds = getLastWeekBounds(); break;
+        case "month": bounds = getMonthBounds(); break;
+        case "lastMonth": bounds = getLastMonthBounds(); break;
+        case "year": bounds = getYearBounds(); break;
+        default: bounds = getMonthBounds();
+      }
     }
     
     return jobs.filter(job => {
@@ -302,10 +365,10 @@ export default function Reports() {
   const arAgingData = useMemo(() => {
     const today = new Date();
     const buckets = {
-      current: { label: "0-30 Days", amount: 0, count: 0 },
-      thirtyPlus: { label: "31-60 Days", amount: 0, count: 0 },
-      sixtyPlus: { label: "61-90 Days", amount: 0, count: 0 },
-      ninetyPlus: { label: "90+ Days", amount: 0, count: 0 },
+      current: { label: "0-30 Days", amount: 0, count: 0, jobs: [] as Job[] },
+      thirtyPlus: { label: "31-60 Days", amount: 0, count: 0, jobs: [] as Job[] },
+      sixtyPlus: { label: "61-90 Days", amount: 0, count: 0, jobs: [] as Job[] },
+      ninetyPlus: { label: "90+ Days", amount: 0, count: 0, jobs: [] as Job[] },
     };
     
     // Include all jobs with outstanding balance, not just filtered ones
@@ -321,15 +384,19 @@ export default function Reports() {
       if (daysOld <= 30) {
         buckets.current.amount += outstanding;
         buckets.current.count += 1;
+        buckets.current.jobs.push(job);
       } else if (daysOld <= 60) {
         buckets.thirtyPlus.amount += outstanding;
         buckets.thirtyPlus.count += 1;
+        buckets.thirtyPlus.jobs.push(job);
       } else if (daysOld <= 90) {
         buckets.sixtyPlus.amount += outstanding;
         buckets.sixtyPlus.count += 1;
+        buckets.sixtyPlus.jobs.push(job);
       } else {
         buckets.ninetyPlus.amount += outstanding;
         buckets.ninetyPlus.count += 1;
+        buckets.ninetyPlus.jobs.push(job);
       }
     });
     
@@ -596,8 +663,11 @@ export default function Reports() {
   }
 
   const timePeriodLabel = timePeriod === "day" ? "Today"
+    : timePeriod === "yesterday" ? "Yesterday"
     : timePeriod === "week" ? "This Week" 
+    : timePeriod === "lastWeek" ? "Last Week"
     : timePeriod === "month" ? "This Month" 
+    : timePeriod === "lastMonth" ? "Last Month"
     : timePeriod === "year" ? "This Year"
     : timePeriod === "custom" ? "Custom Range"
     : "All Time";
@@ -618,8 +688,11 @@ export default function Reports() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="day">Today</SelectItem>
+              <SelectItem value="yesterday">Yesterday</SelectItem>
               <SelectItem value="week">This Week</SelectItem>
+              <SelectItem value="lastWeek">Last Week</SelectItem>
               <SelectItem value="month">This Month</SelectItem>
+              <SelectItem value="lastMonth">Last Month</SelectItem>
               <SelectItem value="year">This Year</SelectItem>
               <SelectItem value="custom">Custom Range</SelectItem>
               <SelectItem value="all">All Time</SelectItem>
@@ -661,7 +734,11 @@ export default function Reports() {
         {/* Sales Tab */}
         <TabsContent value="sales" className="space-y-6">
           <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Revenue - Completed Jobs", completedJobs)}
+              data-testid="card-total-revenue"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
                 <DollarSign className="h-4 w-4 text-green-500" />
@@ -674,7 +751,11 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Gross Profit - Completed Jobs", completedJobs)}
+              data-testid="card-gross-profit"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Gross Profit</CardTitle>
                 <TrendingUp className="h-4 w-4 text-emerald-500" />
@@ -687,7 +768,11 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Completed Jobs", completedJobs)}
+              data-testid="card-jobs-completed"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Jobs Completed</CardTitle>
                 <Briefcase className="h-4 w-4 text-blue-500" />
@@ -700,7 +785,11 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Outstanding Balance", completedJobs.filter(j => j.totalDue > j.amountPaid))}
+              data-testid="card-outstanding"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
                 <Clock className="h-4 w-4 text-amber-500" />
@@ -848,7 +937,12 @@ export default function Reports() {
           </p>
           <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
             {arAgingData.map((bucket, index) => (
-              <Card key={bucket.label}>
+              <Card 
+                key={bucket.label}
+                className="cursor-pointer hover-elevate"
+                onClick={() => openJobListModal(`A/R Aging: ${bucket.label}`, bucket.jobs)}
+                data-testid={`card-ar-${index}`}
+              >
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">{bucket.label}</CardTitle>
                   <Clock className={`h-4 w-4 ${
@@ -934,7 +1028,11 @@ export default function Reports() {
         {/* Jobs Tab */}
         <TabsContent value="jobs" className="space-y-6">
           <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Total Jobs", filteredJobs)}
+              data-testid="card-total-jobs"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Jobs</CardTitle>
                 <Briefcase className="h-4 w-4 text-blue-500" />
@@ -947,7 +1045,11 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Completed Jobs", completedJobs)}
+              data-testid="card-completed-jobs"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Completed</CardTitle>
                 <Target className="h-4 w-4 text-green-500" />
@@ -964,7 +1066,11 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Scheduled Jobs", filteredJobs.filter(j => j.pipelineStage === "scheduled"))}
+              data-testid="card-scheduled-jobs"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Scheduled</CardTitle>
                 <Calendar className="h-4 w-4 text-cyan-500" />
@@ -977,7 +1083,11 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Lost Opportunities", filteredJobs.filter(j => j.pipelineStage === "lost_opportunity"))}
+              data-testid="card-lost-jobs"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Lost</CardTitle>
                 <ArrowDownRight className="h-4 w-4 text-red-500" />
@@ -1304,7 +1414,11 @@ export default function Reports() {
         {/* Customers Tab */}
         <TabsContent value="customers" className="space-y-6">
           <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("All Customer Jobs", filteredJobs)}
+              data-testid="card-total-customers"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
                 <Users className="h-4 w-4 text-blue-500" />
@@ -1317,7 +1431,15 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Repeat Customer Jobs", filteredJobs.filter(j => {
+                const key = j.phone || j.email;
+                const count = filteredJobs.filter(job => job.phone === key || job.email === key).length;
+                return count > 1;
+              }))}
+              data-testid="card-repeat-customers"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Repeat Customers</CardTitle>
                 <ArrowUpRight className="h-4 w-4 text-green-500" />
@@ -1330,7 +1452,15 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("New Customer Jobs", filteredJobs.filter(j => {
+                const key = j.phone || j.email;
+                const count = filteredJobs.filter(job => job.phone === key || job.email === key).length;
+                return count === 1;
+              }))}
+              data-testid="card-new-customers"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">New Customers</CardTitle>
                 <User className="h-4 w-4 text-cyan-500" />
@@ -1343,7 +1473,11 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className="cursor-pointer hover-elevate" 
+              onClick={() => openJobListModal("Business Account Jobs", filteredJobs.filter(j => j.isBusiness))}
+              data-testid="card-business-accounts"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Business Accounts</CardTitle>
                 <Building2 className="h-4 w-4 text-purple-500" />
@@ -1437,6 +1571,76 @@ export default function Reports() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Job List Modal */}
+      <Dialog open={jobListModal.isOpen} onOpenChange={(open) => !open && closeJobListModal()}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>{jobListModal.title}</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh]">
+            {jobListModal.jobs.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Job #</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Stage</TableHead>
+                    <TableHead>Vehicle(s)</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Paid</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {jobListModal.jobs.map((job) => (
+                    <TableRow key={job.id} data-testid={`modal-job-row-${job.id}`}>
+                      <TableCell className="font-medium">{job.jobNumber}</TableCell>
+                      <TableCell>{job.isBusiness ? job.businessName : `${job.firstName} ${job.lastName}`}</TableCell>
+                      <TableCell>
+                        <Badge variant={
+                          job.pipelineStage === "paid_completed" ? "default" :
+                          job.pipelineStage === "scheduled" ? "secondary" :
+                          job.pipelineStage === "lost_opportunity" ? "destructive" :
+                          "outline"
+                        }>
+                          {stageLabels[job.pipelineStage] || job.pipelineStage}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {job.vehicles.map((v, i) => (
+                          <div key={i} className="text-sm">
+                            {v.vehicleYear} {v.vehicleMake} {v.vehicleModel}
+                          </div>
+                        ))}
+                      </TableCell>
+                      <TableCell>
+                        {formatDate(job.installDate || job.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-right">{formatUSD(job.totalDue)}</TableCell>
+                      <TableCell className={`text-right ${job.amountPaid < job.totalDue ? 'text-amber-600' : 'text-green-600'}`}>
+                        {formatUSD(job.amountPaid)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="py-8 text-center text-muted-foreground">
+                No jobs found
+              </div>
+            )}
+          </ScrollArea>
+          <div className="flex justify-between items-center pt-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              {jobListModal.jobs.length} job{jobListModal.jobs.length !== 1 ? 's' : ''}
+            </span>
+            <Button variant="outline" onClick={closeJobListModal}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
