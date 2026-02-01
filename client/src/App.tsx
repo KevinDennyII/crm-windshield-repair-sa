@@ -19,6 +19,8 @@ import TechJobDetail from "@/pages/tech-job-detail";
 import TechJobComplete from "@/pages/tech-job-complete";
 import TechSignature from "@/pages/tech-signature";
 import UserManagement from "@/pages/user-management";
+import StaffManagement from "@/pages/staff-management";
+import CsrActivity from "@/pages/csr-activity";
 import { PlaceholderPage } from "@/pages/placeholder-page";
 import Reports from "@/pages/reports";
 import Contacts from "@/pages/contacts";
@@ -82,6 +84,8 @@ function AdminCsrRouter() {
       </Route>
       <Route path="/reporting" component={Reports} />
       <Route path="/users" component={UserManagement} />
+      <Route path="/staff" component={StaffManagement} />
+      <Route path="/csr-activity" component={CsrActivity} />
       <Route component={NotFound} />
     </Switch>
   );

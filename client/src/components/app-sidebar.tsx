@@ -16,6 +16,8 @@ import {
   Menu,
   LogOut,
   UserCog,
+  UserPlus,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -129,23 +131,59 @@ export function AppSidebar() {
                 );
               })}
               {isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === "/users"}
-                    tooltip="User Management"
-                    className={cn(
-                      "transition-colors",
-                      location === "/users" &&
-                        "bg-sidebar-accent text-sidebar-accent-foreground"
-                    )}
-                  >
-                    <Link href="/users" data-testid="nav-users">
-                      <UserCog className="h-4 w-4" />
-                      <span>User Management</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location === "/users"}
+                      tooltip="User Management"
+                      className={cn(
+                        "transition-colors",
+                        location === "/users" &&
+                          "bg-sidebar-accent text-sidebar-accent-foreground"
+                      )}
+                    >
+                      <Link href="/users" data-testid="nav-users">
+                        <UserCog className="h-4 w-4" />
+                        <span>User Management</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location === "/staff"}
+                      tooltip="Staff Accounts"
+                      className={cn(
+                        "transition-colors",
+                        location === "/staff" &&
+                          "bg-sidebar-accent text-sidebar-accent-foreground"
+                      )}
+                    >
+                      <Link href="/staff" data-testid="nav-staff">
+                        <UserPlus className="h-4 w-4" />
+                        <span>Staff Accounts</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location === "/csr-activity"}
+                      tooltip="CSR Activity"
+                      className={cn(
+                        "transition-colors",
+                        location === "/csr-activity" &&
+                          "bg-sidebar-accent text-sidebar-accent-foreground"
+                      )}
+                    >
+                      <Link href="/csr-activity" data-testid="nav-csr-activity">
+                        <Activity className="h-4 w-4" />
+                        <span>CSR Activity</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </>
               )}
             </SidebarMenu>
           </SidebarGroupContent>

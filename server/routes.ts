@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber } from "./twilio";
@@ -15,6 +15,53 @@ import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { COMPANY_LOGO_BASE64 } from "./logo";
 import { processNewLeads, startLeadPolling, stopLeadPolling } from "./lead-processor";
+import bcrypt from "bcrypt";
+
+// Helper to get current user from session or OIDC
+async function getCurrentUser(req: any): Promise<{ id: string; username: string; role: string } | null> {
+  // Check session-based auth first
+  if (req.session?.userId) {
+    const [user] = await db.select().from(users).where(eq(users.id, req.session.userId));
+    if (user) {
+      return { id: user.id, username: user.username || '', role: user.role || 'technician' };
+    }
+  }
+  // Fall back to OIDC auth
+  if (req.user?.claims?.sub) {
+    const [user] = await db.select().from(users).where(eq(users.id, req.user.claims.sub));
+    if (user) {
+      return { id: user.id, username: user.username || '', role: user.role || 'technician' };
+    }
+  }
+  return null;
+}
+
+// Helper to log activity
+async function logActivity(
+  userId: string,
+  username: string,
+  userRole: string,
+  actionType: string,
+  actionCategory: string,
+  jobId?: string,
+  jobNumber?: string,
+  details?: Record<string, any>
+) {
+  try {
+    await storage.createActivityLog({
+      userId,
+      username,
+      userRole,
+      actionType,
+      actionCategory,
+      jobId,
+      jobNumber,
+      details,
+    });
+  } catch (error) {
+    console.error("Failed to log activity:", error);
+  }
+}
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Setup authentication BEFORE other routes
@@ -43,8 +90,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         return res.status(401).json({ message: "Invalid username or password" });
       }
 
-      // Check password (simple comparison for now)
-      if (user.password !== password) {
+      // Check if user is active
+      if (user.isActive === "false") {
+        return res.status(401).json({ message: "Account is disabled" });
+      }
+
+      // Check password - support both hashed and plain text (for migration)
+      let passwordValid = false;
+      if (user.password?.startsWith("$2")) {
+        // Bcrypt hashed password
+        passwordValid = await bcrypt.compare(password, user.password);
+      } else {
+        // Plain text password (legacy)
+        passwordValid = user.password === password;
+      }
+
+      if (!passwordValid) {
         return res.status(401).json({ message: "Invalid username or password" });
       }
 
@@ -58,6 +119,18 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         lastName: user.lastName,
         role: user.role,
       };
+
+      // Log login activity
+      await logActivity(
+        user.id,
+        user.username || '',
+        user.role || 'technician',
+        'login',
+        'auth',
+        undefined,
+        undefined,
+        { loginMethod: 'username_password' }
+      );
 
       res.json({ 
         message: "Login successful",
@@ -77,8 +150,23 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   });
 
   // Logout endpoint
-  app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy((err) => {
+  app.post("/api/auth/logout", async (req: any, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'logout',
+          'auth'
+        );
+      }
+    } catch (error) {
+      console.error("Error logging logout:", error);
+    }
+    
+    req.session.destroy((err: any) => {
       if (err) {
         return res.status(500).json({ message: "Logout failed" });
       }
@@ -142,20 +230,263 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
-  // Get all users (admin only)
-  app.get("/api/users", isAuthenticated, async (req: any, res) => {
+  // Get all users (admin only) - supports both session and OIDC auth
+  app.get("/api/users", async (req: any, res) => {
     try {
-      const adminId = req.user.claims.sub;
-      const [admin] = await db.select().from(users).where(eq(users.id, adminId));
-      if (!admin || admin.role !== "admin") {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || currentUser.role !== "admin") {
         return res.status(403).json({ message: "Only admins can view all users" });
       }
 
       const allUsers = await db.select().from(users);
-      res.json(allUsers);
+      // Don't expose passwords
+      const sanitizedUsers = allUsers.map(u => ({
+        ...u,
+        password: u.password ? "[HIDDEN]" : null,
+      }));
+      res.json(sanitizedUsers);
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Create new staff account (admin only)
+  app.post("/api/staff", async (req: any, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can create staff accounts" });
+      }
+
+      const staffSchema = z.object({
+        username: z.string().min(3, "Username must be at least 3 characters"),
+        password: z.string().min(6, "Password must be at least 6 characters"),
+        firstName: z.string().min(1, "First name is required"),
+        lastName: z.string().min(1, "Last name is required"),
+        email: z.string().email("Valid email required").optional().or(z.literal("")),
+        role: z.enum(["admin", "csr", "technician", "reports"]),
+      });
+
+      const parsed = staffSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+
+      const { username, password, firstName, lastName, email, role } = parsed.data;
+
+      // Check if username already exists
+      const existing = await storage.getUserByUsername(username);
+      if (existing) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create user
+      const newUser = await storage.createUser({
+        username,
+        password: hashedPassword,
+        firstName,
+        lastName,
+        email: email || null,
+        role,
+        isActive: "true",
+      });
+
+      // Log the creation
+      await logActivity(
+        currentUser.id,
+        currentUser.username,
+        currentUser.role,
+        'contact_created',
+        'other',
+        undefined,
+        undefined,
+        { createdUsername: username, createdRole: role }
+      );
+
+      res.status(201).json({
+        id: newUser.id,
+        username: newUser.username,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        email: newUser.email,
+        role: newUser.role,
+        isActive: newUser.isActive,
+      });
+    } catch (error) {
+      console.error("Error creating staff account:", error);
+      res.status(500).json({ message: "Failed to create staff account" });
+    }
+  });
+
+  // Update staff account (admin only)
+  app.patch("/api/staff/:id", async (req: any, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can update staff accounts" });
+      }
+
+      const updateSchema = z.object({
+        username: z.string().min(3).optional(),
+        password: z.string().min(6).optional(),
+        firstName: z.string().min(1).optional(),
+        lastName: z.string().min(1).optional(),
+        email: z.string().email().optional().or(z.literal("")),
+        role: z.enum(["admin", "csr", "technician", "reports"]).optional(),
+        isActive: z.enum(["true", "false"]).optional(),
+      });
+
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+
+      const updates: any = { ...parsed.data };
+      
+      // Hash password if provided
+      if (updates.password) {
+        updates.password = await bcrypt.hash(updates.password, 10);
+      }
+
+      const updatedUser = await storage.updateUser(req.params.id, updates);
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({
+        id: updatedUser.id,
+        username: updatedUser.username,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        isActive: updatedUser.isActive,
+      });
+    } catch (error) {
+      console.error("Error updating staff account:", error);
+      res.status(500).json({ message: "Failed to update staff account" });
+    }
+  });
+
+  // Get activity logs (admin only)
+  app.get("/api/activity-logs", async (req: any, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can view activity logs" });
+      }
+
+      const { userId, startDate, endDate, actionType, limit } = req.query;
+      
+      const filters: any = {};
+      if (userId) filters.userId = userId;
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
+      if (actionType) filters.actionType = actionType;
+
+      const logs = await storage.getActivityLogs(filters);
+      
+      // Apply limit if specified
+      const limitNum = limit ? parseInt(limit as string, 10) : 500;
+      res.json(logs.slice(0, limitNum));
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+      res.status(500).json({ message: "Failed to fetch activity logs" });
+    }
+  });
+
+  // Get activity logs for a specific user (admin only)
+  app.get("/api/activity-logs/user/:userId", async (req: any, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can view activity logs" });
+      }
+
+      const { limit } = req.query;
+      const limitNum = limit ? parseInt(limit as string, 10) : 100;
+      
+      const logs = await storage.getActivityLogsByUser(req.params.userId, limitNum);
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching user activity logs:", error);
+      res.status(500).json({ message: "Failed to fetch activity logs" });
+    }
+  });
+
+  // Get activity summary for reporting (admin only)
+  app.get("/api/activity-summary", async (req: any, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can view activity summary" });
+      }
+
+      const { startDate, endDate } = req.query;
+      
+      const filters: any = {};
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
+
+      const logs = await storage.getActivityLogs(filters);
+      
+      // Calculate summary by user
+      const userSummary: Record<string, {
+        userId: string;
+        username: string;
+        userRole: string;
+        totalActions: number;
+        jobsCreated: number;
+        stageChanges: number;
+        emailsSent: number;
+        smsSent: number;
+        logins: number;
+        firstActivity: string;
+        lastActivity: string;
+      }> = {};
+
+      for (const log of logs) {
+        if (!userSummary[log.userId]) {
+          userSummary[log.userId] = {
+            userId: log.userId,
+            username: log.username,
+            userRole: log.userRole || 'unknown',
+            totalActions: 0,
+            jobsCreated: 0,
+            stageChanges: 0,
+            emailsSent: 0,
+            smsSent: 0,
+            logins: 0,
+            firstActivity: log.createdAt || '',
+            lastActivity: log.createdAt || '',
+          };
+        }
+
+        const summary = userSummary[log.userId];
+        summary.totalActions++;
+        if (log.actionType === 'job_created') summary.jobsCreated++;
+        if (log.actionType === 'job_stage_changed') summary.stageChanges++;
+        if (log.actionType === 'email_sent' || log.actionType === 'email_replied') summary.emailsSent++;
+        if (log.actionType === 'sms_sent') summary.smsSent++;
+        if (log.actionType === 'login') summary.logins++;
+        
+        // Track first and last activity
+        if (log.createdAt && log.createdAt < summary.firstActivity) {
+          summary.firstActivity = log.createdAt;
+        }
+        if (log.createdAt && log.createdAt > summary.lastActivity) {
+          summary.lastActivity = log.createdAt;
+        }
+      }
+
+      res.json(Object.values(userSummary));
+    } catch (error) {
+      console.error("Error fetching activity summary:", error);
+      res.status(500).json({ message: "Failed to fetch activity summary" });
     }
   });
 
@@ -183,7 +514,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   });
 
   // Create new job
-  app.post("/api/jobs", async (req, res) => {
+  app.post("/api/jobs", async (req: any, res) => {
     try {
       const parsed = insertJobSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -193,6 +524,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         });
       }
       const job = await storage.createJob(parsed.data);
+      
+      // Log activity
+      const currentUser = await getCurrentUser(req);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'job_created',
+          'jobs',
+          job.id,
+          job.jobNumber,
+          { customerName: `${job.firstName} ${job.lastName}`, totalDue: job.totalDue }
+        );
+      }
+      
       res.status(201).json(job);
     } catch (error) {
       res.status(500).json({ message: "Failed to create job" });
@@ -220,7 +567,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   });
 
   // Update job pipeline stage
-  app.patch("/api/jobs/:id/stage", async (req, res) => {
+  app.patch("/api/jobs/:id/stage", async (req: any, res) => {
     try {
       const stageSchema = z.object({
         pipelineStage: z.enum(pipelineStages),
@@ -238,14 +585,34 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         return res.status(404).json({ message: "Job not found" });
       }
       
+      const previousStage = currentJob.pipelineStage;
       const job = await storage.updateJobStage(req.params.id, parsed.data.pipelineStage);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
       
+      // Log stage change activity
+      const currentUser = await getCurrentUser(req);
+      if (currentUser && previousStage !== parsed.data.pipelineStage) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'job_stage_changed',
+          'jobs',
+          job.id,
+          job.jobNumber,
+          { 
+            fromStage: previousStage, 
+            toStage: parsed.data.pipelineStage,
+            customerName: `${job.firstName} ${job.lastName}`
+          }
+        );
+      }
+      
       // Auto-create Google Calendar event when stage changes to "scheduled"
       if (parsed.data.pipelineStage === 'scheduled' && 
-          currentJob.pipelineStage !== 'scheduled' &&
+          previousStage !== 'scheduled' &&
           job.installDate && job.installTime) {
         try {
           const configured = await isCalendarConfigured();
@@ -254,6 +621,20 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
             if (eventId) {
               await storage.updateJob(req.params.id, { googleCalendarEventId: eventId });
               job.googleCalendarEventId = eventId;
+              
+              // Log calendar event creation
+              if (currentUser) {
+                await logActivity(
+                  currentUser.id,
+                  currentUser.username,
+                  currentUser.role,
+                  'calendar_event_created',
+                  'calendar',
+                  job.id,
+                  job.jobNumber,
+                  { eventId, installDate: job.installDate, installTime: job.installTime }
+                );
+              }
             }
           }
         } catch (calendarError: any) {
@@ -268,7 +649,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   });
 
   // Add payment to job
-  app.post("/api/jobs/:id/payments", async (req, res) => {
+  app.post("/api/jobs/:id/payments", async (req: any, res) => {
     try {
       const parsed = paymentHistorySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -281,6 +662,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
+      
+      // Log payment activity
+      const currentUser = await getCurrentUser(req);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'payment_recorded',
+          'jobs',
+          job.id,
+          job.jobNumber,
+          { amount: parsed.data.amount, source: parsed.data.source, newBalance: job.balanceDue }
+        );
+      }
+      
       res.json(job);
     } catch (error) {
       res.status(500).json({ message: "Failed to add payment" });
