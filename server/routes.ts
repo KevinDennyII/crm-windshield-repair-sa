@@ -723,6 +723,21 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       }
 
       await sendEmail(job.email, parsed.data.subject, parsed.data.body);
+      
+      // Log email activity
+      const currentUser = await getCurrentUser(req as any);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'email_sent',
+          'communications',
+          req.params.id,
+          `Sent email to ${job.email}: ${parsed.data.subject}`
+        );
+      }
+      
       res.json({ message: "Email sent successfully" });
     } catch (error: any) {
       console.error("Failed to send email:", error);
@@ -807,6 +822,20 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         receiptSentAt: new Date().toISOString(),
         receiptPdf: parsed.data.pdfBase64
       });
+      
+      // Log receipt email activity
+      const currentUser = await getCurrentUser(req as any);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'email_sent',
+          'communications',
+          job.id,
+          `Sent receipt email to ${job.email}`
+        );
+      }
 
       res.json({ message: "Receipt sent successfully" });
     } catch (error: any) {
@@ -845,6 +874,21 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       }
 
       await sendReply(parsed.data.threadId, parsed.data.to, parsed.data.subject, parsed.data.body);
+      
+      // Log email reply activity
+      const currentUser = await getCurrentUser(req as any);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'email_replied',
+          'communications',
+          undefined,
+          `Replied to email thread: ${parsed.data.subject}`
+        );
+      }
+      
       res.json({ message: "Reply sent successfully" });
     } catch (error: any) {
       console.error("Failed to send reply:", error);
@@ -972,6 +1016,21 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       }
 
       const message = await sendSms(parsed.data.to, parsed.data.body);
+      
+      // Log SMS activity
+      const currentUser = await getCurrentUser(req as any);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'sms_sent',
+          'communications',
+          undefined,
+          `Sent SMS to ${parsed.data.to}`
+        );
+      }
+      
       res.json({ message: "SMS sent successfully", data: message });
     } catch (error: any) {
       console.error("Failed to send SMS:", error);
@@ -1008,6 +1067,21 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       }
 
       const message = await sendSms(job.phone, parsed.data.body);
+      
+      // Log SMS activity
+      const currentUser = await getCurrentUser(req as any);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'sms_sent',
+          'communications',
+          req.params.id,
+          `Sent SMS to ${job.phone}`
+        );
+      }
+      
       res.json({ message: "SMS sent successfully", data: message });
     } catch (error: any) {
       console.error("Failed to send SMS:", error);
@@ -1057,6 +1131,21 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       }
 
       await sendBluehostEmail(parsed.data.to, parsed.data.subject, parsed.data.body);
+      
+      // Log email activity
+      const currentUser = await getCurrentUser(req as any);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'email_sent',
+          'communications',
+          undefined,
+          `Sent Bluehost email to ${parsed.data.to}: ${parsed.data.subject}`
+        );
+      }
+      
       res.json({ message: "Email sent successfully" });
     } catch (error: any) {
       console.error("Failed to send Bluehost email:", error);
@@ -1085,6 +1174,21 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       }
 
       await replyToBluehostEmail(parsed.data.to, parsed.data.subject, parsed.data.body);
+      
+      // Log email reply activity
+      const currentUser = await getCurrentUser(req as any);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          'email_replied',
+          'communications',
+          undefined,
+          `Replied to Bluehost email: ${parsed.data.subject}`
+        );
+      }
+      
       res.json({ message: "Reply sent successfully" });
     } catch (error: any) {
       console.error("Failed to send Bluehost reply:", error);
