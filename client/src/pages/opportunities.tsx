@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { KanbanBoard } from "@/components/kanban-board";
 import { JobDetailModal } from "@/components/job-detail-modal";
 import { RepeatCustomerReminderDialog } from "@/components/repeat-customer-reminder-dialog";
+import { ConfirmationSendModal } from "@/components/confirmation-send-modal";
 import { type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +17,10 @@ export default function Opportunities() {
   
   const [pendingMoveJob, setPendingMoveJob] = useState<{ job: Job; newStage: PipelineStage } | null>(null);
   const [showRepeatReminder, setShowRepeatReminder] = useState(false);
+  
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [jobForConfirmation, setJobForConfirmation] = useState<Job | null>(null);
+  const [pendingSaveData, setPendingSaveData] = useState<{ previousStage: string; newData: InsertJob } | null>(null);
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -48,13 +53,23 @@ export default function Opportunities() {
       const response = await apiRequest("PATCH", `/api/jobs/${id}`, data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (savedJob: Job) => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       setIsModalOpen(false);
       toast({
         title: "Job updated",
         description: "Job details have been saved.",
       });
+      
+      // Check if we should show confirmation modal (stage changed to scheduled for retail)
+      if (pendingSaveData && 
+          pendingSaveData.newData.pipelineStage === 'scheduled' &&
+          pendingSaveData.previousStage !== 'scheduled' &&
+          pendingSaveData.newData.customerType === 'retail') {
+        setJobForConfirmation(savedJob);
+        setShowConfirmationModal(true);
+      }
+      setPendingSaveData(null);
     },
     onError: () => {
       toast({
@@ -62,6 +77,7 @@ export default function Opportunities() {
         description: "Failed to update job. Please try again.",
         variant: "destructive",
       });
+      setPendingSaveData(null);
     },
   });
 
@@ -155,6 +171,11 @@ export default function Opportunities() {
     if (isNewJob) {
       createJobMutation.mutate(data);
     } else if (selectedJob) {
+      // Track previous stage so we can show confirmation modal after save
+      setPendingSaveData({
+        previousStage: selectedJob.pipelineStage,
+        newData: data
+      });
       updateJobMutation.mutate({ id: selectedJob.id, data });
     }
   };
@@ -242,6 +263,21 @@ export default function Opportunities() {
         onCancel={handleRepeatReminderCancel}
         job={pendingMoveJob?.job || null}
       />
+
+      {jobForConfirmation && (
+        <ConfirmationSendModal
+          isOpen={showConfirmationModal}
+          onClose={() => {
+            setShowConfirmationModal(false);
+            setJobForConfirmation(null);
+          }}
+          job={jobForConfirmation}
+          onSuccess={() => {
+            setShowConfirmationModal(false);
+            setJobForConfirmation(null);
+          }}
+        />
+      )}
     </>
   );
 }

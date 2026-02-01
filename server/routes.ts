@@ -642,45 +642,72 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         }
       }
       
-      // Send appointment confirmation email and SMS when stage changes to "scheduled"
-      if (parsed.data.pipelineStage === 'scheduled' && previousStage !== 'scheduled') {
-        // Send appointment confirmation email and SMS
-        try {
-          const vehicle = job.vehicles?.[0];
-          const vehicleInfo = vehicle 
-            ? `${vehicle.vehicleYear || ""} ${vehicle.vehicleMake || ""} ${vehicle.vehicleModel || ""}`.trim()
-            : "Your Vehicle";
-          
-          // Get service type and glass type from parts
-          const parts = vehicle?.parts || [];
-          const serviceTypes = Array.from(new Set(parts.map(p => p.serviceType === 'repair' ? 'Repair' : p.serviceType === 'replace' ? 'Replacement' : 'Calibration')));
-          const glassTypes = Array.from(new Set(parts.map(p => {
-            const glassMap: Record<string, string> = {
-              'windshield': 'Windshield',
-              'door_glass': 'Door Glass',
-              'back_glass': 'Back Glass',
-              'back_glass_powerslide': 'Back Glass (Powerslide)',
-              'quarter_glass': 'Quarter Glass',
-              'sunroof': 'Sunroof',
-              'side_mirror': 'Side Mirror'
-            };
-            return glassMap[p.glassType] || p.glassType;
-          })));
-          
-          // Format date nicely
-          const formatDate = (dateStr: string) => {
-            const date = new Date(dateStr);
-            return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-          };
-          
-          // Format time frame
-          const timeFrameMap: Record<string, string> = {
-            'am': 'Morning (8am-12pm)',
-            'pm': 'Afternoon (12pm-5pm)',
-            'anytime': 'Anytime'
-          };
-          
-          const confirmationMessage = `Thank you for scheduling your auto glass service with Windshield Repair SA! If all information is correct can you reply with "confirm".
+      res.json(job);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update job stage" });
+    }
+  });
+
+  // Send appointment confirmation email/SMS
+  app.post("/api/jobs/:id/send-confirmation", async (req: any, res) => {
+    try {
+      const confirmationSchema = z.object({
+        sendEmail: z.boolean().default(true),
+        sendSms: z.boolean().default(true),
+      });
+      
+      const parsed = confirmationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request", errors: parsed.error.errors });
+      }
+      
+      const job = await storage.getJob(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      const currentUser = await getCurrentUser(req);
+      
+      const vehicle = job.vehicles?.[0];
+      const vehicleInfo = vehicle 
+        ? `${vehicle.vehicleYear || ""} ${vehicle.vehicleMake || ""} ${vehicle.vehicleModel || ""}`.trim()
+        : "Your Vehicle";
+      
+      // Get service type and glass type from parts
+      const parts = vehicle?.parts || [];
+      const serviceTypes = Array.from(new Set(parts.map(p => p.serviceType === 'repair' ? 'Repair' : p.serviceType === 'replace' ? 'Replacement' : 'Calibration')));
+      const glassTypes = Array.from(new Set(parts.map(p => {
+        const glassMap: Record<string, string> = {
+          'windshield': 'Windshield',
+          'door_glass': 'Door Glass',
+          'back_glass': 'Back Glass',
+          'back_glass_powerslide': 'Back Glass (Powerslide)',
+          'quarter_glass': 'Quarter Glass',
+          'sunroof': 'Sunroof',
+          'side_mirror': 'Side Mirror'
+        };
+        return glassMap[p.glassType] || p.glassType;
+      })));
+      
+      // Format date nicely
+      const formatDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      };
+      
+      // Format time frame
+      const timeFrameMap: Record<string, string> = {
+        'am': 'Morning (8am-12pm)',
+        'pm': 'Afternoon (12pm-5pm)',
+        'anytime': 'Anytime'
+      };
+      
+      // Format payment method
+      const paymentMethodText = Array.isArray(job.paymentMethod) && job.paymentMethod.length > 0
+        ? job.paymentMethod.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(', ')
+        : 'TBD';
+      
+      const confirmationMessage = `Thank you for scheduling your auto glass service with Windshield Repair SA! If all information is correct can you reply with "confirm".
 
 Service day: ${job.installDate ? formatDate(job.installDate) : 'TBD'}
 Time frame: ${job.installTime ? timeFrameMap[job.installTime] || job.installTime : 'TBD'}
@@ -689,66 +716,73 @@ Service: ${serviceTypes.join(', ') || 'Auto Glass Service'}
 Glass: ${glassTypes.join(', ') || 'TBD'}
 Address: ${job.streetAddress || 'TBD'}
 Total price: $${Number(job.totalDue || 0).toFixed(2)}
-Payment method: ${job.paymentMethod || 'TBD'}
+Payment method: ${paymentMethodText}
 
 Please be sure to be onsite so we can take payment before start work and please keep in mind that our technician do not have change on hand (if paying cash)
 
 Please let us know of any changes.`;
 
-          // Send email if customer has email
-          if (job.email) {
-            try {
-              const subject = `Appointment Confirmation - Windshield Repair SA - ${vehicleInfo}`;
-              await sendEmail(job.email, subject, confirmationMessage);
-              
-              if (currentUser) {
-                await logActivity(
-                  currentUser.id,
-                  currentUser.username,
-                  currentUser.role,
-                  'email_sent',
-                  'communications',
-                  job.id,
-                  job.jobNumber,
-                  { type: 'appointment_confirmation', to: job.email }
-                );
-              }
-              console.log("Sent appointment confirmation email to:", job.email);
-            } catch (emailError: any) {
-              console.error("Failed to send confirmation email:", emailError.message);
-            }
-          }
+      const results = { emailSent: false, smsSent: false, errors: [] as string[] };
+
+      // Send email if requested and customer has email
+      if (parsed.data.sendEmail && job.email) {
+        try {
+          const subject = `Appointment Confirmation - Windshield Repair SA - ${vehicleInfo}`;
+          await sendEmail(job.email, subject, confirmationMessage);
+          results.emailSent = true;
           
-          // Send SMS if customer has phone and Twilio is configured
-          if (job.phone && isTwilioConfigured()) {
-            try {
-              await sendSms(job.phone, confirmationMessage);
-              
-              if (currentUser) {
-                await logActivity(
-                  currentUser.id,
-                  currentUser.username,
-                  currentUser.role,
-                  'sms_sent',
-                  'communications',
-                  job.id,
-                  job.jobNumber,
-                  { type: 'appointment_confirmation', to: job.phone }
-                );
-              }
-              console.log("Sent appointment confirmation SMS to:", job.phone);
-            } catch (smsError: any) {
-              console.error("Failed to send confirmation SMS:", smsError.message);
-            }
+          if (currentUser) {
+            await logActivity(
+              currentUser.id,
+              currentUser.username,
+              currentUser.role,
+              'email_sent',
+              'communications',
+              job.id,
+              job.jobNumber,
+              { type: 'appointment_confirmation', to: job.email }
+            );
           }
-        } catch (confirmationError: any) {
-          console.error("Failed to send appointment confirmation:", confirmationError.message);
+          console.log("Sent appointment confirmation email to:", job.email);
+        } catch (emailError: any) {
+          console.error("Failed to send confirmation email:", emailError.message);
+          results.errors.push(`Email failed: ${emailError.message}`);
         }
       }
       
-      res.json(job);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to update job stage" });
+      // Send SMS if requested and customer has phone and Twilio is configured
+      if (parsed.data.sendSms && job.phone && isTwilioConfigured()) {
+        try {
+          await sendSms(job.phone, confirmationMessage);
+          results.smsSent = true;
+          
+          if (currentUser) {
+            await logActivity(
+              currentUser.id,
+              currentUser.username,
+              currentUser.role,
+              'sms_sent',
+              'communications',
+              job.id,
+              job.jobNumber,
+              { type: 'appointment_confirmation', to: job.phone }
+            );
+          }
+          console.log("Sent appointment confirmation SMS to:", job.phone);
+        } catch (smsError: any) {
+          console.error("Failed to send confirmation SMS:", smsError.message);
+          results.errors.push(`SMS failed: ${smsError.message}`);
+        }
+      }
+      
+      res.json({ 
+        success: results.emailSent || results.smsSent, 
+        ...results,
+        message: confirmationMessage
+      });
+    } catch (error: any) {
+      console.error("Failed to send appointment confirmation:", error.message);
+      res.status(500).json({ message: "Failed to send confirmation" });
     }
   });
 
