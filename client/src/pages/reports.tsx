@@ -522,10 +522,13 @@ export default function Reports() {
   }, [jobs]);
 
   // Job Profitability Report - Only completed jobs
-  // Cost = partPrice + accessoriesPrice + urethanePrice + calibrationPrice + salesTax + 3.5% processing fee
+  // Cost = partPrice + accessoriesPrice + urethanePrice + calibrationPrice + subcontractorUrethane + salesTax + 3.5% processing fee
   const jobProfitability = useMemo(() => {
     return completedJobs.map(job => {
       const revenue = job.totalDue;
+      // Check if this is a subcontractor job
+      const isSubcontractor = job.customerType === "subcontractor";
+      
       // Sum costs from all parts across all vehicles with detailed breakdown
       let totalPartPrice = 0;
       let totalAccessoriesPrice = 0;
@@ -533,9 +536,11 @@ export default function Reports() {
       let totalCalibrationPrice = 0;
       let totalSalesTax = 0;
       let totalProcessingFee = 0;
+      let partCount = 0;
       
       job.vehicles?.forEach(vehicle => {
         vehicle.parts?.forEach(part => {
+          partCount++;
           const partPrice = part.partPrice || 0;
           const accessoriesPrice = part.accessoriesPrice || 0;
           const urethanePrice = part.urethanePrice || 0;
@@ -559,7 +564,10 @@ export default function Reports() {
         });
       });
       
-      const subtotal = totalPartPrice + totalAccessoriesPrice + totalUrethanePrice + totalCalibrationPrice;
+      // Add $15 urethane cost per part for subcontractor jobs
+      const subcontractorUrethane = isSubcontractor ? (partCount * 15) : 0;
+      
+      const subtotal = totalPartPrice + totalAccessoriesPrice + totalUrethanePrice + totalCalibrationPrice + subcontractorUrethane;
       const cost = subtotal + totalSalesTax + totalProcessingFee;
       const profit = revenue - cost;
       const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
@@ -575,12 +583,14 @@ export default function Reports() {
         cost,
         profit,
         margin,
+        isSubcontractor,
         // Detailed breakdown for tooltip
         breakdown: {
           partPrice: totalPartPrice,
           accessoriesPrice: totalAccessoriesPrice,
           urethanePrice: totalUrethanePrice,
           calibrationPrice: totalCalibrationPrice,
+          subcontractorUrethane,
           subtotal,
           salesTax: totalSalesTax,
           processingFee: totalProcessingFee,
@@ -1636,6 +1646,12 @@ export default function Reports() {
                                       <span>Calibration (cost: $100)</span>
                                       <span className="font-medium">{formatUSD(row.breakdown.calibrationPrice)}</span>
                                     </div>
+                                    {row.isSubcontractor && row.breakdown.subcontractorUrethane > 0 && (
+                                      <div className="flex justify-between text-blue-600">
+                                        <span>Subcontractor Urethane ($15/part)</span>
+                                        <span className="font-medium">{formatUSD(row.breakdown.subcontractorUrethane)}</span>
+                                      </div>
+                                    )}
                                     <div className="flex justify-between font-medium border-t pt-1">
                                       <span>Subtotal</span>
                                       <span>{formatUSD(row.breakdown.subtotal)}</span>
