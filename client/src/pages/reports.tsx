@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { JobDetailModal } from "@/components/job-detail-modal";
 import {
   BarChart,
   Bar,
@@ -47,7 +50,7 @@ import {
   UserCheck,
   FileText,
 } from "lucide-react";
-import { type Job } from "@shared/schema";
+import { type Job, type InsertJob, type PaymentHistoryEntry } from "@shared/schema";
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658", "#ff7c7c"];
 
@@ -229,6 +232,7 @@ interface JobListModalState {
 }
 
 export default function Reports() {
+  const { toast } = useToast();
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("month");
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
@@ -237,9 +241,75 @@ export default function Reports() {
     title: "",
     jobs: [],
   });
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
+  });
+
+  // Mutations for job operations
+  const updateJobMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: InsertJob }) => {
+      const response = await apiRequest("PATCH", `/api/jobs/${id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      setSelectedJob(null);
+      toast({
+        title: "Job updated",
+        description: "Job details have been saved.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to update job.",
+      });
+    },
+  });
+
+  const deleteJobMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/jobs/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      setSelectedJob(null);
+      toast({
+        title: "Job deleted",
+        description: "Job has been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to delete job.",
+      });
+    },
+  });
+
+  const addPaymentMutation = useMutation({
+    mutationFn: async ({ id, payment }: { id: string; payment: PaymentHistoryEntry }) => {
+      const response = await apiRequest("POST", `/api/jobs/${id}/payments`, payment);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({
+        title: "Payment added",
+        description: "Payment has been recorded.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to add payment.",
+      });
+    },
   });
 
   const openJobListModal = (title: string, jobList: Job[]) => {
@@ -248,6 +318,28 @@ export default function Reports() {
 
   const closeJobListModal = () => {
     setJobListModal({ isOpen: false, title: "", jobs: [] });
+  };
+
+  const handleJobRowClick = (job: Job) => {
+    setSelectedJob(job);
+  };
+
+  const handleSaveJob = (data: InsertJob) => {
+    if (selectedJob) {
+      updateJobMutation.mutate({ id: selectedJob.id, data });
+    }
+  };
+
+  const handleDeleteJob = (jobId: string) => {
+    deleteJobMutation.mutate(jobId);
+  };
+
+  const handleAddPayment = (jobId: string, payment: PaymentHistoryEntry) => {
+    addPaymentMutation.mutate({ id: jobId, payment });
+  };
+
+  const closeJobDetailModal = () => {
+    setSelectedJob(null);
   };
 
   const filteredJobs = useMemo(() => {
@@ -1678,8 +1770,13 @@ export default function Reports() {
                 </TableHeader>
                 <TableBody>
                   {jobListModal.jobs.map((job) => (
-                    <TableRow key={job.id} data-testid={`modal-job-row-${job.id}`}>
-                      <TableCell className="font-medium">{job.jobNumber}</TableCell>
+                    <TableRow 
+                      key={job.id} 
+                      data-testid={`modal-job-row-${job.id}`}
+                      className="cursor-pointer hover-elevate"
+                      onClick={() => handleJobRowClick(job)}
+                    >
+                      <TableCell className="font-medium text-primary underline">{job.jobNumber}</TableCell>
                       <TableCell>{job.isBusiness ? job.businessName : `${job.firstName} ${job.lastName}`}</TableCell>
                       <TableCell>
                         <Badge variant={
@@ -1725,6 +1822,16 @@ export default function Reports() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Job Detail Modal for editing individual jobs */}
+      <JobDetailModal
+        job={selectedJob}
+        isOpen={selectedJob !== null}
+        onClose={closeJobDetailModal}
+        onSave={handleSaveJob}
+        onDelete={handleDeleteJob}
+        onAddPayment={handleAddPayment}
+      />
     </div>
   );
 }
