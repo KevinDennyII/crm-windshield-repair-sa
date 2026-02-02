@@ -526,8 +526,9 @@ export default function Reports() {
   const jobProfitability = useMemo(() => {
     return completedJobs.map(job => {
       const revenue = job.totalDue;
-      // Check if this is a subcontractor job
+      // Check customer types for special pricing rules
       const isSubcontractor = job.customerType === "subcontractor";
+      const isDealer = job.customerType === "dealer";
       
       // Sum costs from all parts across all vehicles with detailed breakdown
       let totalPartPrice = 0;
@@ -568,8 +569,10 @@ export default function Reports() {
           const salesTaxPercent = part.salesTaxPercent ?? 8.25;
           totalSalesTax += subtotal * (salesTaxPercent / 100);
           
-          // 3.5% processing fee on subtotal
-          totalProcessingFee += subtotal * 0.035;
+          // 3.5% processing fee on subtotal (NOT applied to dealer jobs)
+          if (!isDealer) {
+            totalProcessingFee += subtotal * 0.035;
+          }
         });
       });
       
@@ -593,6 +596,7 @@ export default function Reports() {
         profit,
         margin,
         isSubcontractor,
+        isDealer,
         // Detailed breakdown for tooltip
         breakdown: {
           partPrice: totalPartPrice,
@@ -1670,8 +1674,8 @@ export default function Reports() {
                                       <span>{formatUSD(row.breakdown.salesTax)}</span>
                                     </div>
                                     <div className="flex justify-between text-muted-foreground">
-                                      <span>Processing Fee (3.5%)</span>
-                                      <span>{formatUSD(row.breakdown.processingFee)}</span>
+                                      <span>Processing Fee (3.5%){row.isDealer && " - N/A for Dealer"}</span>
+                                      <span>{row.isDealer ? "$0" : formatUSD(row.breakdown.processingFee)}</span>
                                     </div>
                                     <div className="flex justify-between font-bold border-t pt-1 text-amber-600">
                                       <span>Total Cost</span>
