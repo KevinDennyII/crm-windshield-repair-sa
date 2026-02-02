@@ -553,7 +553,8 @@ export default function Reports() {
           const calibrationCost = (part.calibrationPrice && part.calibrationPrice > 0) ? 100 : 0;
           
           // Count parts that require urethane for subcontractor cost
-          if (isSubcontractor && part.glassType && urethaneGlassTypes.includes(part.glassType)) {
+          // Only count actual installations (partPrice > 0), not calibration-only parts
+          if (isSubcontractor && part.glassType && urethaneGlassTypes.includes(part.glassType) && (part.partPrice || 0) > 0) {
             urethanePartCount++;
           }
           
