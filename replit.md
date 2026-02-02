@@ -74,7 +74,7 @@ The Job Profitability report calculates costs using the following formula:
 - **Calibration**: Fixed $100 cost per calibration (regardless of customer-charged price)
 - **Subcontractor Urethane**: Additional $15 per part for subcontractor jobs (customerType === "subcontractor"), only for actual installations (serviceType === "replace") of windshield, back glass, and quarter glass parts (NOT calibration, repair, or other service types)
 - **Sales Tax**: 8.25% on subtotal
-- **Processing Fee**: 3.5% on revenue (job total), rounded UP to next dollar (NOT applied to dealer jobs)
+- **Processing Fee**: 3.5% on revenue (job total), rounded UP to next dollar (NOT applied to dealer or subcontractor jobs)
 
 ### Build Process
 - **Development**: `npm run dev` (tsx with Vite HMR).

@@ -573,8 +573,8 @@ export default function Reports() {
       const subcontractorUrethane = isSubcontractor ? (urethanePartCount * PRICING.SUBCONTRACTOR_URETHANE_PER_PART) : 0;
       
       // Processing fee: 3.5% of revenue (job total), rounded UP to next dollar
-      // NOT applied to dealer jobs
-      const processingFee = isDealer ? 0 : Math.ceil(revenue * PRICING.PROCESSING_FEE_RATE);
+      // NOT applied to dealer or subcontractor jobs
+      const processingFee = (isDealer || isSubcontractor) ? 0 : Math.ceil(revenue * PRICING.PROCESSING_FEE_RATE);
       
       const subtotal = totalPartPrice + totalAccessoriesPrice + totalUrethanePrice + totalCalibrationPrice + subcontractorUrethane;
       const cost = subtotal + totalSalesTax + processingFee;
