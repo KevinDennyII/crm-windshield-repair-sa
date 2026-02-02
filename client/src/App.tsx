@@ -7,6 +7,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar, MobileHeader } from "@/components/app-sidebar";
 import { ReportsSidebar, ReportsMobileHeader } from "@/components/reports-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { FloatingAIAssistant } from "@/components/floating-ai-assistant";
+import { AIContextProvider } from "@/contexts/ai-context";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Opportunities from "@/pages/opportunities";
@@ -170,21 +172,24 @@ function AuthenticatedApp() {
 
   // Admins and CSRs get the full desktop interface
   return (
-    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full overflow-hidden">
-        <AppSidebar />
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <MobileHeader />
-          <header className="hidden md:flex items-center justify-between gap-4 h-12 px-4 border-b bg-background flex-shrink-0">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <ThemeToggle />
-          </header>
-          <main className="flex-1 overflow-auto bg-background">
-            <AdminCsrRouter />
-          </main>
+    <AIContextProvider>
+      <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+        <div className="flex h-screen w-full overflow-hidden">
+          <AppSidebar />
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <MobileHeader />
+            <header className="hidden md:flex items-center justify-between gap-4 h-12 px-4 border-b bg-background flex-shrink-0">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <ThemeToggle />
+            </header>
+            <main className="flex-1 overflow-auto bg-background">
+              <AdminCsrRouter />
+            </main>
+          </div>
+          <FloatingAIAssistant />
         </div>
-      </div>
-    </SidebarProvider>
+      </SidebarProvider>
+    </AIContextProvider>
   );
 }
 

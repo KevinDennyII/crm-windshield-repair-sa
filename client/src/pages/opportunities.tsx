@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { KanbanBoard } from "@/components/kanban-board";
 import { JobDetailModal } from "@/components/job-detail-modal";
@@ -8,9 +8,11 @@ import { type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry 
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAIContext } from "@/contexts/ai-context";
 
 export default function Opportunities() {
   const { toast } = useToast();
+  const { setSelectedEntity, clearSelectedEntity } = useAIContext();
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNewJob, setIsNewJob] = useState(false);
@@ -21,6 +23,27 @@ export default function Opportunities() {
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [jobForConfirmation, setJobForConfirmation] = useState<Job | null>(null);
   const [pendingSaveData, setPendingSaveData] = useState<{ previousStage: string; newData: InsertJob } | null>(null);
+  
+  useEffect(() => {
+    if (selectedJob && isModalOpen) {
+      const firstVehicle = selectedJob.vehicles?.[0];
+      const vehicleInfo = firstVehicle 
+        ? `${firstVehicle.vehicleYear} ${firstVehicle.vehicleMake} ${firstVehicle.vehicleModel}`
+        : "Unknown Vehicle";
+      setSelectedEntity({
+        type: "job",
+        id: selectedJob.id,
+        name: selectedJob.jobNumber || `Job ${selectedJob.id}`,
+        details: {
+          customerName: `${selectedJob.firstName} ${selectedJob.lastName}`,
+          vehicleInfo,
+          stage: selectedJob.pipelineStage,
+        },
+      });
+    } else {
+      clearSelectedEntity();
+    }
+  }, [selectedJob, isModalOpen, setSelectedEntity, clearSelectedEntity]);
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
