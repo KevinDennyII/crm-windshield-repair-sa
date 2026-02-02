@@ -1,4 +1,4 @@
-import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, type ActivityLog, type InsertActivityLog, jobs, users, customerReminders, contacts, activityLogs } from "@shared/schema";
+import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, type ActivityLog, type InsertActivityLog, type ProcessedLead, type InsertProcessedLead, jobs, users, customerReminders, contacts, activityLogs, processedLeads } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, desc, sql, max, and, gte, lte } from "drizzle-orm";
@@ -39,6 +39,11 @@ export interface IStorage {
   // User management
   getAllUsers(): Promise<User[]>;
   updateUser(id: string, updates: Partial<UpsertUser>): Promise<User | undefined>;
+  
+  // Processed leads (for preventing duplicate lead processing)
+  isLeadProcessed(emailId: string): Promise<boolean>;
+  markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string): Promise<void>;
+  getAllProcessedLeadIds(): Promise<string[]>;
 }
 
 function createDefaultPart(overrides: Partial<Part> = {}): Part {
@@ -587,6 +592,33 @@ export class DatabaseStorage implements IStorage {
     
     await db.update(users).set(updateData).where(eq(users.id, id));
     return this.getUser(id);
+  }
+  
+  // Processed leads methods
+  async isLeadProcessed(emailId: string): Promise<boolean> {
+    const result = await db
+      .select({ emailId: processedLeads.emailId })
+      .from(processedLeads)
+      .where(eq(processedLeads.emailId, emailId))
+      .limit(1);
+    return result.length > 0;
+  }
+  
+  async markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string): Promise<void> {
+    try {
+      await db.insert(processedLeads).values({
+        emailId,
+        emailSubject: emailSubject || null,
+        customerEmail: customerEmail || null,
+      });
+    } catch (error) {
+      // Ignore duplicate key errors - lead was already processed
+    }
+  }
+  
+  async getAllProcessedLeadIds(): Promise<string[]> {
+    const result = await db.select({ emailId: processedLeads.emailId }).from(processedLeads);
+    return result.map(r => r.emailId);
   }
 }
 

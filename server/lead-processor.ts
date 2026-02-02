@@ -21,8 +21,6 @@ export interface ParsedLead {
   originalEmailDate: string;
 }
 
-const processedLeadIds = new Set<string>();
-
 // SAFETY: Only process emails received after this date to avoid sending to already-contacted customers
 // This was set on Jan 31, 2026 after discovering old emails were being processed
 const LEAD_PROCESSING_CUTOFF_DATE = new Date('2026-01-31T12:00:00Z'); // Noon UTC on Jan 31, 2026
@@ -322,7 +320,9 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
     
     for (const thread of threads) {
       for (const email of thread.messages) {
-        if (processedLeadIds.has(email.id)) {
+        // Check if already processed using persistent database storage
+        const alreadyProcessed = await storage.isLeadProcessed(email.id);
+        if (alreadyProcessed) {
           continue;
         }
 
@@ -333,13 +333,13 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
         // SAFETY: Skip emails received before the cutoff date
         const emailDate = new Date(email.date);
         if (emailDate < LEAD_PROCESSING_CUTOFF_DATE) {
-          processedLeadIds.add(email.id); // Mark as processed so we don't check again
+          await storage.markLeadProcessed(email.id, email.subject); // Persist to database
           continue;
         }
 
         const lead = parseLeadEmail(email);
         if (!lead) {
-          processedLeadIds.add(email.id);
+          await storage.markLeadProcessed(email.id, email.subject);
           results.errors.push(`Failed to parse lead from email: ${email.subject}`);
           continue;
         }
@@ -352,7 +352,7 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
         );
 
         if (alreadyExists) {
-          processedLeadIds.add(email.id);
+          await storage.markLeadProcessed(email.id, email.subject, lead.email);
           continue;
         }
 
@@ -364,7 +364,7 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
             sendLeadConfirmationSms(lead),
           ]);
 
-          processedLeadIds.add(email.id);
+          await storage.markLeadProcessed(email.id, email.subject, lead.email);
           results.processed++;
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -405,6 +405,9 @@ export function stopLeadPolling(): void {
   }
 }
 
+// Note: clearProcessedLeads is now a no-op since we use persistent database storage
+// Keeping the function signature for backwards compatibility but it does nothing
 export function clearProcessedLeads(): void {
-  processedLeadIds.clear();
+  // Database-persisted processed leads cannot be cleared through this function
+  // This is intentional to prevent accidental re-processing of leads
 }

@@ -58,6 +58,12 @@ A mobile-optimized interface for field technicians featuring:
 - **Validation**: Zod schemas generated from Drizzle schemas
 - **Current Storage**: In-memory Map-based storage, designed for PostgreSQL integration.
 
+### Lead Processing
+- **Lead Polling**: Automatic polling of Bluehost emails for new leads (60-second interval)
+- **Duplicate Prevention**: Processed lead email IDs are stored in the `processed_leads` database table to prevent duplicate emails/SMS across server restarts
+- **Date Cutoff**: Only processes emails received after Jan 31, 2026 noon UTC to avoid re-sending to already-contacted customers
+- **Auto-Response**: New leads automatically receive a confirmation email and SMS
+
 ### Shared Code
 The `shared/` directory contains common code including database schema definitions, TypeScript types, Zod validation schemas, pipeline stages (quote → scheduled → paid_completed → lost_opportunity), and payment statuses.
 
