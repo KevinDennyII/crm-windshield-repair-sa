@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   Dialog,
@@ -18,6 +18,7 @@ import type { Job } from "@shared/schema";
 
 interface QuoteSendModalProps {
   job: Job;
+  calculatedTotal: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -35,7 +36,7 @@ function formatGlassType(glassType: string): string {
   return typeMap[glassType] || glassType.replace(/_/g, " ");
 }
 
-function generateQuoteContent(job: Job): string {
+function generateQuoteContent(job: Job, calculatedTotal: number): string {
   const vehicle = job.vehicles?.[0];
   const part = vehicle?.parts?.[0];
   
@@ -44,7 +45,7 @@ function generateQuoteContent(job: Job): string {
     : "Your Vehicle";
   
   const glassType = part ? formatGlassType(part.glassType || "windshield") : "windshield";
-  const price = job.totalDue || 0;
+  const price = calculatedTotal;
   const vin = vehicle?.vin || "";
   
   let content = `Thank you for your interest in Windshield Repair SA! Here is your quote:
@@ -69,11 +70,17 @@ Payment method - cash or card (due at the beginning of service.)`;
   return content;
 }
 
-export function QuoteSendModal({ job, open, onOpenChange }: QuoteSendModalProps) {
+export function QuoteSendModal({ job, calculatedTotal, open, onOpenChange }: QuoteSendModalProps) {
   const { toast } = useToast();
   const [sendEmail, setSendEmail] = useState(true);
   const [sendSms, setSendSms] = useState(true);
-  const [quoteContent, setQuoteContent] = useState(() => generateQuoteContent(job));
+  const [quoteContent, setQuoteContent] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setQuoteContent(generateQuoteContent(job, calculatedTotal));
+    }
+  }, [open, job, calculatedTotal]);
 
   const sendQuoteMutation = useMutation({
     mutationFn: async ({ email, sms }: { email: boolean; sms: boolean }) => {

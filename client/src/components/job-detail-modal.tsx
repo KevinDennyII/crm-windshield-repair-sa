@@ -2757,6 +2757,7 @@ export function JobDetailModal({
       {job && (
         <QuoteSendModal
           job={job}
+          calculatedTotal={jobTotal}
           open={showQuoteModal}
           onOpenChange={setShowQuoteModal}
         />
