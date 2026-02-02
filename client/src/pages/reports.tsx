@@ -520,6 +520,45 @@ export default function Reports() {
       .sort((a, b) => b.amount - a.amount);
   }, [jobs]);
 
+  // Job Profitability Report - Only completed jobs
+  const jobProfitability = useMemo(() => {
+    return completedJobs.map(job => {
+      const revenue = job.totalDue;
+      // Sum materialCost and subcontractorCost from all parts across all vehicles
+      let cost = 0;
+      job.vehicles?.forEach(vehicle => {
+        vehicle.parts?.forEach(part => {
+          cost += (part.materialCost || 0) + (part.subcontractorCost || 0);
+        });
+      });
+      const profit = revenue - cost;
+      const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+      
+      const customerName = job.isBusiness && job.businessName 
+        ? job.businessName 
+        : `${job.firstName} ${job.lastName}`.trim();
+      
+      return {
+        job,
+        customerName,
+        revenue,
+        cost,
+        profit,
+        margin,
+      };
+    }).sort((a, b) => b.profit - a.profit);
+  }, [completedJobs]);
+
+  // Profitability summary
+  const profitabilitySummary = useMemo(() => {
+    const totalRevenue = jobProfitability.reduce((sum, j) => sum + j.revenue, 0);
+    const totalCost = jobProfitability.reduce((sum, j) => sum + j.cost, 0);
+    const totalProfit = totalRevenue - totalCost;
+    const avgMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+    
+    return { totalRevenue, totalCost, totalProfit, avgMargin };
+  }, [jobProfitability]);
+
   // Sales by payment method
   const salesByPaymentMethod = useMemo(() => {
     const methodTotals: Record<string, number> = {};
@@ -1461,6 +1500,92 @@ export default function Reports() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Job Profitability Report */}
+          <Card data-testid="card-job-profitability">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Job Profitability</CardTitle>
+              <p className="text-xs text-muted-foreground">Cost and profit breakdown for completed jobs</p>
+            </CardHeader>
+            <CardContent>
+              {/* Summary Cards */}
+              <div className="grid gap-4 grid-cols-2 md:grid-cols-4 mb-6">
+                <div className="p-3 rounded-md bg-muted/50">
+                  <p className="text-xs text-muted-foreground">Total Revenue</p>
+                  <p className="text-lg font-bold text-primary">{formatUSD(profitabilitySummary.totalRevenue)}</p>
+                </div>
+                <div className="p-3 rounded-md bg-muted/50">
+                  <p className="text-xs text-muted-foreground">Total Cost</p>
+                  <p className="text-lg font-bold text-amber-600">{formatUSD(profitabilitySummary.totalCost)}</p>
+                </div>
+                <div className="p-3 rounded-md bg-muted/50">
+                  <p className="text-xs text-muted-foreground">Total Profit</p>
+                  <p className={`text-lg font-bold ${profitabilitySummary.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatUSD(profitabilitySummary.totalProfit)}
+                  </p>
+                </div>
+                <div className="p-3 rounded-md bg-muted/50">
+                  <p className="text-xs text-muted-foreground">Avg Margin</p>
+                  <p className={`text-lg font-bold ${profitabilitySummary.avgMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {profitabilitySummary.avgMargin.toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Profitability Table */}
+              {jobProfitability.length > 0 ? (
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background">
+                      <TableRow>
+                        <TableHead>Job #</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Revenue</TableHead>
+                        <TableHead className="text-right">Cost</TableHead>
+                        <TableHead className="text-right">Profit</TableHead>
+                        <TableHead className="text-right">Margin</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {jobProfitability.map((row, index) => (
+                        <TableRow 
+                          key={row.job.id} 
+                          className="cursor-pointer hover-elevate"
+                          onClick={() => setSelectedJob(row.job)}
+                          data-testid={`row-profit-${index}`}
+                        >
+                          <TableCell className="font-mono text-xs text-primary underline">
+                            #{row.job.jobNumber}
+                          </TableCell>
+                          <TableCell className="max-w-[150px] truncate">{row.customerName}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {row.job.installDate || row.job.createdAt?.split('T')[0] || '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {formatUSD(row.revenue)}
+                          </TableCell>
+                          <TableCell className="text-right text-amber-600">
+                            {formatUSD(row.cost)}
+                          </TableCell>
+                          <TableCell className={`text-right font-medium ${row.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatUSD(row.profit)}
+                          </TableCell>
+                          <TableCell className={`text-right ${row.margin >= 50 ? 'text-green-600' : row.margin >= 30 ? 'text-amber-600' : 'text-red-600'}`}>
+                            {row.margin.toFixed(1)}%
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  No completed jobs in this period
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Team Tab (CSR + Technicians) */}
