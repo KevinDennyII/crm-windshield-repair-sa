@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAIContext } from "@/contexts/ai-context";
 import {
   Mail,
   MessageSquare,
@@ -100,6 +101,7 @@ interface ConversationContact {
 
 export default function Conversations() {
   const { toast } = useToast();
+  const { setSelectedEntity, clearSelectedEntity } = useAIContext();
   const [activeTab, setActiveTab] = useState<string>("all");
   const [selectedConversation, setSelectedConversation] = useState<EmailThread | null>(null);
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsConversation | null>(null);
@@ -109,6 +111,44 @@ export default function Conversations() {
 
   const [selectedBluehostConversation, setSelectedBluehostConversation] = useState<BluehostThread | null>(null);
   const [bluehostReplyText, setBluehostReplyText] = useState("");
+
+  useEffect(() => {
+    if (selectedConversation) {
+      setSelectedEntity({
+        type: "conversation",
+        id: selectedConversation.threadId,
+        name: selectedConversation.from,
+        details: {
+          subject: selectedConversation.subject,
+          source: "gmail",
+          email: selectedConversation.fromEmail,
+        },
+      });
+    } else if (selectedSmsConversation) {
+      setSelectedEntity({
+        type: "conversation",
+        id: selectedSmsConversation.phoneNumber,
+        name: selectedSmsConversation.phoneNumber,
+        details: {
+          source: "sms",
+          messageCount: selectedSmsConversation.messages.length,
+        },
+      });
+    } else if (selectedBluehostConversation) {
+      setSelectedEntity({
+        type: "conversation",
+        id: selectedBluehostConversation.id,
+        name: selectedBluehostConversation.from,
+        details: {
+          subject: selectedBluehostConversation.subject,
+          source: "bluehost",
+          email: selectedBluehostConversation.fromEmail,
+        },
+      });
+    } else {
+      clearSelectedEntity();
+    }
+  }, [selectedConversation, selectedSmsConversation, selectedBluehostConversation, setSelectedEntity, clearSelectedEntity]);
 
   const { data: emailThreads, isLoading: loadingEmails, refetch: refetchEmails } = useQuery<EmailThread[]>({
     queryKey: ["/api/emails/inbox"],

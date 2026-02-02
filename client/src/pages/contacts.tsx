@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAIContext } from "@/contexts/ai-context";
 import {
   Search,
   User,
@@ -122,6 +123,7 @@ const ITEMS_PER_PAGE = 25;
 
 export default function Contacts() {
   const { toast } = useToast();
+  const { setSelectedEntity, clearSelectedEntity } = useAIContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [activeTab, setActiveTab] = useState("details");
@@ -129,6 +131,24 @@ export default function Contacts() {
   const [isEditing, setIsEditing] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    if (selectedContact) {
+      setSelectedEntity({
+        type: "contact",
+        id: selectedContact.id,
+        name: `${selectedContact.firstName} ${selectedContact.lastName}`,
+        details: {
+          phone: selectedContact.phone,
+          email: selectedContact.email || undefined,
+          category: selectedContact.category,
+          businessName: selectedContact.businessName || undefined,
+        },
+      });
+    } else {
+      clearSelectedEntity();
+    }
+  }, [selectedContact, setSelectedEntity, clearSelectedEntity]);
 
   const { data: contacts, isLoading: loadingContacts, refetch: refetchContacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],

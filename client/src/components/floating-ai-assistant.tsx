@@ -147,6 +147,13 @@ export function FloatingAIAssistant() {
           { label: "Service history", prompt: `What's the service history for customer "${entityName}"?`, icon: FileText },
           { label: "Referral request", prompt: `Draft a referral request message for customer "${entityName}".`, icon: ClipboardList },
         ];
+      case "conversation":
+        const source = selectedEntity.details?.source || "email";
+        return [
+          { label: "Summarize thread", prompt: `Summarize this ${source} conversation with "${entityName}" including key points and any action items.`, icon: FileText },
+          { label: "Draft reply", prompt: `Help me draft a professional reply to "${entityName}" in this ${source} conversation.`, icon: Mail },
+          { label: "Analyze sentiment", prompt: `Analyze the sentiment and tone of this conversation with "${entityName}". Is the customer satisfied, frustrated, or neutral?`, icon: ClipboardList },
+        ];
       default:
         return [];
     }

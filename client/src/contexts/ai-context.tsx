@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 
 interface SelectedEntity {
-  type: "job" | "lead" | "quote" | "contact" | null;
+  type: "job" | "lead" | "quote" | "contact" | "conversation" | null;
   id: string | null;
   name: string | null;
   details?: Record<string, unknown>;
