@@ -320,26 +320,28 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
     
     for (const thread of threads) {
       for (const email of thread.messages) {
-        // Check if already processed using persistent database storage
-        const alreadyProcessed = await storage.isLeadProcessed(email.id);
-        if (alreadyProcessed) {
-          continue;
-        }
-
+        // Skip non-lead emails without marking (they might be other types of emails)
         if (!isLeadEmail(email)) {
           continue;
         }
 
-        // SAFETY: Skip emails received before the cutoff date
+        // ATOMIC CLAIM: Try to insert into processed_leads table FIRST
+        // This is the single authoritative gate - if insert succeeds, we own this email
+        // If insert fails (conflict), another process already claimed it or it was processed before
+        const claimed = await storage.markLeadProcessed(email.id, email.subject);
+        if (!claimed) {
+          // Already processed or claimed by another process - skip
+          continue;
+        }
+
+        // SAFETY: Skip emails received before the cutoff date (already marked as processed above)
         const emailDate = new Date(email.date);
         if (emailDate < LEAD_PROCESSING_CUTOFF_DATE) {
-          await storage.markLeadProcessed(email.id, email.subject); // Persist to database
           continue;
         }
 
         const lead = parseLeadEmail(email);
         if (!lead) {
-          await storage.markLeadProcessed(email.id, email.subject);
           results.errors.push(`Failed to parse lead from email: ${email.subject}`);
           continue;
         }
@@ -352,7 +354,7 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
         );
 
         if (alreadyExists) {
-          await storage.markLeadProcessed(email.id, email.subject, lead.email);
+          // Job already exists for this customer - we've marked as processed, just skip
           continue;
         }
 
@@ -364,7 +366,6 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
             sendLeadConfirmationSms(lead),
           ]);
 
-          await storage.markLeadProcessed(email.id, email.subject, lead.email);
           results.processed++;
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';

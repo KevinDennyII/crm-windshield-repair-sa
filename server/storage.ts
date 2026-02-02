@@ -42,7 +42,7 @@ export interface IStorage {
   
   // Processed leads (for preventing duplicate lead processing)
   isLeadProcessed(emailId: string): Promise<boolean>;
-  markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string): Promise<void>;
+  markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string): Promise<boolean>;
   getAllProcessedLeadIds(): Promise<string[]>;
 }
 
@@ -604,15 +604,22 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
   
-  async markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string): Promise<void> {
+  async markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string): Promise<boolean> {
     try {
-      await db.insert(processedLeads).values({
+      // Use INSERT ON CONFLICT DO NOTHING to safely handle race conditions
+      // The UNIQUE constraint on email_id ensures no duplicates even with concurrent processing
+      // Returns true if insert succeeded (we should process), false if already exists (skip)
+      const result = await db.insert(processedLeads).values({
         emailId,
         emailSubject: emailSubject || null,
         customerEmail: customerEmail || null,
-      });
+      }).onConflictDoNothing({ target: processedLeads.emailId }).returning({ id: processedLeads.id });
+      
+      // If result is empty, the row already existed (conflict occurred)
+      return result.length > 0;
     } catch (error) {
-      // Ignore duplicate key errors - lead was already processed
+      // If insert fails for any reason, consider it already processed to be safe
+      return false;
     }
   }
   
