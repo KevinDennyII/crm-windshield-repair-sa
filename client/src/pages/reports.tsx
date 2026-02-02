@@ -521,14 +521,30 @@ export default function Reports() {
   }, [jobs]);
 
   // Job Profitability Report - Only completed jobs
+  // Cost = partPrice + accessoriesPrice + urethanePrice + calibrationPrice + salesTax + 3.5% processing fee
   const jobProfitability = useMemo(() => {
     return completedJobs.map(job => {
       const revenue = job.totalDue;
-      // Sum materialCost and subcontractorCost from all parts across all vehicles
+      // Sum costs from all parts across all vehicles
       let cost = 0;
       job.vehicles?.forEach(vehicle => {
         vehicle.parts?.forEach(part => {
-          cost += (part.materialCost || 0) + (part.subcontractorCost || 0);
+          const partPrice = part.partPrice || 0;
+          const accessoriesPrice = part.accessoriesPrice || 0;
+          const urethanePrice = part.urethanePrice || 0;
+          const calibrationPrice = part.calibrationPrice || 0;
+          
+          // Calculate subtotal before tax and processing fee
+          const subtotal = partPrice + accessoriesPrice + urethanePrice + calibrationPrice;
+          
+          // Sales tax (default 8.25% if not specified)
+          const salesTaxPercent = part.salesTaxPercent ?? 8.25;
+          const salesTax = subtotal * (salesTaxPercent / 100);
+          
+          // 3.5% processing fee on subtotal
+          const processingFee = subtotal * 0.035;
+          
+          cost += subtotal + salesTax + processingFee;
         });
       });
       const profit = revenue - cost;
