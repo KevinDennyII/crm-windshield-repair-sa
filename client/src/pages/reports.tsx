@@ -523,7 +523,8 @@ export default function Reports() {
   }, [jobs]);
 
   // Job Profitability Report - Only completed jobs
-  // Cost = partPrice + accessoriesPrice + urethanePrice + calibrationPrice + subcontractorUrethane + salesTax + 3.5% processing fee
+  // Cost = partPrice + accessoriesPrice + urethanePrice + calibrationPrice + subcontractorUrethane + salesTax + processingFee
+  // Processing fee = 3.5% of revenue (job total), rounded UP to next dollar (NOT applied to dealer jobs)
   const jobProfitability = useMemo(() => {
     return completedJobs.map(job => {
       const revenue = job.totalDue;
@@ -537,7 +538,6 @@ export default function Reports() {
       let totalUrethanePrice = 0;
       let totalCalibrationPrice = 0;
       let totalSalesTax = 0;
-      let totalProcessingFee = 0;
       let partCount = 0;
       
       let urethanePartCount = 0;
@@ -562,22 +562,22 @@ export default function Reports() {
           totalUrethanePrice += urethanePrice;
           totalCalibrationPrice += calibrationCost;
           
-          // Calculate subtotal before tax and processing fee
+          // Calculate subtotal before tax
           const subtotal = partPrice + accessoriesPrice + urethanePrice + calibrationCost;
           
           const salesTaxPercent = part.salesTaxPercent ?? PRICING.SALES_TAX_PERCENT;
           totalSalesTax += subtotal * (salesTaxPercent / 100);
-          
-          if (!isDealer) {
-            totalProcessingFee += subtotal * PRICING.PROCESSING_FEE_RATE;
-          }
         });
       });
       
       const subcontractorUrethane = isSubcontractor ? (urethanePartCount * PRICING.SUBCONTRACTOR_URETHANE_PER_PART) : 0;
       
+      // Processing fee: 3.5% of revenue (job total), rounded UP to next dollar
+      // NOT applied to dealer jobs
+      const processingFee = isDealer ? 0 : Math.ceil(revenue * PRICING.PROCESSING_FEE_RATE);
+      
       const subtotal = totalPartPrice + totalAccessoriesPrice + totalUrethanePrice + totalCalibrationPrice + subcontractorUrethane;
-      const cost = subtotal + totalSalesTax + totalProcessingFee;
+      const cost = subtotal + totalSalesTax + processingFee;
       const profit = revenue - cost;
       const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
       
@@ -603,7 +603,7 @@ export default function Reports() {
           subcontractorUrethane,
           subtotal,
           salesTax: totalSalesTax,
-          processingFee: totalProcessingFee,
+          processingFee,
           totalCost: cost,
         }
       };
