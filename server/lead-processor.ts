@@ -134,7 +134,6 @@ export function parseLeadEmail(email: BluehostEmail): ParsedLead | null {
   }
 
   if (!customerName || !phone) {
-    console.log('Could not parse lead email - missing required fields');
     return null;
   }
 
@@ -284,15 +283,13 @@ windshieldrepairsa@gmail.com`;
 
   try {
     await sendEmail(lead.email, subject, body);
-    console.log(`Confirmation email sent to ${lead.email}`);
   } catch (error) {
-    console.error('Failed to send confirmation email:', error);
+    // Email sending failed silently
   }
 }
 
 export async function sendLeadConfirmationSms(lead: ParsedLead): Promise<void> {
   if (!isTwilioConfigured()) {
-    console.log('Twilio not configured, skipping SMS');
     return;
   }
 
@@ -309,9 +306,8 @@ export async function sendLeadConfirmationSms(lead: ParsedLead): Promise<void> {
 
   try {
     await sendSms(formattedPhone, message);
-    console.log(`Confirmation SMS sent to ${formattedPhone}`);
   } catch (error) {
-    console.error('Failed to send confirmation SMS:', error);
+    // SMS sending failed silently
   }
 }
 
@@ -362,7 +358,6 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
 
         try {
           const jobId = await createJobFromLead(lead);
-          console.log(`Created job ${jobId} from lead: ${lead.customerName}`);
 
           await Promise.all([
             sendLeadConfirmationEmail(lead),
@@ -389,26 +384,16 @@ let pollingInterval: NodeJS.Timeout | null = null;
 
 export function startLeadPolling(intervalMs: number = 60000): void {
   if (pollingInterval) {
-    console.log('Lead polling already running');
     return;
   }
 
-  console.log(`Starting lead polling every ${intervalMs / 1000} seconds`);
-  
-  processNewLeads().then(result => {
-    if (result.processed > 0) {
-      console.log(`Initial lead check: processed ${result.processed} leads`);
-    }
-  }).catch(console.error);
+  processNewLeads().catch(() => {});
 
   pollingInterval = setInterval(async () => {
     try {
-      const result = await processNewLeads();
-      if (result.processed > 0 || result.errors.length > 0) {
-        console.log(`Lead polling: processed ${result.processed}, errors: ${result.errors.length}`);
-      }
+      await processNewLeads();
     } catch (error) {
-      console.error('Lead polling error:', error);
+      // Lead polling error handled silently
     }
   }, intervalMs);
 }
@@ -417,7 +402,6 @@ export function stopLeadPolling(): void {
   if (pollingInterval) {
     clearInterval(pollingInterval);
     pollingInterval = null;
-    console.log('Lead polling stopped');
   }
 }
 

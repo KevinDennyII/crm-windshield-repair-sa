@@ -58,7 +58,6 @@ export async function seedSampleUsers() {
     const [existing] = await db.select().from(users).where(eq(users.id, user.id));
     if (!existing) {
       await db.insert(users).values(user);
-      console.log(`Seeded user: ${user.username}`);
     }
   }
 }

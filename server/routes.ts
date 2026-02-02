@@ -743,7 +743,6 @@ Please let us know of any changes.`;
               { type: 'appointment_confirmation', to: job.email }
             );
           }
-          console.log("Sent appointment confirmation email to:", job.email);
         } catch (emailError: any) {
           console.error("Failed to send confirmation email:", emailError.message);
           results.errors.push(`Email failed: ${emailError.message}`);
@@ -768,7 +767,6 @@ Please let us know of any changes.`;
               { type: 'appointment_confirmation', to: job.phone }
             );
           }
-          console.log("Sent appointment confirmation SMS to:", job.phone);
         } catch (smsError: any) {
           console.error("Failed to send confirmation SMS:", smsError.message);
           results.errors.push(`SMS failed: ${smsError.message}`);
@@ -1743,6 +1741,5 @@ Please let us know of any changes.`;
   // Lead polling with date cutoff safeguard - only processes emails after Jan 31, 2026 noon UTC
   if (isBluehostConfigured()) {
     startLeadPolling(60000); // Check every 60 seconds
-    console.log("Lead polling started - only processing NEW leads (after Jan 31, 2026 cutoff)");
   }
 }

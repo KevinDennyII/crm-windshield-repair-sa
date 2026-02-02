@@ -59,10 +59,6 @@ export async function decodeVIN(vin: string): Promise<DecodedVehicle> {
     throw new Error('Unable to decode VIN - no vehicle data found');
   }
 
-  // Log warning for partial decodes but still return data
-  if (errorCode && errorCode !== '0') {
-    console.log('NHTSA decode warning:', errorText);
-  }
 
   return {
     year,
