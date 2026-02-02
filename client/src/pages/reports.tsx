@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { JobDetailModal } from "@/components/job-detail-modal";
 import {
   BarChart,
@@ -525,8 +526,14 @@ export default function Reports() {
   const jobProfitability = useMemo(() => {
     return completedJobs.map(job => {
       const revenue = job.totalDue;
-      // Sum costs from all parts across all vehicles
-      let cost = 0;
+      // Sum costs from all parts across all vehicles with detailed breakdown
+      let totalPartPrice = 0;
+      let totalAccessoriesPrice = 0;
+      let totalUrethanePrice = 0;
+      let totalCalibrationPrice = 0;
+      let totalSalesTax = 0;
+      let totalProcessingFee = 0;
+      
       job.vehicles?.forEach(vehicle => {
         vehicle.parts?.forEach(part => {
           const partPrice = part.partPrice || 0;
@@ -534,19 +541,25 @@ export default function Reports() {
           const urethanePrice = part.urethanePrice || 0;
           const calibrationPrice = part.calibrationPrice || 0;
           
+          totalPartPrice += partPrice;
+          totalAccessoriesPrice += accessoriesPrice;
+          totalUrethanePrice += urethanePrice;
+          totalCalibrationPrice += calibrationPrice;
+          
           // Calculate subtotal before tax and processing fee
           const subtotal = partPrice + accessoriesPrice + urethanePrice + calibrationPrice;
           
           // Sales tax (default 8.25% if not specified)
           const salesTaxPercent = part.salesTaxPercent ?? 8.25;
-          const salesTax = subtotal * (salesTaxPercent / 100);
+          totalSalesTax += subtotal * (salesTaxPercent / 100);
           
           // 3.5% processing fee on subtotal
-          const processingFee = subtotal * 0.035;
-          
-          cost += subtotal + salesTax + processingFee;
+          totalProcessingFee += subtotal * 0.035;
         });
       });
+      
+      const subtotal = totalPartPrice + totalAccessoriesPrice + totalUrethanePrice + totalCalibrationPrice;
+      const cost = subtotal + totalSalesTax + totalProcessingFee;
       const profit = revenue - cost;
       const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
       
@@ -561,6 +574,17 @@ export default function Reports() {
         cost,
         profit,
         margin,
+        // Detailed breakdown for tooltip
+        breakdown: {
+          partPrice: totalPartPrice,
+          accessoriesPrice: totalAccessoriesPrice,
+          urethanePrice: totalUrethanePrice,
+          calibrationPrice: totalCalibrationPrice,
+          subtotal,
+          salesTax: totalSalesTax,
+          processingFee: totalProcessingFee,
+          totalCost: cost,
+        }
       };
     }).sort((a, b) => b.profit - a.profit);
   }, [completedJobs]);
@@ -1585,7 +1609,70 @@ export default function Reports() {
                             {formatUSD(row.cost)}
                           </TableCell>
                           <TableCell className={`text-right font-medium ${row.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatUSD(row.profit)}
+                            <HoverCard>
+                              <HoverCardTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">
+                                  {formatUSD(row.profit)}
+                                </span>
+                              </HoverCardTrigger>
+                              <HoverCardContent className="w-72" align="end">
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-sm border-b pb-2">Cost Breakdown</h4>
+                                  <div className="space-y-1 text-sm">
+                                    <div className="flex justify-between">
+                                      <span>Part Price (glass)</span>
+                                      <span className="font-medium">{formatUSD(row.breakdown.partPrice)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>Accessories (moldings, clips)</span>
+                                      <span className="font-medium">{formatUSD(row.breakdown.accessoriesPrice)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>Urethane</span>
+                                      <span className="font-medium">{formatUSD(row.breakdown.urethanePrice)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>Calibration</span>
+                                      <span className="font-medium">{formatUSD(row.breakdown.calibrationPrice)}</span>
+                                    </div>
+                                    <div className="flex justify-between font-medium border-t pt-1">
+                                      <span>Subtotal</span>
+                                      <span>{formatUSD(row.breakdown.subtotal)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-muted-foreground">
+                                      <span>Sales Tax (8.25%)</span>
+                                      <span>{formatUSD(row.breakdown.salesTax)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-muted-foreground">
+                                      <span>Processing Fee (3.5%)</span>
+                                      <span>{formatUSD(row.breakdown.processingFee)}</span>
+                                    </div>
+                                    <div className="flex justify-between font-bold border-t pt-1 text-amber-600">
+                                      <span>Total Cost</span>
+                                      <span>{formatUSD(row.breakdown.totalCost)}</span>
+                                    </div>
+                                  </div>
+                                  <div className="border-t pt-2 mt-2 space-y-1 text-sm">
+                                    <div className="flex justify-between">
+                                      <span>Revenue (Total Due)</span>
+                                      <span className="font-medium">{formatUSD(row.revenue)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>Cost</span>
+                                      <span className="text-amber-600">{formatUSD(row.cost)}</span>
+                                    </div>
+                                    <div className={`flex justify-between font-bold ${row.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      <span>Profit</span>
+                                      <span>{formatUSD(row.profit)}</span>
+                                    </div>
+                                    <div className={`flex justify-between ${row.margin >= 50 ? 'text-green-600' : row.margin >= 30 ? 'text-amber-600' : 'text-red-600'}`}>
+                                      <span>Margin</span>
+                                      <span>{row.margin.toFixed(1)}%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </HoverCardContent>
+                            </HoverCard>
                           </TableCell>
                           <TableCell className={`text-right ${row.margin >= 50 ? 'text-green-600' : row.margin >= 30 ? 'text-amber-600' : 'text-red-600'}`}>
                             {row.margin.toFixed(1)}%
