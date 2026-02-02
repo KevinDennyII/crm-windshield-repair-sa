@@ -431,3 +431,20 @@ export const insertActivityLogSchema = activityLogSchema.omit({ id: true, create
 
 export type ActivityLog = z.infer<typeof activityLogSchema>;
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+
+// Processed leads table - tracks email IDs that have already been processed to prevent duplicate sends
+export const processedLeads = pgTable("processed_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  emailId: varchar("email_id").notNull().unique(), // The unique email ID from Bluehost
+  emailSubject: varchar("email_subject"), // For debugging/tracking
+  customerEmail: varchar("customer_email"), // For debugging/tracking
+  processedAt: timestamp("processed_at").defaultNow(),
+});
+
+export const insertProcessedLeadSchema = createInsertSchema(processedLeads).omit({ 
+  id: true, 
+  processedAt: true 
+});
+
+export type ProcessedLead = typeof processedLeads.$inferSelect;
+export type InsertProcessedLead = z.infer<typeof insertProcessedLeadSchema>;
