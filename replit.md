@@ -41,13 +41,47 @@ Preferred communication style: Simple, everyday language.
   - Detailed activity log table with action details and timestamps
 
 ### AI Tools (`/ai-tools`)
-AI-powered assistant tools accessible to Admin and CSR roles:
-- **Chat Assistant**: Interactive AI chatbot with CRM context awareness (can access recent jobs data)
-- **Message Composer**: Generate professional email/SMS messages for customers
-- **Quote Generator**: Create quote descriptions from vehicle and glass details
+Comprehensive AI-powered tools accessible to Admin and CSR roles, powered by OpenAI via Replit AI Integrations (no API key required, billed to credits):
+
+**Chat & Compose:**
+- **Chat Assistant**: Interactive AI chatbot with CRM context awareness
+- **Message Composer**: Generate professional email/SMS messages
+- **Quote Generator**: Create quote descriptions from vehicle/glass details
 - **Follow-up Suggester**: AI analyzes CRM data to identify leads needing attention
 - **Insurance Claim Helper**: Generate claim descriptions for insurance purposes
-- **Technology**: Powered by OpenAI via Replit AI Integrations (no API key required, billed to credits)
+
+**Communication Intelligence:**
+- **Smart Reply Suggestions**: AI drafts quick responses for customer messages
+- **Conversation Summary**: Auto-generate summaries of long email/SMS threads
+- **Sentiment Analysis**: Detect frustrated customers to prioritize responses
+- **Spanish Translation**: Auto-translate messages for Spanish-speaking customers
+- **Call Transcription**: Phone call transcription (requires Twilio voice configuration)
+
+**Technician Tools (Vision AI):**
+- **Damage Assessment**: Upload photos, AI identifies crack type and recommends repair method
+- **Installation Guide Lookup**: AI finds installation instructions for any vehicle/glass combo
+- **Safety Checklist Verification**: AI reviews completion photos to ensure quality standards
+- **Photo Analysis**: Analyze damage photos to suggest repair vs. replace
+
+**Business Intelligence:**
+- **Win/Loss Analysis**: Understand why quotes convert or get lost
+- **Revenue Forecasting**: Predict weekly/monthly revenue based on pipeline
+- **Customer Churn Prediction**: Identify customers unlikely to return
+- **Best Time to Contact**: AI suggests when each customer is most likely to respond
+- **Competitor Price Monitoring**: Track and analyze competitor pricing trends
+
+**Operations:**
+- **Smart Scheduling**: AI suggests optimal appointment times based on technician location and job complexity
+- **Parts Prediction**: Predict which parts to stock based on historical job data
+- **Job Time Estimation**: Estimate job duration based on vehicle type and glass
+
+**Sales & Marketing:**
+- **Upsell Suggestions**: Recommend related services (chip repair, calibration) based on job type
+- **Review Response Generator**: Draft professional responses to Google/Yelp reviews
+
+**Quality & Training:**
+- **Customer Satisfaction Prediction**: Predict satisfaction before job is complete
+- **CSR Performance Coaching**: AI suggests improvements based on activity patterns
 
 ### Technician Mobile Portal
 A mobile-optimized interface for field technicians featuring:
