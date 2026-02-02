@@ -453,7 +453,7 @@ export default function Reports() {
       .slice(-30); // Last 30 days
   }, [completedJobs]);
 
-  // A/R Aging Report
+  // A/R Aging Report - Only completed jobs
   const arAgingData = useMemo(() => {
     const today = new Date();
     const buckets = {
@@ -463,8 +463,8 @@ export default function Reports() {
       ninetyPlus: { label: "90+ Days", amount: 0, count: 0, jobs: [] as Job[] },
     };
     
-    // Include all jobs with outstanding balance, not just filtered ones
-    jobs.forEach(job => {
+    // Only include completed jobs with outstanding balance
+    jobs.filter(j => j.pipelineStage === "paid_completed").forEach(job => {
       const outstanding = job.totalDue - job.amountPaid;
       if (outstanding <= 0) return;
       
@@ -493,6 +493,31 @@ export default function Reports() {
     });
     
     return Object.values(buckets);
+  }, [jobs]);
+
+  // A/R Aging by Customer - Only completed jobs
+  const arByCustomer = useMemo(() => {
+    const customerBalances: Record<string, { name: string; amount: 0; jobs: Job[] }> = {};
+    
+    jobs.filter(j => j.pipelineStage === "paid_completed").forEach(job => {
+      const outstanding = job.totalDue - job.amountPaid;
+      if (outstanding <= 0) return;
+      
+      const customerName = job.isBusiness && job.businessName 
+        ? job.businessName 
+        : `${job.firstName} ${job.lastName}`.trim();
+      
+      const customerKey = customerName.toLowerCase();
+      
+      if (!customerBalances[customerKey]) {
+        customerBalances[customerKey] = { name: customerName, amount: 0, jobs: [] };
+      }
+      customerBalances[customerKey].amount += outstanding;
+      customerBalances[customerKey].jobs.push(job);
+    });
+    
+    return Object.values(customerBalances)
+      .sort((a, b) => b.amount - a.amount);
   }, [jobs]);
 
   // Sales by payment method
@@ -1070,7 +1095,7 @@ export default function Reports() {
         {/* A/R Aging Tab */}
         <TabsContent value="ar" className="space-y-6">
           <p className="text-sm text-muted-foreground">
-            Shows all outstanding balances regardless of date filter
+            Shows outstanding balances for completed jobs only
           </p>
           <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
             {arAgingData.map((bucket, index) => (
@@ -1158,6 +1183,50 @@ export default function Reports() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* A/R by Customer */}
+          <Card data-testid="card-ar-by-customer">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Outstanding Balances by Customer</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {arByCustomer.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead className="text-center">Jobs</TableHead>
+                        <TableHead className="text-right">Outstanding</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {arByCustomer.map((customer, index) => (
+                        <TableRow 
+                          key={index} 
+                          className="cursor-pointer hover-elevate"
+                          onClick={() => openJobListModal(`Outstanding: ${customer.name}`, customer.jobs)}
+                          data-testid={`row-ar-customer-${index}`}
+                        >
+                          <TableCell className="font-medium text-primary underline">{customer.name}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary">{customer.jobs.length}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-amber-600">
+                            {formatUSD(customer.amount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  No outstanding balances
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
