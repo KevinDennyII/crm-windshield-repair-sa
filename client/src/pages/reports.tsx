@@ -234,7 +234,7 @@ interface JobListModalState {
 
 export default function Reports() {
   const { toast } = useToast();
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>("month");
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("week");
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
   const [jobListModal, setJobListModal] = useState<JobListModalState>({
