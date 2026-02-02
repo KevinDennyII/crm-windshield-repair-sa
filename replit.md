@@ -66,6 +66,16 @@ Supports multi-vehicle and multi-part jobs for fleet companies.
 - **Job Structure**: Hierarchical (Job → vehicles[] → parts[]).
 - **Pricing**: Detailed part pricing calculator with automatic labor pricing based on vehicle/part info, and special subcontractor pricing rules. Includes considerations for dealer exceptions and mobile fees.
 
+### Profitability Cost Calculation
+The Job Profitability report calculates costs using the following formula:
+- **Part Price**: Cost of glass from distributor
+- **Accessories**: Moldings, clips, etc.
+- **Urethane**: Standard urethane cost
+- **Calibration**: Fixed $100 cost per calibration (regardless of customer-charged price)
+- **Subcontractor Urethane**: Additional $15 per part for subcontractor jobs (customerType === "subcontractor")
+- **Sales Tax**: 8.25% on subtotal
+- **Processing Fee**: 3.5% on subtotal
+
 ### Build Process
 - **Development**: `npm run dev` (tsx with Vite HMR).
 - **Production**: Custom build script using esbuild for server and Vite for client.
