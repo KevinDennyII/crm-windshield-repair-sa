@@ -550,10 +550,10 @@ export default function Reports() {
           const urethanePrice = part.urethanePrice || 0;
           const calibrationCost = (part.calibrationPrice && part.calibrationPrice > 0) ? PRICING.CALIBRATION_COST : 0;
           
-          // Count parts for subcontractor urethane: must be installation (partPrice > 0 OR laborPrice > 0), not calibration-only
-          const isInstallation = (part.partPrice || 0) > 0 || (part.laborPrice || 0) > 0;
-          const isCalibrationOnly = !isInstallation && (part.calibrationPrice || 0) > 0;
-          if (isSubcontractor && part.glassType && GLASS_TYPES_REQUIRING_URETHANE.includes(part.glassType as typeof GLASS_TYPES_REQUIRING_URETHANE[number]) && isInstallation && !isCalibrationOnly) {
+          // Count parts for subcontractor urethane: must be actual installation (serviceType === 'replace')
+          // Only 'replace' service type counts as installation - 'calibration', 'repair', etc. do NOT incur urethane cost
+          const isActualInstallation = part.serviceType === 'replace';
+          if (isSubcontractor && part.glassType && GLASS_TYPES_REQUIRING_URETHANE.includes(part.glassType as typeof GLASS_TYPES_REQUIRING_URETHANE[number]) && isActualInstallation) {
             urethanePartCount++;
           }
           
