@@ -538,6 +538,10 @@ export default function Reports() {
       let totalProcessingFee = 0;
       let partCount = 0;
       
+      // Glass types that require subcontractor urethane cost
+      const urethaneGlassTypes = ["windshield", "back_glass", "back_glass_powerslide", "quarter_glass"];
+      let urethanePartCount = 0;
+      
       job.vehicles?.forEach(vehicle => {
         vehicle.parts?.forEach(part => {
           partCount++;
@@ -546,6 +550,11 @@ export default function Reports() {
           const urethanePrice = part.urethanePrice || 0;
           // Calibration cost is fixed at $100 (calibrationPrice is what we charge customer)
           const calibrationCost = (part.calibrationPrice && part.calibrationPrice > 0) ? 100 : 0;
+          
+          // Count parts that require urethane for subcontractor cost
+          if (isSubcontractor && part.glassType && urethaneGlassTypes.includes(part.glassType)) {
+            urethanePartCount++;
+          }
           
           totalPartPrice += partPrice;
           totalAccessoriesPrice += accessoriesPrice;
@@ -564,8 +573,8 @@ export default function Reports() {
         });
       });
       
-      // Add $15 urethane cost per part for subcontractor jobs
-      const subcontractorUrethane = isSubcontractor ? (partCount * 15) : 0;
+      // Add $15 urethane cost per applicable part for subcontractor jobs (windshield, back glass, quarter glass only)
+      const subcontractorUrethane = isSubcontractor ? (urethanePartCount * 15) : 0;
       
       const subtotal = totalPartPrice + totalAccessoriesPrice + totalUrethanePrice + totalCalibrationPrice + subcontractorUrethane;
       const cost = subtotal + totalSalesTax + totalProcessingFee;
