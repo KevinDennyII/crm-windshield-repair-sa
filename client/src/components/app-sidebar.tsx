@@ -18,6 +18,7 @@ import {
   UserCog,
   UserPlus,
   Activity,
+  Bot,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -46,6 +47,7 @@ const allNavItems = [
   { title: "Payments", url: "/payments", icon: CreditCard },
   { title: "Calendar", url: "/calendar", icon: Calendar },
   { title: "Contacts", url: "/contacts", icon: Users },
+  { title: "AI Tools", url: "/ai-tools", icon: Bot },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
   { title: "Automation", url: "/automation", icon: Zap },
   { title: "Sites", url: "/sites", icon: Globe },
@@ -58,6 +60,7 @@ const csrNavItems = [
   { title: "Conversations", url: "/conversations", icon: MessageSquare },
   { title: "Opportunities", url: "/", icon: Kanban },
   { title: "Calendar", url: "/calendar", icon: Calendar },
+  { title: "AI Tools", url: "/ai-tools", icon: Bot },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
   { title: "Reputation", url: "/reputation", icon: Star },
 ];

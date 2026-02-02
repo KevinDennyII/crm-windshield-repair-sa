@@ -40,6 +40,15 @@ Preferred communication style: Simple, everyday language.
   - User summary cards: total actions, jobs created, stage changes, emails/SMS sent, login count
   - Detailed activity log table with action details and timestamps
 
+### AI Tools (`/ai-tools`)
+AI-powered assistant tools accessible to Admin and CSR roles:
+- **Chat Assistant**: Interactive AI chatbot with CRM context awareness (can access recent jobs data)
+- **Message Composer**: Generate professional email/SMS messages for customers
+- **Quote Generator**: Create quote descriptions from vehicle and glass details
+- **Follow-up Suggester**: AI analyzes CRM data to identify leads needing attention
+- **Insurance Claim Helper**: Generate claim descriptions for insurance purposes
+- **Technology**: Powered by OpenAI via Replit AI Integrations (no API key required, billed to credits)
+
 ### Technician Mobile Portal
 A mobile-optimized interface for field technicians featuring:
 - **Dashboard**: Job summaries.

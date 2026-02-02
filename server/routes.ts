@@ -15,6 +15,7 @@ import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { COMPANY_LOGO_BASE64 } from "./logo";
 import { processNewLeads, startLeadPolling, stopLeadPolling } from "./lead-processor";
+import { registerAIRoutes } from "./ai-routes";
 import bcrypt from "bcrypt";
 
 // Helper to get current user from session or OIDC
@@ -67,6 +68,9 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   // Setup authentication BEFORE other routes
   await setupAuth(app);
   registerAuthRoutes(app);
+  
+  // Register AI routes
+  registerAIRoutes(app);
 
   // Simple username/password login
   app.post("/api/auth/login", async (req, res) => {
