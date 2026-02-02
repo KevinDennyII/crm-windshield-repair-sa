@@ -16,13 +16,15 @@ function getSession() {
     throw new Error("SESSION_SECRET environment variable is not set");
   }
 
+  const store = new PostgresSessionStore({
+    conObject: {
+      connectionString: process.env.DATABASE_URL,
+    },
+    createTableIfMissing: true,
+  });
+
   return session({
-    store: new PostgresSessionStore({
-      conObject: {
-        connectionString: process.env.DATABASE_URL,
-      },
-      createTableIfMissing: true,
-    }),
+    store,
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
