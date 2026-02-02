@@ -539,15 +539,16 @@ export default function Reports() {
           const partPrice = part.partPrice || 0;
           const accessoriesPrice = part.accessoriesPrice || 0;
           const urethanePrice = part.urethanePrice || 0;
-          const calibrationPrice = part.calibrationPrice || 0;
+          // Calibration cost is fixed at $100 (calibrationPrice is what we charge customer)
+          const calibrationCost = (part.calibrationPrice && part.calibrationPrice > 0) ? 100 : 0;
           
           totalPartPrice += partPrice;
           totalAccessoriesPrice += accessoriesPrice;
           totalUrethanePrice += urethanePrice;
-          totalCalibrationPrice += calibrationPrice;
+          totalCalibrationPrice += calibrationCost;
           
           // Calculate subtotal before tax and processing fee
-          const subtotal = partPrice + accessoriesPrice + urethanePrice + calibrationPrice;
+          const subtotal = partPrice + accessoriesPrice + urethanePrice + calibrationCost;
           
           // Sales tax (default 8.25% if not specified)
           const salesTaxPercent = part.salesTaxPercent ?? 8.25;
@@ -1632,7 +1633,7 @@ export default function Reports() {
                                       <span className="font-medium">{formatUSD(row.breakdown.urethanePrice)}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                      <span>Calibration</span>
+                                      <span>Calibration (cost: $100)</span>
                                       <span className="font-medium">{formatUSD(row.breakdown.calibrationPrice)}</span>
                                     </div>
                                     <div className="flex justify-between font-medium border-t pt-1">
