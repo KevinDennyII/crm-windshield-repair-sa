@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { PRICING, GLASS_TYPES_REQUIRING_URETHANE } from "@shared/constants";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -539,8 +540,6 @@ export default function Reports() {
       let totalProcessingFee = 0;
       let partCount = 0;
       
-      // Glass types that require subcontractor urethane cost
-      const urethaneGlassTypes = ["windshield", "back_glass", "back_glass_powerslide", "quarter_glass"];
       let urethanePartCount = 0;
       
       job.vehicles?.forEach(vehicle => {
@@ -549,12 +548,9 @@ export default function Reports() {
           const partPrice = part.partPrice || 0;
           const accessoriesPrice = part.accessoriesPrice || 0;
           const urethanePrice = part.urethanePrice || 0;
-          // Calibration cost is fixed at $100 (calibrationPrice is what we charge customer)
-          const calibrationCost = (part.calibrationPrice && part.calibrationPrice > 0) ? 100 : 0;
+          const calibrationCost = (part.calibrationPrice && part.calibrationPrice > 0) ? PRICING.CALIBRATION_COST : 0;
           
-          // Count parts that require urethane for subcontractor cost
-          // Only count actual installations (partPrice > 0), not calibration-only parts
-          if (isSubcontractor && part.glassType && urethaneGlassTypes.includes(part.glassType) && (part.partPrice || 0) > 0) {
+          if (isSubcontractor && part.glassType && GLASS_TYPES_REQUIRING_URETHANE.includes(part.glassType as typeof GLASS_TYPES_REQUIRING_URETHANE[number]) && (part.partPrice || 0) > 0) {
             urethanePartCount++;
           }
           
@@ -566,19 +562,16 @@ export default function Reports() {
           // Calculate subtotal before tax and processing fee
           const subtotal = partPrice + accessoriesPrice + urethanePrice + calibrationCost;
           
-          // Sales tax (default 8.25% if not specified)
-          const salesTaxPercent = part.salesTaxPercent ?? 8.25;
+          const salesTaxPercent = part.salesTaxPercent ?? PRICING.SALES_TAX_PERCENT;
           totalSalesTax += subtotal * (salesTaxPercent / 100);
           
-          // 3.5% processing fee on subtotal (NOT applied to dealer jobs)
           if (!isDealer) {
-            totalProcessingFee += subtotal * 0.035;
+            totalProcessingFee += subtotal * PRICING.PROCESSING_FEE_RATE;
           }
         });
       });
       
-      // Add $15 urethane cost per applicable part for subcontractor jobs (windshield, back glass, quarter glass only)
-      const subcontractorUrethane = isSubcontractor ? (urethanePartCount * 15) : 0;
+      const subcontractorUrethane = isSubcontractor ? (urethanePartCount * PRICING.SUBCONTRACTOR_URETHANE_PER_PART) : 0;
       
       const subtotal = totalPartPrice + totalAccessoriesPrice + totalUrethanePrice + totalCalibrationPrice + subcontractorUrethane;
       const cost = subtotal + totalSalesTax + totalProcessingFee;
