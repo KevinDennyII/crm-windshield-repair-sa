@@ -18,8 +18,10 @@ import {
   Package,
   ChevronDown,
   ChevronUp,
-  Truck
+  Truck,
+  Phone
 } from "lucide-react";
+import { CallCenter, CallCenterButton } from "@/components/call-center";
 import type { Job, Part, Vehicle } from "@shared/schema";
 
 type TabType = "current" | "last" | "yearly" | "pickup";
@@ -75,6 +77,7 @@ export default function TechDashboard() {
     mygrant: true,
     pgw: true
   });
+  const [isCallCenterOpen, setIsCallCenterOpen] = useState(false);
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -379,7 +382,10 @@ export default function TechDashboard() {
           )}
         </div>
 
-        <div className="w-10" />
+        <CallCenterButton 
+          onClick={() => setIsCallCenterOpen(true)} 
+          className="border-white/50 text-white"
+        />
       </header>
 
       <div 
@@ -692,6 +698,11 @@ export default function TechDashboard() {
         <Wifi className="w-5 h-5" style={{ color: "#29ABE2" }} />
         <span className="font-semibold text-gray-800">Orders</span>
       </footer>
+
+      <CallCenter 
+        isOpen={isCallCenterOpen} 
+        onClose={() => setIsCallCenterOpen(false)} 
+      />
     </div>
   );
 }

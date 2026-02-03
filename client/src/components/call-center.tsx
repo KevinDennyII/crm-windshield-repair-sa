@@ -387,7 +387,7 @@ export function CallCenter({ isOpen, onClose }: CallCenterProps) {
   );
 }
 
-export function CallCenterButton({ onClick }: { onClick: () => void }) {
+export function CallCenterButton({ onClick, className }: { onClick: () => void; className?: string }) {
   const { data: voiceStatus } = useQuery<{
     configured: boolean;
     twilioConfigured: boolean;
@@ -403,7 +403,7 @@ export function CallCenterButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       size="icon"
       variant="outline"
-      className="rounded-full"
+      className={`rounded-full ${className || ""}`}
       data-testid="button-open-call-center"
     >
       <Phone className="h-4 w-4" />
