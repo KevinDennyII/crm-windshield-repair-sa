@@ -480,3 +480,31 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+// Phone calls table for tracking incoming/outgoing calls
+export const phoneCalls = pgTable("phone_calls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  callSid: varchar("call_sid").notNull().unique(),
+  direction: varchar("direction").notNull(), // 'inbound' or 'outbound'
+  fromNumber: varchar("from_number").notNull(),
+  toNumber: varchar("to_number").notNull(),
+  status: varchar("status").notNull(), // 'ringing', 'in-progress', 'completed', 'missed', 'busy', 'failed'
+  duration: integer("duration"), // seconds
+  answeredBy: varchar("answered_by"), // user ID who answered
+  jobId: varchar("job_id"), // linked job if identified
+  contactName: varchar("contact_name"), // caller name if known
+  notes: text("notes"),
+  recordingUrl: text("recording_url"),
+  startedAt: timestamp("started_at").defaultNow(),
+  answeredAt: timestamp("answered_at"),
+  endedAt: timestamp("ended_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPhoneCallSchema = createInsertSchema(phoneCalls).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type PhoneCall = typeof phoneCalls.$inferSelect;
+export type InsertPhoneCall = z.infer<typeof insertPhoneCallSchema>;

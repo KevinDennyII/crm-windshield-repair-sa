@@ -1,10 +1,10 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
-import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber } from "./twilio";
+import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, validateTwilioSignature } from "./twilio";
 import { isBluehostConfigured, getBluehostEmail, getBluehostEmails, sendBluehostEmail, replyToBluehostEmail } from "./bluehost";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
 import { decodeVIN } from "./vin-decoder";
@@ -12,7 +12,7 @@ import { isPlacesConfigured, getAutocomplete, getPlaceDetails } from "./places";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { db } from "./db";
 import { users } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { COMPANY_LOGO_BASE64 } from "./logo";
 import { processNewLeads, startLeadPolling, stopLeadPolling } from "./lead-processor";
 import { registerAIRoutes } from "./ai-routes";
@@ -1320,6 +1320,172 @@ Please let us know of any changes.`;
     } catch (error: any) {
       console.error("Failed to send quote SMS:", error);
       res.status(500).json({ message: error.message || "Failed to send quote SMS" });
+    }
+  });
+
+  // ====== VOICE CALLING ENDPOINTS ======
+
+  // Check if voice calling is configured
+  app.get("/api/voice/status", async (req, res) => {
+    res.json({ 
+      configured: isVoiceConfigured(),
+      twilioConfigured: isTwilioConfigured(),
+      phoneNumber: getTwilioPhoneNumber()
+    });
+  });
+
+  // Generate access token for browser-based calling
+  app.post("/api/voice/token", isAuthenticated, async (req, res) => {
+    try {
+      if (!isVoiceConfigured()) {
+        return res.status(400).json({ 
+          message: "Voice calling not configured. Need TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET, and TWILIO_TWIML_APP_SID." 
+        });
+      }
+
+      const currentUser = await getCurrentUser(req as any);
+      if (!currentUser) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      // Use user ID as the client identity
+      const identity = `user_${currentUser.id}`;
+      const token = generateVoiceToken(identity);
+
+      res.json({ token, identity });
+    } catch (error: any) {
+      console.error("Failed to generate voice token:", error);
+      res.status(500).json({ message: error.message || "Failed to generate voice token" });
+    }
+  });
+
+  // Incoming call webhook - Twilio calls this when someone dials the number
+  app.post("/api/voice/incoming", async (req, res) => {
+    try {
+      console.log("Incoming call webhook received:", req.body);
+
+      // Validate Twilio signature for security (in production)
+      const twilioSignature = req.headers['x-twilio-signature'] as string;
+      if (twilioSignature && process.env.NODE_ENV === 'production') {
+        const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+        if (!validateTwilioSignature(url, req.body, twilioSignature)) {
+          console.warn("Invalid Twilio signature - possible spoofing attempt");
+          return res.status(403).send("Forbidden");
+        }
+      }
+
+      const { CallSid, From, To, CallStatus } = req.body;
+
+      // Look up caller in contacts/jobs
+      let contactName = "Unknown Caller";
+      const formattedFrom = From?.replace(/\D/g, "");
+      if (formattedFrom) {
+        const jobs = await storage.getAllJobs();
+        const matchingJob = jobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedFrom);
+        if (matchingJob) {
+          contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
+        }
+      }
+
+      // Log the incoming call - use insert with onConflictDoUpdate
+      await db.insert(phoneCalls).values({
+        callSid: CallSid,
+        direction: 'inbound',
+        fromNumber: From,
+        toNumber: To,
+        status: CallStatus || 'ringing',
+        contactName: contactName,
+      }).onConflictDoUpdate({
+        target: phoneCalls.callSid,
+        set: { status: CallStatus || 'ringing' }
+      });
+
+      // Generate TwiML to route call to all connected browser clients (shared identity)
+      // Contact name is passed as a parameter so browser UI can display it
+      const twiml = generateIncomingCallTwiml(contactName);
+
+      res.type("text/xml");
+      res.send(twiml);
+    } catch (error: any) {
+      console.error("Incoming call webhook error:", error);
+      // Return empty TwiML to prevent call from failing
+      res.type("text/xml");
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say>We are experiencing technical difficulties. Please try again later.</Say></Response>`);
+    }
+  });
+
+  // Call status callback - Twilio calls this when call status changes
+  app.post("/api/voice/status-callback", async (req, res) => {
+    try {
+      // Validate Twilio signature for security (in production)
+      const twilioSignature = req.headers['x-twilio-signature'] as string;
+      if (twilioSignature && process.env.NODE_ENV === 'production') {
+        const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+        if (!validateTwilioSignature(url, req.body, twilioSignature)) {
+          console.warn("Invalid Twilio signature on status callback");
+          return res.status(403).send("Forbidden");
+        }
+      }
+
+      const { CallSid, CallStatus, CallDuration } = req.body;
+      console.log("Call status callback:", { CallSid, CallStatus, CallDuration });
+
+      // Update call record in database
+      const updateData: any = { status: CallStatus };
+      if (CallDuration) {
+        updateData.duration = parseInt(CallDuration);
+      }
+      if (CallStatus === 'in-progress') {
+        updateData.answeredAt = new Date();
+      }
+      if (['completed', 'failed', 'busy', 'no-answer'].includes(CallStatus)) {
+        updateData.endedAt = new Date();
+      }
+
+      await db.update(phoneCalls)
+        .set(updateData)
+        .where(eq(phoneCalls.callSid, CallSid));
+
+      res.sendStatus(200);
+    } catch (error: any) {
+      console.error("Call status callback error:", error);
+      res.sendStatus(500);
+    }
+  });
+
+  // Get call logs
+  app.get("/api/voice/calls", isAuthenticated, async (req, res) => {
+    try {
+      const calls = await db.select()
+        .from(phoneCalls)
+        .orderBy(desc(phoneCalls.startedAt))
+        .limit(100);
+      res.json(calls);
+    } catch (error: any) {
+      console.error("Failed to get calls:", error);
+      res.status(500).json({ message: error.message || "Failed to get calls" });
+    }
+  });
+
+  // Update call record (e.g., add notes, link to job)
+  app.patch("/api/voice/calls/:callSid", isAuthenticated, async (req, res) => {
+    try {
+      const callSidParam = req.params.callSid;
+      const { notes, jobId, answeredBy } = req.body;
+
+      const updateData: Partial<typeof phoneCalls.$inferInsert> = {};
+      if (notes !== undefined) updateData.notes = notes;
+      if (jobId !== undefined) updateData.jobId = jobId;
+      if (answeredBy !== undefined) updateData.answeredBy = answeredBy;
+
+      await db.update(phoneCalls)
+        .set(updateData)
+        .where(eq(phoneCalls.callSid, callSidParam as string));
+
+      res.json({ message: "Call updated" });
+    } catch (error: any) {
+      console.error("Failed to update call:", error);
+      res.status(500).json({ message: error.message || "Failed to update call" });
     }
   });
 

@@ -149,6 +149,19 @@ The Job Profitability report calculates costs using the following formula:
 ### SMS Integration
 - **Twilio**: For SMS messaging, integrated for sending and managing conversation history, linking SMS to jobs.
 
+### Twilio Voice (Browser-Based Calling)
+- **Call Center**: Browser-based phone system allowing CSRs to answer incoming calls from anywhere
+- **Phone Button**: Located in header, opens the Call Center panel
+- **Incoming Call Handling**: When customers call the Twilio number, calls ring in all connected browser clients
+- **Call Controls**: Answer, decline, mute, and hang up buttons
+- **Caller Identification**: Automatically looks up caller in existing jobs/contacts
+- **Call Logging**: All calls logged to `phone_calls` table with status, duration, and notes
+- **Required Secrets** for voice calling:
+  - `TWILIO_API_KEY_SID`: API Key SID from Twilio console
+  - `TWILIO_API_KEY_SECRET`: API Key Secret from Twilio console
+  - `TWILIO_TWIML_APP_SID`: TwiML App SID (create in Twilio console, set voice URL to `https://[your-domain]/api/voice/incoming`)
+- **Webhook Configuration**: Point Twilio number's voice URL to `/api/voice/incoming` and status callback to `/api/voice/status-callback`
+
 ### Contacts & Documents
 - **Contacts page**: Directory of customers synced from jobs.
 - **Documents tab**: Displays documents associated with a contact's jobs, including sent PDF receipts (stored as base64), available receipts, and completion photos/signatures from the technician portal.

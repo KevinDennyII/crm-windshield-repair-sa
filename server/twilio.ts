@@ -1,8 +1,14 @@
 import twilio from "twilio";
 
+const { AccessToken } = twilio.jwt;
+const { VoiceGrant } = AccessToken;
+
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+const twimlAppSid = process.env.TWILIO_TWIML_APP_SID;
+const apiKeySid = process.env.TWILIO_API_KEY_SID;
+const apiKeySecret = process.env.TWILIO_API_KEY_SECRET;
 
 let client: twilio.Twilio | null = null;
 
@@ -20,8 +26,56 @@ export function isTwilioConfigured(): boolean {
   return !!(accountSid && authToken && twilioPhoneNumber);
 }
 
+export function isVoiceConfigured(): boolean {
+  return !!(accountSid && apiKeySid && apiKeySecret && twimlAppSid);
+}
+
 export function getTwilioPhoneNumber(): string | null {
   return twilioPhoneNumber || null;
+}
+
+// Shared identity for all CSR agents so calls ring on all connected browsers
+const SHARED_AGENT_IDENTITY = "crm_agent";
+
+export function generateVoiceToken(identity: string): string {
+  if (!accountSid || !apiKeySid || !apiKeySecret || !twimlAppSid) {
+    throw new Error("Twilio Voice not fully configured. Need TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET, and TWILIO_TWIML_APP_SID.");
+  }
+
+  // Use shared identity so calls ring on all connected CSR browsers
+  const accessToken = new AccessToken(
+    accountSid,
+    apiKeySid,
+    apiKeySecret,
+    { identity: SHARED_AGENT_IDENTITY, ttl: 3600 }
+  );
+
+  const voiceGrant = new VoiceGrant({
+    outgoingApplicationSid: twimlAppSid,
+    incomingAllow: true,
+  });
+
+  accessToken.addGrant(voiceGrant);
+  return accessToken.toJwt();
+}
+
+export function generateIncomingCallTwiml(contactName: string): string {
+  const response = new twilio.twiml.VoiceResponse();
+  const dial = response.dial({
+    callerId: twilioPhoneNumber || undefined,
+  });
+  
+  // Dial the shared agent identity with caller info as parameter
+  const clientEl = dial.client({});
+  clientEl.identity(SHARED_AGENT_IDENTITY);
+  clientEl.parameter({ name: "contactName", value: contactName });
+  
+  return response.toString();
+}
+
+export function validateTwilioSignature(url: string, params: Record<string, string>, signature: string): boolean {
+  if (!authToken) return false;
+  return twilio.validateRequest(authToken, signature, url, params);
 }
 
 export interface SmsMessage {

@@ -8,7 +8,9 @@ import { AppSidebar, MobileHeader } from "@/components/app-sidebar";
 import { ReportsSidebar, ReportsMobileHeader } from "@/components/reports-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FloatingAIAssistant } from "@/components/floating-ai-assistant";
+import { CallCenter, CallCenterButton } from "@/components/call-center";
 import { AIContextProvider } from "@/contexts/ai-context";
+import { useState } from "react";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Opportunities from "@/pages/opportunities";
@@ -131,6 +133,7 @@ function LoadingScreen() {
 
 function AuthenticatedApp() {
   const { user, isLoading, isTechnician, isReports } = useAuth();
+  const [isCallCenterOpen, setIsCallCenterOpen] = useState(false);
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3.5rem",
@@ -180,13 +183,17 @@ function AuthenticatedApp() {
             <MobileHeader />
             <header className="hidden md:flex items-center justify-between gap-4 h-12 px-4 border-b bg-background flex-shrink-0">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
-              <ThemeToggle />
+              <div className="flex items-center gap-2">
+                <CallCenterButton onClick={() => setIsCallCenterOpen(true)} />
+                <ThemeToggle />
+              </div>
             </header>
             <main className="flex-1 overflow-auto bg-background">
               <AdminCsrRouter />
             </main>
           </div>
           <FloatingAIAssistant />
+          <CallCenter isOpen={isCallCenterOpen} onClose={() => setIsCallCenterOpen(false)} />
         </div>
       </SidebarProvider>
     </AIContextProvider>
