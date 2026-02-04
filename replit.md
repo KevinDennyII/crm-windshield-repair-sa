@@ -86,13 +86,17 @@ Comprehensive AI-powered tools accessible to Admin and CSR roles, powered by Ope
 ### Technician Mobile Portal
 A mobile-optimized interface for field technicians featuring:
 - **Dashboard**: Job summaries.
-- **Job Details**: Customer info, vehicle info, task checklist.
+- **Job Details**: Customer info, vehicle info, task checklist with persistent state.
+- **Persistent Task Checklist**: On My Way, On Site, Take Payment tasks saved to database (`technician_job_data` table) and persist across page refreshes.
+- **Parts Checklist**: Each part in a job has a checkbox for technicians to mark as verified/ready, persisted to database.
+- **Payment Recording**: Technicians can record payments directly from the mobile portal with amount and payment method (cash, credit card, debit card, check, insurance, other). Payments update job totals and payment status automatically.
 - **Job Completion**: Photo capture, signature, payment collection.
 - **On My Way SMS**: When technician clicks "On My Way" task, an SMS is automatically sent to the customer with glass-type-specific preparation instructions:
   - **Windshield**: Park with front doors accessible, face street, remove stickers from dashboard
   - **Door Glass**: Park near outlet for vacuuming, be present with keys, warning about window elevator
   - **Back Glass**: Park facing house/building, clear trunk/bed area
   - All messages include payment reminder about cash/exact change
+- **Materials List**: Global inventory list of technician supplies (glass cleaner, paper towels, urethane, primer, daubers, blades, sponges, cloth towels) stored in `tech_materials_list` table.
 - **Design**: Blue header theme (#29ABE2), large touch-friendly buttons.
 
 ### Data Layer
