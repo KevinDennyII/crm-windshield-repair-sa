@@ -508,3 +508,41 @@ export const insertPhoneCallSchema = createInsertSchema(phoneCalls).omit({
 
 export type PhoneCall = typeof phoneCalls.$inferSelect;
 export type InsertPhoneCall = z.infer<typeof insertPhoneCallSchema>;
+
+// Technician job data - stores per-job technician-editable data like task status and part checklist
+export const technicianJobData = pgTable("technician_job_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().unique(),
+  taskStatus: jsonb("task_status").default({}), // { onMyWay: boolean, onSite: boolean, takePayment: boolean }
+  partsChecklist: jsonb("parts_checklist").default({}), // { [partId]: boolean } - tracks which parts are completed
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTechnicianJobDataSchema = createInsertSchema(technicianJobData).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type TechnicianJobData = typeof technicianJobData.$inferSelect;
+export type InsertTechnicianJobData = z.infer<typeof insertTechnicianJobDataSchema>;
+
+// Technician materials checklist - global supplies list for technicians
+export const techMaterialsList = pgTable("tech_materials_list", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  quantity: integer("quantity").default(0),
+  minQuantity: integer("min_quantity").default(0), // Alert when below this
+  isChecked: boolean("is_checked").default(false),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTechMaterialsListSchema = createInsertSchema(techMaterialsList).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TechMaterial = typeof techMaterialsList.$inferSelect;
+export type InsertTechMaterial = z.infer<typeof insertTechMaterialsListSchema>;

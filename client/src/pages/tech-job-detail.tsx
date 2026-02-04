@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute, Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { generateReceiptBase64 } from "@/lib/receipt-generator";
 import { 
@@ -17,9 +19,17 @@ import {
   Loader2,
   Check,
   Mail,
-  Send
+  Send,
+  DollarSign,
+  Plus
 } from "lucide-react";
 import type { Job } from "@shared/schema";
+
+interface TechData {
+  jobId: string;
+  taskStatus: { onMyWay?: boolean; onSite?: boolean; takePayment?: boolean };
+  partsChecklist: Record<string, boolean>;
+}
 
 export default function TechJobDetail() {
   const [, params] = useRoute("/tech/job/:id");
@@ -27,17 +37,59 @@ export default function TechJobDetail() {
   const { toast } = useToast();
   const jobId = params?.id;
   const [tasksExpanded, setTasksExpanded] = useState(false);
-  const [taskStatus, setTaskStatus] = useState({
-    onMyWay: false,
-    onSite: false,
-    takePayment: false
-  });
+  const [partsExpanded, setPartsExpanded] = useState(false);
+  const [paymentExpanded, setPaymentExpanded] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentSource, setPaymentSource] = useState<string>("cash");
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
 
   const job = jobs.find(j => j.id === jobId);
+
+  // Fetch persisted technician data for this job
+  const { data: techData } = useQuery<TechData>({
+    queryKey: ["/api/tech-data", jobId],
+    enabled: !!jobId,
+  });
+
+  const taskStatus = techData?.taskStatus || { onMyWay: false, onSite: false, takePayment: false };
+  const partsChecklist = techData?.partsChecklist || {};
+
+  // Mutation to update tech data
+  const updateTechDataMutation = useMutation({
+    mutationFn: async (data: { taskStatus?: any; partsChecklist?: any }) => {
+      const response = await apiRequest("PATCH", `/api/tech-data/${jobId}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tech-data", jobId] });
+    },
+  });
+
+  // Mutation to record payment
+  const recordPaymentMutation = useMutation({
+    mutationFn: async (data: { amount: number; source: string; notes?: string }) => {
+      const response = await apiRequest("POST", `/api/tech/jobs/${jobId}/payment`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      setPaymentAmount("");
+      toast({
+        title: "Payment Recorded",
+        description: "The payment has been added to this job.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to record payment",
+        variant: "destructive",
+      });
+    },
+  });
 
   const sendReceiptMutation = useMutation({
     mutationFn: async () => {
@@ -229,9 +281,13 @@ export default function TechJobDetail() {
     return date.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
   };
 
-  const toggleTask = (task: keyof typeof taskStatus) => {
-    const newValue = !taskStatus[task];
-    setTaskStatus(prev => ({ ...prev, [task]: newValue }));
+  const toggleTask = (task: "onMyWay" | "onSite" | "takePayment") => {
+    const currentValue = taskStatus[task] || false;
+    const newValue = !currentValue;
+    const newTaskStatus = { ...taskStatus, [task]: newValue };
+    
+    // Persist to database
+    updateTechDataMutation.mutate({ taskStatus: newTaskStatus });
     
     // Send "On My Way" SMS when the task is toggled ON
     if (task === "onMyWay" && newValue) {
@@ -245,6 +301,25 @@ export default function TechJobDetail() {
         sendOnMyWayMutation.mutate();
       }
     }
+  };
+
+  const togglePartChecklist = (partId: string) => {
+    const currentValue = partsChecklist[partId] || false;
+    const newPartsChecklist = { ...partsChecklist, [partId]: !currentValue };
+    updateTechDataMutation.mutate({ partsChecklist: newPartsChecklist });
+  };
+
+  const handleRecordPayment = () => {
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid payment amount.",
+        variant: "destructive",
+      });
+      return;
+    }
+    recordPaymentMutation.mutate({ amount, source: paymentSource });
   };
 
   const calculateTax = () => {
@@ -401,6 +476,143 @@ export default function TechJobDetail() {
                 Take Payment
               </span>
             </button>
+          </div>
+        )}
+
+        {/* Parts Checklist Section */}
+        <div className="px-4 py-3">
+          <button
+            onClick={() => setPartsExpanded(!partsExpanded)}
+            className="w-full py-3 rounded-full font-semibold text-white flex items-center justify-center gap-2"
+            style={{ backgroundColor: "#10B981" }}
+            data-testid="button-parts-checklist"
+          >
+            Parts Checklist
+            {partsExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {partsExpanded && (
+          <div className="px-4 pb-4 space-y-2">
+            {vehicles.map((veh, vehIndex) => {
+              const vehParts = veh.parts || [];
+              return vehParts.map((part: any, partIndex: number) => {
+                const partKey = `${vehIndex}-${partIndex}`;
+                const isChecked = partsChecklist[partKey] || false;
+                return (
+                  <button
+                    key={partKey}
+                    onClick={() => togglePartChecklist(partKey)}
+                    className="w-full flex items-center gap-4 p-4 bg-gray-50 rounded-lg border"
+                    data-testid={`part-check-${partKey}`}
+                  >
+                    <div 
+                      className={`w-7 h-7 rounded border-2 flex items-center justify-center transition-colors ${
+                        isChecked 
+                          ? "bg-green-500 border-green-500" 
+                          : "border-gray-400 bg-white"
+                      }`}
+                    >
+                      {isChecked && <Check className="w-5 h-5 text-white" />}
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <span className={`text-base font-medium ${isChecked ? "text-gray-500 line-through" : "text-gray-800"}`}>
+                        {part?.glassType?.replace(/_/g, " ") || "Part"} - {part?.serviceType?.replace(/_/g, " ") || "Service"}
+                      </span>
+                      {part?.glassPartNumber && (
+                        <span className="text-sm text-gray-500">Part# {part.glassPartNumber}</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              });
+            })}
+            {vehicles.flatMap(v => v.parts || []).length === 0 && (
+              <div className="text-center text-gray-500 py-4">No parts on this job</div>
+            )}
+          </div>
+        )}
+
+        {/* Payment Recording Section */}
+        <div className="px-4 py-3">
+          <button
+            onClick={() => setPaymentExpanded(!paymentExpanded)}
+            className="w-full py-3 rounded-full font-semibold text-white flex items-center justify-center gap-2"
+            style={{ backgroundColor: "#7C3AED" }}
+            data-testid="button-record-payment"
+          >
+            <DollarSign className="w-5 h-5" />
+            Record Payment
+            {paymentExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {paymentExpanded && (
+          <div className="px-4 pb-4 space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg border space-y-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Total Due:</span>
+                <span className="font-bold">${(job.totalDue || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Amount Paid:</span>
+                <span className="font-bold text-green-600">${(job.amountPaid || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Balance Due:</span>
+                <span className="font-bold text-red-600">${(job.balanceDue || job.totalDue || 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Amount</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Enter amount"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="text-lg"
+                  data-testid="input-payment-amount"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                <Select value={paymentSource} onValueChange={setPaymentSource}>
+                  <SelectTrigger data-testid="select-payment-method">
+                    <SelectValue placeholder="Select method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                    <SelectItem value="debit_card">Debit Card</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                    <SelectItem value="insurance">Insurance</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                onClick={handleRecordPayment}
+                disabled={recordPaymentMutation.isPending}
+                className="w-full py-6 text-lg font-semibold"
+                style={{ backgroundColor: "#7C3AED" }}
+                data-testid="button-submit-payment"
+              >
+                {recordPaymentMutation.isPending ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5 mr-2" />
+                    Add Payment
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         )}
 

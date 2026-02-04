@@ -1912,4 +1912,295 @@ Please let us know of any changes.`;
   if (isBluehostConfigured()) {
     startLeadPolling(60000); // Check every 60 seconds
   }
+
+  // ==================== Technician Job Data Routes ====================
+  
+  // Validation schemas for technician data
+  const taskStatusSchema = z.object({
+    onMyWay: z.boolean().optional(),
+    onSite: z.boolean().optional(),
+    takePayment: z.boolean().optional(),
+  }).optional();
+
+  const partsChecklistSchema = z.record(z.string(), z.boolean()).optional();
+
+  const techDataUpdateSchema = z.object({
+    taskStatus: taskStatusSchema,
+    partsChecklist: partsChecklistSchema,
+  });
+
+  // Get technician data for a specific job
+  app.get("/api/tech-data/:jobId", async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      
+      // Validate jobId format (basic sanitization)
+      if (!jobId || typeof jobId !== "string" || jobId.length > 100) {
+        return res.status(400).json({ message: "Invalid job ID" });
+      }
+      
+      const data = await storage.getTechnicianJobData(jobId);
+      res.json(data || { jobId, taskStatus: {}, partsChecklist: {} });
+    } catch (error: any) {
+      console.error("Error fetching technician job data:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch technician data" });
+    }
+  });
+
+  // Update technician data for a job
+  app.patch("/api/tech-data/:jobId", async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      
+      // Validate jobId format
+      if (!jobId || typeof jobId !== "string" || jobId.length > 100) {
+        return res.status(400).json({ message: "Invalid job ID" });
+      }
+
+      // Validate request body
+      const parseResult = techDataUpdateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid request body", 
+          errors: parseResult.error.flatten() 
+        });
+      }
+
+      const { taskStatus, partsChecklist } = parseResult.data;
+      const data = await storage.upsertTechnicianJobData(jobId, { taskStatus, partsChecklist });
+      res.json(data);
+    } catch (error: any) {
+      console.error("Error updating technician job data:", error);
+      res.status(500).json({ message: error.message || "Failed to update technician data" });
+    }
+  });
+
+  // ==================== Tech Materials List Routes ====================
+  
+  // Validation schema for materials
+  const materialCreateSchema = z.object({
+    name: z.string().min(1).max(100),
+    quantity: z.number().int().min(0).optional(),
+    minQuantity: z.number().int().min(0).optional(),
+    sortOrder: z.number().int().min(0).optional(),
+  });
+
+  const materialUpdateSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    quantity: z.number().int().min(0).optional(),
+    minQuantity: z.number().int().min(0).optional(),
+    isChecked: z.boolean().optional(),
+    sortOrder: z.number().int().min(0).optional(),
+  });
+  
+  // Get all materials
+  app.get("/api/tech-materials", async (req, res) => {
+    try {
+      const materials = await storage.getTechMaterials();
+      res.json(materials);
+    } catch (error: any) {
+      console.error("Error fetching tech materials:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch materials" });
+    }
+  });
+
+  // Create a new material (admin only)
+  app.post("/api/tech-materials", async (req, res) => {
+    try {
+      // Check authentication
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      // Validate request body
+      const parseResult = materialCreateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid request body", 
+          errors: parseResult.error.flatten() 
+        });
+      }
+
+      const material = await storage.createTechMaterial(parseResult.data);
+      res.json(material);
+    } catch (error: any) {
+      console.error("Error creating tech material:", error);
+      res.status(500).json({ message: error.message || "Failed to create material" });
+    }
+  });
+
+  // Update a material
+  app.patch("/api/tech-materials/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Validate ID format
+      if (!id || typeof id !== "string" || id.length > 100) {
+        return res.status(400).json({ message: "Invalid material ID" });
+      }
+
+      // Validate request body
+      const parseResult = materialUpdateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid request body", 
+          errors: parseResult.error.flatten() 
+        });
+      }
+
+      const material = await storage.updateTechMaterial(id, parseResult.data);
+      res.json(material);
+    } catch (error: any) {
+      console.error("Error updating tech material:", error);
+      res.status(500).json({ message: error.message || "Failed to update material" });
+    }
+  });
+
+  // Delete a material (admin only)
+  app.delete("/api/tech-materials/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Check authentication
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      
+      // Validate ID format
+      if (!id || typeof id !== "string" || id.length > 100) {
+        return res.status(400).json({ message: "Invalid material ID" });
+      }
+
+      await storage.deleteTechMaterial(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting tech material:", error);
+      res.status(500).json({ message: error.message || "Failed to delete material" });
+    }
+  });
+
+  // Seed default materials (run once to populate the list)
+  app.post("/api/tech-materials/seed", async (req, res) => {
+    try {
+      const defaultMaterials = [
+        { name: "Glass Cleaner", quantity: 0, minQuantity: 2, sortOrder: 1 },
+        { name: "Paper Towels", quantity: 0, minQuantity: 2, sortOrder: 2 },
+        { name: "Urethane", quantity: 0, minQuantity: 2, sortOrder: 3 },
+        { name: "Primer", quantity: 0, minQuantity: 2, sortOrder: 4 },
+        { name: "Small Daubers", quantity: 0, minQuantity: 5, sortOrder: 5 },
+        { name: "Large Daubers", quantity: 0, minQuantity: 5, sortOrder: 6 },
+        { name: "Blades", quantity: 0, minQuantity: 5, sortOrder: 7 },
+        { name: "White Sponges", quantity: 0, minQuantity: 5, sortOrder: 8 },
+        { name: "Cloth Towels", quantity: 0, minQuantity: 5, sortOrder: 9 },
+      ];
+
+      const existing = await storage.getTechMaterials();
+      if (existing.length === 0) {
+        for (const mat of defaultMaterials) {
+          await storage.createTechMaterial(mat);
+        }
+        const materials = await storage.getTechMaterials();
+        res.json({ message: "Default materials seeded", materials });
+      } else {
+        res.json({ message: "Materials already exist", materials: existing });
+      }
+    } catch (error: any) {
+      console.error("Error seeding tech materials:", error);
+      res.status(500).json({ message: error.message || "Failed to seed materials" });
+    }
+  });
+
+  // ==================== Technician Payment Recording ====================
+  
+  // Add payment from technician portal
+  app.post("/api/tech/jobs/:id/payment", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const paymentSchema = z.object({
+        amount: z.number().min(0.01, "Amount must be greater than 0"),
+        source: z.enum(["cash", "credit_card", "debit_card", "check", "insurance", "other"]),
+        notes: z.string().optional(),
+      });
+
+      const { amount, source, notes } = paymentSchema.parse(req.body);
+      
+      const job = await storage.getJob(id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Create payment entry
+      const paymentEntry = {
+        id: crypto.randomUUID(),
+        date: new Date().toISOString(),
+        source,
+        amount,
+        notes: notes || `Payment recorded by technician`,
+      };
+
+      // Calculate new totals
+      const currentPaymentHistory = (job.paymentHistory as any[]) || [];
+      const newPaymentHistory = [...currentPaymentHistory, paymentEntry];
+      const newAmountPaid = (job.amountPaid || 0) + amount;
+      const totalDue = job.totalDue || 0;
+      const newBalanceDue = Math.max(0, totalDue - newAmountPaid);
+      
+      // Determine payment status
+      let newPaymentStatus: "pending" | "partial" | "paid" = "pending";
+      if (newBalanceDue <= 0) {
+        newPaymentStatus = "paid";
+      } else if (newAmountPaid > 0) {
+        newPaymentStatus = "partial";
+      }
+
+      // Update payment methods
+      type PaymentMethodType = "cash" | "card" | "check" | "zelle" | "bank_deposit";
+      const currentMethods = (job.paymentMethod as PaymentMethodType[]) || [];
+      const methodMap: Record<string, PaymentMethodType> = {
+        cash: "cash",
+        credit_card: "card",
+        debit_card: "card",
+        check: "check",
+        insurance: "card",
+        other: "cash",
+      };
+      const newMethod: PaymentMethodType = methodMap[source] || "cash";
+      const updatedMethods: PaymentMethodType[] = currentMethods.includes(newMethod) 
+        ? currentMethods 
+        : [...currentMethods, newMethod];
+
+      // Update job
+      const updatedJob = await storage.updateJob(id, {
+        paymentHistory: newPaymentHistory,
+        amountPaid: newAmountPaid,
+        balanceDue: newBalanceDue,
+        paymentStatus: newPaymentStatus,
+        paymentMethod: updatedMethods,
+        // If fully paid, move to paid_completed stage
+        ...(newPaymentStatus === "paid" ? { pipelineStage: "paid_completed" } : {}),
+      });
+
+      // Log activity if we have a current user
+      const currentUser = await getCurrentUser(req);
+      if (currentUser) {
+        await logActivity(
+          currentUser.id,
+          currentUser.username,
+          currentUser.role,
+          "payment_recorded",
+          "jobs",
+          job.id,
+          job.jobNumber,
+          { amount, source, newBalance: newBalanceDue, newStatus: newPaymentStatus }
+        );
+      }
+
+      res.json(updatedJob);
+    } catch (error: any) {
+      console.error("Error recording tech payment:", error);
+      res.status(500).json({ message: error.message || "Failed to record payment" });
+    }
+  });
 }

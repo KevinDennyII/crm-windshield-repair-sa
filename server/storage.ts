@@ -1,4 +1,4 @@
-import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, type ActivityLog, type InsertActivityLog, type ProcessedLead, type InsertProcessedLead, jobs, users, customerReminders, contacts, activityLogs, processedLeads } from "@shared/schema";
+import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, type ActivityLog, type InsertActivityLog, type ProcessedLead, type InsertProcessedLead, type TechnicianJobData, type InsertTechnicianJobData, type TechMaterial, type InsertTechMaterial, jobs, users, customerReminders, contacts, activityLogs, processedLeads, technicianJobData, techMaterialsList } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, desc, sql, max, and, gte, lte } from "drizzle-orm";
@@ -626,6 +626,59 @@ export class DatabaseStorage implements IStorage {
   async getAllProcessedLeadIds(): Promise<string[]> {
     const result = await db.select({ emailId: processedLeads.emailId }).from(processedLeads);
     return result.map(r => r.emailId);
+  }
+
+  // Technician Job Data methods
+  async getTechnicianJobData(jobId: string): Promise<TechnicianJobData | undefined> {
+    const result = await db.select().from(technicianJobData).where(eq(technicianJobData.jobId, jobId)).limit(1);
+    return result[0];
+  }
+
+  async upsertTechnicianJobData(jobId: string, data: { taskStatus?: any; partsChecklist?: any }): Promise<TechnicianJobData> {
+    const existing = await this.getTechnicianJobData(jobId);
+    
+    if (existing) {
+      const [updated] = await db.update(technicianJobData)
+        .set({
+          taskStatus: data.taskStatus !== undefined ? data.taskStatus : existing.taskStatus,
+          partsChecklist: data.partsChecklist !== undefined ? data.partsChecklist : existing.partsChecklist,
+          updatedAt: new Date(),
+        })
+        .where(eq(technicianJobData.jobId, jobId))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(technicianJobData).values({
+        jobId,
+        taskStatus: data.taskStatus || {},
+        partsChecklist: data.partsChecklist || {},
+      }).returning();
+      return created;
+    }
+  }
+
+  // Tech Materials List methods
+  async getTechMaterials(): Promise<TechMaterial[]> {
+    const result = await db.select().from(techMaterialsList).orderBy(techMaterialsList.sortOrder);
+    return result;
+  }
+
+  async createTechMaterial(material: InsertTechMaterial): Promise<TechMaterial> {
+    const [created] = await db.insert(techMaterialsList).values(material).returning();
+    return created;
+  }
+
+  async updateTechMaterial(id: string, updates: Partial<InsertTechMaterial>): Promise<TechMaterial | undefined> {
+    const [updated] = await db.update(techMaterialsList)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(techMaterialsList.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTechMaterial(id: string): Promise<boolean> {
+    const result = await db.delete(techMaterialsList).where(eq(techMaterialsList.id, id));
+    return true;
   }
 }
 
