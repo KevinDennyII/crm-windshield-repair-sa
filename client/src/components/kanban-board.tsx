@@ -17,6 +17,7 @@ import { type Job, type PipelineStage, pipelineStages } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { EmailComposeModal } from "./email-compose-modal";
 import { useIsMobile } from "@/hooks/use-media-query";
+import { triggerOutboundCall } from "@/App";
 
 const stageConfig: Record<
   PipelineStage,
@@ -179,12 +180,13 @@ export function KanbanBoard({
             <Button
               variant="ghost"
               size="icon"
-              asChild
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                triggerOutboundCall(job.phone, `${job.firstName} ${job.lastName}`);
+              }}
+              data-testid={`button-call-${job.id}`}
             >
-              <a href={`tel:${job.phone}`} data-testid={`button-call-${job.id}`}>
-                <Phone className="h-4 w-4 text-green-600" />
-              </a>
+              <Phone className="h-4 w-4 text-green-600" />
             </Button>
             <Button
               variant="ghost"
@@ -259,16 +261,14 @@ export function KanbanBoard({
               <Button
                 variant="outline"
                 size="sm"
-                asChild
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  triggerOutboundCall(job.phone, `${job.firstName} ${job.lastName}`);
+                }}
+                data-testid={`button-call-${job.id}`}
               >
-                <a
-                  href={`tel:${job.phone}`}
-                  data-testid={`button-call-${job.id}`}
-                >
-                  <Phone className="h-3 w-3 mr-1" />
-                  Call
-                </a>
+                <Phone className="h-3 w-3 mr-1" />
+                Call
               </Button>
               <Button
                 variant="outline"

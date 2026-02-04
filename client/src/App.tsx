@@ -10,7 +10,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { FloatingAIAssistant } from "@/components/floating-ai-assistant";
 import { CallCenter, CallCenterButton } from "@/components/call-center";
 import { AIContextProvider } from "@/contexts/ai-context";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Opportunities from "@/pages/opportunities";
@@ -131,12 +131,37 @@ function LoadingScreen() {
   );
 }
 
+// Global dial request handler - exposed for other components to trigger calls
+let globalDialHandler: ((phone: string, contactName?: string) => void) | null = null;
+
+export function triggerOutboundCall(phone: string, contactName?: string) {
+  if (globalDialHandler) {
+    globalDialHandler(phone, contactName);
+  }
+}
+
 function AuthenticatedApp() {
   const { user, isLoading, isTechnician, isReports } = useAuth();
   const [isCallCenterOpen, setIsCallCenterOpen] = useState(false);
+  const [dialRequest, setDialRequest] = useState<{ phone: string; contactName?: string } | null>(null);
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3.5rem",
+  };
+
+  // Register global dial handler
+  useEffect(() => {
+    globalDialHandler = (phone: string, contactName?: string) => {
+      setDialRequest({ phone, contactName });
+      setIsCallCenterOpen(true);
+    };
+    return () => {
+      globalDialHandler = null;
+    };
+  }, []);
+
+  const handleDialComplete = () => {
+    setDialRequest(null);
   };
 
   if (isLoading) {
@@ -193,7 +218,13 @@ function AuthenticatedApp() {
             </main>
           </div>
           <FloatingAIAssistant />
-          <CallCenter isOpen={isCallCenterOpen} onClose={() => setIsCallCenterOpen(false)} />
+          <CallCenter 
+            isOpen={isCallCenterOpen} 
+            onClose={() => setIsCallCenterOpen(false)}
+            dialNumber={dialRequest?.phone}
+            dialContactName={dialRequest?.contactName}
+            onDialComplete={handleDialComplete}
+          />
         </div>
       </SidebarProvider>
     </AIContextProvider>

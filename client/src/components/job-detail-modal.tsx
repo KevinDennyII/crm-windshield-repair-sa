@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { triggerOutboundCall } from "@/App";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -1077,15 +1078,14 @@ export function JobDetailModal({
                             <Button
                               variant="outline"
                               size="sm"
-                              asChild
+                              onClick={() => {
+                                // Trigger Twilio outbound call via Call Center
+                                triggerOutboundCall(formData.phone, `${formData.firstName} ${formData.lastName}`);
+                              }}
+                              data-testid="button-call-customer"
                             >
-                              <a
-                                href={`tel:${formData.phone}`}
-                                data-testid="button-call-customer"
-                              >
-                                <Phone className="h-3 w-3 mr-1" />
-                                Call
-                              </a>
+                              <Phone className="h-3 w-3 mr-1" />
+                              Call
                             </Button>
                             <Button
                               variant="outline"

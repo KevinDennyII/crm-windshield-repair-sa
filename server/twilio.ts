@@ -78,6 +78,20 @@ export function validateTwilioSignature(url: string, params: Record<string, stri
   return twilio.validateRequest(authToken, signature, url, params);
 }
 
+export function generateOutboundCallTwiml(toNumber: string): string {
+  const response = new twilio.twiml.VoiceResponse();
+  
+  // Dial the customer's phone number
+  const dial = response.dial({
+    callerId: twilioPhoneNumber || undefined,
+    answerOnBridge: true,
+  });
+  
+  dial.number(toNumber);
+  
+  return response.toString();
+}
+
 export interface SmsMessage {
   sid: string;
   to: string;

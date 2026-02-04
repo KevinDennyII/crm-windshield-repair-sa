@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
-import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, validateTwilioSignature } from "./twilio";
+import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, validateTwilioSignature } from "./twilio";
 import { isBluehostConfigured, getBluehostEmail, getBluehostEmails, sendBluehostEmail, replyToBluehostEmail } from "./bluehost";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
 import { decodeVIN } from "./vin-decoder";
@@ -1359,10 +1359,10 @@ Please let us know of any changes.`;
     }
   });
 
-  // Incoming call webhook - Twilio calls this when someone dials the number
+  // Incoming call webhook - Twilio calls this when someone dials the number OR when browser initiates outbound
   app.post("/api/voice/incoming", async (req, res) => {
     try {
-      console.log("Incoming call webhook received:", req.body);
+      console.log("Voice webhook received:", req.body);
 
       // Validate Twilio signature for security (in production)
       const twilioSignature = req.headers['x-twilio-signature'] as string;
@@ -1375,8 +1375,55 @@ Please let us know of any changes.`;
       }
 
       const { CallSid, From, To, CallStatus } = req.body;
+      
+      // Detect outbound call from browser:
+      // When browser calls device.connect({ params: { To: "..." } }), Twilio sends:
+      // - From: "client:crm_agent" (the browser client identity)
+      // - To: the phone number the user wants to call
+      // For inbound calls, From is the caller's phone number and To is our Twilio number
+      const isOutboundFromBrowser = From && From.startsWith("client:");
+      
+      if (isOutboundFromBrowser && To) {
+        // This is an outbound call from browser - dial the customer
+        const toNumber = To;
+        console.log("Outbound call from browser detected, dialing:", toNumber);
+        
+        // Format number for Twilio
+        let formattedNumber = toNumber.replace(/\D/g, "");
+        if (formattedNumber.length === 10) {
+          formattedNumber = "+1" + formattedNumber;
+        } else if (!formattedNumber.startsWith("+")) {
+          formattedNumber = "+" + formattedNumber;
+        }
+        
+        // Look up contact name
+        let contactName = "Unknown";
+        const jobs = await storage.getAllJobs();
+        const matchingJob = jobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedNumber.replace(/\D/g, ""));
+        if (matchingJob) {
+          contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
+        }
+        
+        // Log outbound call
+        await db.insert(phoneCalls).values({
+          callSid: CallSid,
+          direction: 'outbound',
+          fromNumber: getTwilioPhoneNumber() || "",
+          toNumber: formattedNumber,
+          status: 'initiated',
+          contactName: contactName,
+        }).onConflictDoUpdate({
+          target: phoneCalls.callSid,
+          set: { status: 'initiated' }
+        });
+        
+        // Generate TwiML to dial the customer
+        const twiml = generateOutboundCallTwiml(formattedNumber);
+        res.type("text/xml");
+        return res.send(twiml);
+      }
 
-      // Look up caller in contacts/jobs
+      // Handle inbound call - look up caller in contacts/jobs
       let contactName = "Unknown Caller";
       const formattedFrom = From?.replace(/\D/g, "");
       if (formattedFrom) {

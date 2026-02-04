@@ -29,9 +29,12 @@ interface CallLog {
 interface CallCenterProps {
   isOpen: boolean;
   onClose: () => void;
+  dialNumber?: string | null;
+  dialContactName?: string | null;
+  onDialComplete?: () => void;
 }
 
-export function CallCenter({ isOpen, onClose }: CallCenterProps) {
+export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDialComplete }: CallCenterProps) {
   const { toast } = useToast();
   const [device, setDevice] = useState<any>(null);
   const [activeCall, setActiveCall] = useState<any>(null);
@@ -40,7 +43,10 @@ export function CallCenter({ isOpen, onClose }: CallCenterProps) {
   const [isMuted, setIsMuted] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [outboundNumber, setOutboundNumber] = useState<string | null>(null);
+  const [outboundContactName, setOutboundContactName] = useState<string | null>(null);
   const deviceRef = useRef<any>(null);
+  const hasInitiatedDialRef = useRef<string | null>(null);
 
   const { data: voiceStatus } = useQuery<{
     configured: boolean;
@@ -179,6 +185,98 @@ export function CallCenter({ isOpen, onClose }: CallCenterProps) {
     }
   }, [activeCall, isMuted]);
 
+  // Initiate an outbound call
+  const makeOutboundCall = useCallback(async (phoneNumber: string, contactName?: string) => {
+    if (!device || callStatus !== "ready") {
+      toast({
+        title: "Cannot Make Call",
+        description: "Call center is not ready. Please wait for initialization.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setOutboundNumber(phoneNumber);
+      setOutboundContactName(contactName || null);
+      setCallStatus("calling");
+
+      // Format the phone number
+      let formattedNumber = phoneNumber.replace(/\D/g, "");
+      if (formattedNumber.length === 10) {
+        formattedNumber = "+1" + formattedNumber;
+      } else if (!formattedNumber.startsWith("+")) {
+        formattedNumber = "+" + formattedNumber;
+      }
+
+      // Connect to the number via Twilio
+      const call = await device.connect({
+        params: {
+          To: formattedNumber,
+        },
+      });
+
+      setActiveCall(call);
+
+      call.on("accept", () => {
+        console.log("Outbound call accepted");
+        setCallStatus("in-call");
+      });
+
+      call.on("disconnect", () => {
+        console.log("Outbound call disconnected");
+        setCallStatus("ready");
+        setActiveCall(null);
+        setOutboundNumber(null);
+        setOutboundContactName(null);
+        queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
+      });
+
+      call.on("cancel", () => {
+        console.log("Outbound call cancelled");
+        setCallStatus("ready");
+        setActiveCall(null);
+        setOutboundNumber(null);
+        setOutboundContactName(null);
+      });
+
+      call.on("error", (error: any) => {
+        console.error("Outbound call error:", error);
+        toast({
+          title: "Call Failed",
+          description: error.message || "Failed to connect call",
+          variant: "destructive",
+        });
+        setCallStatus("ready");
+        setActiveCall(null);
+        setOutboundNumber(null);
+        setOutboundContactName(null);
+      });
+
+    } catch (error: any) {
+      console.error("Failed to initiate outbound call:", error);
+      toast({
+        title: "Call Failed",
+        description: error.message || "Failed to initiate call",
+        variant: "destructive",
+      });
+      setCallStatus("ready");
+      setOutboundNumber(null);
+      setOutboundContactName(null);
+    }
+  }, [device, callStatus, toast]);
+
+  // Effect to handle incoming dialNumber prop
+  useEffect(() => {
+    if (dialNumber && device && callStatus === "ready" && hasInitiatedDialRef.current !== dialNumber) {
+      hasInitiatedDialRef.current = dialNumber;
+      makeOutboundCall(dialNumber, dialContactName || undefined);
+      if (onDialComplete) {
+        onDialComplete();
+      }
+    }
+  }, [dialNumber, dialContactName, device, callStatus, makeOutboundCall, onDialComplete]);
+
   useEffect(() => {
     return () => {
       if (deviceRef.current) {
@@ -265,9 +363,10 @@ export function CallCenter({ isOpen, onClose }: CallCenterProps) {
         ) : (
           <>
             <div className="flex items-center justify-between">
-              <Badge variant={callStatus === "ready" ? "default" : callStatus === "in-call" ? "destructive" : "secondary"}>
+              <Badge variant={callStatus === "ready" ? "default" : callStatus === "in-call" || callStatus === "calling" ? "destructive" : "secondary"}>
                 {callStatus === "ready" && "Ready"}
                 {callStatus === "ringing" && "Incoming Call"}
+                {callStatus === "calling" && "Dialing..."}
                 {callStatus === "in-call" && "On Call"}
                 {callStatus === "error" && "Error"}
               </Badge>
@@ -277,6 +376,39 @@ export function CallCenter({ isOpen, onClose }: CallCenterProps) {
                 </span>
               )}
             </div>
+
+            {/* Outbound calling state */}
+            {(callStatus === "calling" || (callStatus === "in-call" && outboundNumber)) && (
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Phone className="h-5 w-5 text-blue-600" />
+                  <span className="font-medium">{callStatus === "calling" ? "Calling..." : "Outbound Call"}</span>
+                </div>
+                {outboundContactName && <p className="text-sm font-medium">{outboundContactName}</p>}
+                <p className="text-xs text-muted-foreground">{formatPhoneNumber(outboundNumber || "")}</p>
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    onClick={toggleMute}
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    data-testid="button-mute-outbound"
+                  >
+                    {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    onClick={hangup}
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1"
+                    data-testid="button-hangup-outbound"
+                  >
+                    <PhoneOff className="h-4 w-4 mr-1" />
+                    End
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {callStatus === "ringing" && incomingCall && (
               <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 animate-pulse">
