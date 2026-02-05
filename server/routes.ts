@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, validateTwilioSignature } from "./twilio";
@@ -12,7 +12,7 @@ import { isPlacesConfigured, getAutocomplete, getPlaceDetails } from "./places";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { db } from "./db";
 import { users } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { COMPANY_LOGO_BASE64 } from "./logo";
 import { processNewLeads, startLeadPolling, stopLeadPolling } from "./lead-processor";
 import { registerAIRoutes } from "./ai-routes";
@@ -2156,6 +2156,68 @@ Please let us know of any changes.`;
     } catch (error: any) {
       console.error("Error seeding tech materials:", error);
       res.status(500).json({ message: error.message || "Failed to seed materials" });
+    }
+  });
+
+  // ==================== Pickup Checklist ====================
+  
+  // Get all pickup checklist items
+  app.get("/api/pickup-checklist", async (req, res) => {
+    try {
+      const items = await db.select().from(pickupChecklist);
+      res.json(items);
+    } catch (error: any) {
+      console.error("Error fetching pickup checklist:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch pickup checklist" });
+    }
+  });
+
+  // Toggle pickup status for a part
+  app.post("/api/pickup-checklist/toggle", async (req, res) => {
+    try {
+      const toggleSchema = z.object({
+        jobId: z.string(),
+        vehicleIndex: z.number(),
+        partIndex: z.number(),
+        isPickedUp: z.boolean(),
+      });
+
+      const { jobId, vehicleIndex, partIndex, isPickedUp } = toggleSchema.parse(req.body);
+
+      // Check if record exists
+      const existing = await db.select().from(pickupChecklist)
+        .where(
+          and(
+            eq(pickupChecklist.jobId, jobId),
+            eq(pickupChecklist.vehicleIndex, vehicleIndex),
+            eq(pickupChecklist.partIndex, partIndex)
+          )
+        );
+
+      if (existing.length > 0) {
+        // Update existing record
+        await db.update(pickupChecklist)
+          .set({ 
+            isPickedUp, 
+            pickedUpAt: isPickedUp ? new Date() : null 
+          })
+          .where(eq(pickupChecklist.id, existing[0].id));
+      } else {
+        // Create new record
+        await db.insert(pickupChecklist).values({
+          jobId,
+          vehicleIndex,
+          partIndex,
+          isPickedUp,
+          pickedUpAt: isPickedUp ? new Date() : null,
+        });
+      }
+
+      const items = await db.select().from(pickupChecklist);
+      res.json(items);
+    } catch (error: any) {
+      console.error("Error toggling pickup status:", error);
+      res.status(500).json({ message: error.message || "Failed to toggle pickup status" });
     }
   });
 

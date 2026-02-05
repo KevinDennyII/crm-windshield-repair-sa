@@ -4,7 +4,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   Menu, 
   X, 
@@ -19,12 +20,15 @@ import {
   ChevronDown,
   ChevronUp,
   Truck,
-  Phone
+  Phone,
+  ClipboardCheck,
+  Check
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CallCenter, CallCenterButton } from "@/components/call-center";
-import type { Job, Part, Vehicle } from "@shared/schema";
+import type { Job, Part, Vehicle, PickupChecklistItem } from "@shared/schema";
 
-type TabType = "current" | "last" | "yearly" | "pickup";
+type TabType = "current" | "last" | "yearly" | "pickup" | "materials";
 
 const DISTRIBUTOR_ADDRESSES = {
   mygrant: "4825 Eisenhauer Rd, San Antonio, TX",
@@ -79,9 +83,45 @@ export default function TechDashboard() {
   });
   const [isCallCenterOpen, setIsCallCenterOpen] = useState(false);
 
+  const queryClient = useQueryClient();
+
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
+
+  const { data: pickupChecklistData = [] } = useQuery<PickupChecklistItem[]>({
+    queryKey: ["/api/pickup-checklist"],
+  });
+
+  const { data: materials = [] } = useQuery<any[]>({
+    queryKey: ["/api/tech-materials"],
+  });
+
+  const togglePickupMutation = useMutation({
+    mutationFn: async (data: { jobId: string; vehicleIndex: number; partIndex: number; isPickedUp: boolean }) => {
+      const res = await apiRequest("POST", "/api/pickup-checklist/toggle", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pickup-checklist"] });
+    },
+  });
+
+  const toggleMaterialMutation = useMutation({
+    mutationFn: async (data: { id: string; isChecked: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/tech-materials/${data.id}`, { isChecked: data.isChecked });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tech-materials"] });
+    },
+  });
+
+  const isPartPickedUp = (jobId: string, vehicleIndex: number, partIndex: number) => {
+    return pickupChecklistData.some(
+      item => item.jobId === jobId && item.vehicleIndex === vehicleIndex && item.partIndex === partIndex && item.isPickedUp
+    );
+  };
 
   const scheduledJobs = jobs.filter(job => job.pipelineStage === "scheduled");
   const completedJobs = jobs.filter(job => job.pipelineStage === "paid_completed");
@@ -165,17 +205,18 @@ export default function TechDashboard() {
   const sortedTodaysJobs = useMemo(() => sortJobsByRoute(todaysJobs), [todaysJobs]);
 
   const pickupList = useMemo(() => {
-    const list: { mygrant: { job: Job; vehicle: Vehicle; part: Part }[]; pgw: { job: Job; vehicle: Vehicle; part: Part }[]; other: { job: Job; vehicle: Vehicle; part: Part }[] } = {
+    type PickupItem = { job: Job; vehicle: Vehicle; part: Part; vehicleIndex: number; partIndex: number };
+    const list: { mygrant: PickupItem[]; pgw: PickupItem[]; other: PickupItem[] } = {
       mygrant: [],
       pgw: [],
       other: []
     };
 
     sortedTodaysJobs.forEach(job => {
-      job.vehicles?.forEach(vehicle => {
-        vehicle.parts?.forEach(part => {
+      job.vehicles?.forEach((vehicle, vehicleIndex) => {
+        vehicle.parts?.forEach((part, partIndex) => {
           const distributor = (part.distributor || "").toLowerCase();
-          const item = { job, vehicle, part };
+          const item = { job, vehicle, part, vehicleIndex, partIndex };
           
           if (distributor.includes("mygrant")) {
             list.mygrant.push(item);
@@ -197,6 +238,7 @@ export default function TechDashboard() {
       case "last": return "Last Week";
       case "yearly": return "Yearly";
       case "pickup": return "Today's Pickup List";
+      case "materials": return "Materials Checklist";
     }
   };
 
@@ -297,6 +339,17 @@ export default function TechDashboard() {
               <Package className="w-5 h-5 text-white" />
               <span className="text-white font-medium">Pickup List</span>
               <span className="text-white/70 text-sm ml-auto">{sortedTodaysJobs.length}</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab("materials"); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeTab === "materials" ? "bg-white/20" : "hover:bg-white/10"
+              }`}
+              data-testid="nav-materials-checklist"
+            >
+              <ClipboardCheck className="w-5 h-5 text-white" />
+              <span className="text-white font-medium">Materials Checklist</span>
             </button>
 
             <button
@@ -444,34 +497,42 @@ export default function TechDashboard() {
                       <MapPin className="w-4 h-4" />
                       <span className="font-medium">Navigate to Mygrant</span>
                     </button>
-                    {pickupList.mygrant.map((item, idx) => (
-                      <div key={`mygrant-${idx}`} className="px-4 py-3 bg-white">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {item.vehicle.vehicleYear} {item.vehicle.vehicleMake} {item.vehicle.vehicleModel}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
-                            </p>
-                            {item.part.accessories && (
-                              <p className="text-sm text-orange-600 font-medium">
-                                Accessories: {item.part.accessories}
+                    {pickupList.mygrant.map((item, idx) => {
+                      const picked = isPartPickedUp(item.job.id, item.vehicleIndex, item.partIndex);
+                      return (
+                        <div key={`mygrant-${idx}`} className={`px-4 py-3 ${picked ? 'bg-green-50' : 'bg-white'}`}>
+                          <div className="flex items-start gap-3">
+                            <Checkbox
+                              checked={picked}
+                              onCheckedChange={(checked) => {
+                                togglePickupMutation.mutate({
+                                  jobId: item.job.id,
+                                  vehicleIndex: item.vehicleIndex,
+                                  partIndex: item.partIndex,
+                                  isPickedUp: !!checked,
+                                });
+                              }}
+                              className="mt-1 h-5 w-5"
+                              data-testid={`checkbox-pickup-mygrant-${idx}`}
+                            />
+                            <div className="flex-1">
+                              <p className={`font-medium ${picked ? 'text-green-700 line-through' : 'text-gray-900'}`}>
+                                {item.part.glassPartNumber || "N/A"}
                               </p>
-                            )}
-                            <p className="text-sm text-gray-500">
-                              Customer: {item.job.firstName} {item.job.lastName}
-                            </p>
-                            {item.job.customerType === "subcontractor" && item.job.businessName && (
-                              <p className="text-sm font-medium text-purple-600">
-                                For Subcontractor: {item.job.businessName}
+                              <p className="text-sm text-gray-500">
+                                Job #{item.job.jobNumber} - {item.job.firstName} {item.job.lastName}
                               </p>
-                            )}
+                              {item.part.accessories && (
+                                <p className="text-sm text-orange-600 font-medium">
+                                  + {item.part.accessories}
+                                </p>
+                              )}
+                            </div>
+                            {picked && <Check className="w-5 h-5 text-green-600" />}
                           </div>
-                          <span className="text-sm font-medium text-blue-600">#{item.job.jobNumber}</span>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -506,34 +567,42 @@ export default function TechDashboard() {
                       <MapPin className="w-4 h-4" />
                       <span className="font-medium">Navigate to PGW</span>
                     </button>
-                    {pickupList.pgw.map((item, idx) => (
-                      <div key={`pgw-${idx}`} className="px-4 py-3 bg-white">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {item.vehicle.vehicleYear} {item.vehicle.vehicleMake} {item.vehicle.vehicleModel}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
-                            </p>
-                            {item.part.accessories && (
-                              <p className="text-sm text-orange-600 font-medium">
-                                Accessories: {item.part.accessories}
+                    {pickupList.pgw.map((item, idx) => {
+                      const picked = isPartPickedUp(item.job.id, item.vehicleIndex, item.partIndex);
+                      return (
+                        <div key={`pgw-${idx}`} className={`px-4 py-3 ${picked ? 'bg-green-50' : 'bg-white'}`}>
+                          <div className="flex items-start gap-3">
+                            <Checkbox
+                              checked={picked}
+                              onCheckedChange={(checked) => {
+                                togglePickupMutation.mutate({
+                                  jobId: item.job.id,
+                                  vehicleIndex: item.vehicleIndex,
+                                  partIndex: item.partIndex,
+                                  isPickedUp: !!checked,
+                                });
+                              }}
+                              className="mt-1 h-5 w-5"
+                              data-testid={`checkbox-pickup-pgw-${idx}`}
+                            />
+                            <div className="flex-1">
+                              <p className={`font-medium ${picked ? 'text-green-700 line-through' : 'text-gray-900'}`}>
+                                {item.part.glassPartNumber || "N/A"}
                               </p>
-                            )}
-                            <p className="text-sm text-gray-500">
-                              Customer: {item.job.firstName} {item.job.lastName}
-                            </p>
-                            {item.job.customerType === "subcontractor" && item.job.businessName && (
-                              <p className="text-sm font-medium text-purple-600">
-                                For Subcontractor: {item.job.businessName}
+                              <p className="text-sm text-gray-500">
+                                Job #{item.job.jobNumber} - {item.job.firstName} {item.job.lastName}
                               </p>
-                            )}
+                              {item.part.accessories && (
+                                <p className="text-sm text-orange-600 font-medium">
+                                  + {item.part.accessories}
+                                </p>
+                              )}
+                            </div>
+                            {picked && <Check className="w-5 h-5 text-green-600" />}
                           </div>
-                          <span className="text-sm font-medium text-green-600">#{item.job.jobNumber}</span>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -549,32 +618,43 @@ export default function TechDashboard() {
                   </div>
                 </div>
                 <div className="divide-y">
-                  {pickupList.other.map((item, idx) => (
-                    <div key={`other-${idx}`} className="px-4 py-3 bg-white">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600">{item.part.distributor}</p>
-                          <p className="font-medium text-gray-900">
-                            {item.vehicle.vehicleYear} {item.vehicle.vehicleMake} {item.vehicle.vehicleModel}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Part#: {item.part.glassPartNumber || "N/A"} - {item.part.glassType?.replace(/_/g, " ")}
-                          </p>
-                          {item.part.accessories && (
-                            <p className="text-sm text-orange-600 font-medium">
-                              Accessories: {item.part.accessories}
+                  {pickupList.other.map((item, idx) => {
+                    const picked = isPartPickedUp(item.job.id, item.vehicleIndex, item.partIndex);
+                    return (
+                      <div key={`other-${idx}`} className={`px-4 py-3 ${picked ? 'bg-green-50' : 'bg-white'}`}>
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={picked}
+                            onCheckedChange={(checked) => {
+                              togglePickupMutation.mutate({
+                                jobId: item.job.id,
+                                vehicleIndex: item.vehicleIndex,
+                                partIndex: item.partIndex,
+                                isPickedUp: !!checked,
+                              });
+                            }}
+                            className="mt-1 h-5 w-5"
+                            data-testid={`checkbox-pickup-other-${idx}`}
+                          />
+                          <div className="flex-1">
+                            <p className={`font-medium ${picked ? 'text-green-700 line-through' : 'text-gray-900'}`}>
+                              {item.part.glassPartNumber || "N/A"}
                             </p>
-                          )}
-                          {item.job.customerType === "subcontractor" && item.job.businessName && (
-                            <p className="text-sm font-medium text-purple-600">
-                              For Subcontractor: {item.job.businessName}
+                            <p className="text-xs text-gray-400">{item.part.distributor}</p>
+                            <p className="text-sm text-gray-500">
+                              Job #{item.job.jobNumber} - {item.job.firstName} {item.job.lastName}
                             </p>
-                          )}
+                            {item.part.accessories && (
+                              <p className="text-sm text-orange-600 font-medium">
+                                + {item.part.accessories}
+                              </p>
+                            )}
+                          </div>
+                          {picked && <Check className="w-5 h-5 text-green-600" />}
                         </div>
-                        <span className="text-sm font-medium text-gray-600">#{item.job.jobNumber}</span>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -584,6 +664,41 @@ export default function TechDashboard() {
                 <Package className="w-12 h-12 mb-3 text-gray-300" />
                 <p>No parts to pick up today</p>
               </div>
+            )}
+          </div>
+        ) : activeTab === "materials" ? (
+          <div className="p-4 space-y-2">
+            <p className="text-sm text-gray-500 mb-4">Check off supplies you have ready in your vehicle</p>
+            {materials.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                <ClipboardCheck className="w-12 h-12 mb-3 text-gray-300" />
+                <p>No materials in checklist</p>
+              </div>
+            ) : (
+              materials.map((material) => (
+                <div 
+                  key={material.id} 
+                  className={`p-4 rounded-lg border ${material.isChecked ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={material.isChecked}
+                      onCheckedChange={(checked) => {
+                        toggleMaterialMutation.mutate({
+                          id: material.id,
+                          isChecked: !!checked,
+                        });
+                      }}
+                      className="h-5 w-5"
+                      data-testid={`checkbox-material-${material.id}`}
+                    />
+                    <span className={`font-medium ${material.isChecked ? 'text-green-700 line-through' : 'text-gray-900'}`}>
+                      {material.name}
+                    </span>
+                    {material.isChecked && <Check className="w-5 h-5 text-green-600 ml-auto" />}
+                  </div>
+                </div>
+              ))
             )}
           </div>
         ) : filteredJobs.length === 0 ? (

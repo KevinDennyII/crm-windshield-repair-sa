@@ -546,3 +546,22 @@ export const insertTechMaterialsListSchema = createInsertSchema(techMaterialsLis
 
 export type TechMaterial = typeof techMaterialsList.$inferSelect;
 export type InsertTechMaterial = z.infer<typeof insertTechMaterialsListSchema>;
+
+// Pickup list checklist - tracks which parts have been picked up
+export const pickupChecklist = pgTable("pickup_checklist", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull(),
+  partIndex: integer("part_index").notNull(), // Index of the part in the vehicle's parts array
+  vehicleIndex: integer("vehicle_index").notNull(), // Index of the vehicle in the job's vehicles array
+  isPickedUp: boolean("is_picked_up").default(false),
+  pickedUpAt: timestamp("picked_up_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPickupChecklistSchema = createInsertSchema(pickupChecklist).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type PickupChecklistItem = typeof pickupChecklist.$inferSelect;
+export type InsertPickupChecklistItem = z.infer<typeof insertPickupChecklistSchema>;
