@@ -71,6 +71,71 @@ function parseLocalDate(dateStr: string | null | undefined): Date | null {
   return new Date(year, month, day);
 }
 
+function formatTimeTo12Hour(time24: string | null | undefined): string {
+  if (!time24) return "";
+  const [hours, minutes] = time24.split(":").map(Number);
+  if (isNaN(hours) || isNaN(minutes)) return time24;
+  const normalizedHours = ((hours % 24) + 24) % 24;
+  const period = normalizedHours >= 12 ? "PM" : "AM";
+  const hours12 = normalizedHours % 12 || 12;
+  return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;
+}
+
+function parseTimeFrameSlot(slot: string): string {
+  const match = slot.trim().match(/^(\d{1,2})(a|p)$/i);
+  if (!match) return slot;
+  const hour = parseInt(match[1], 10);
+  const isPM = match[2].toLowerCase() === "p";
+  const displayHour = hour === 12 ? 12 : (isPM && hour < 12 ? hour : hour);
+  const period = isPM ? "PM" : "AM";
+  return `${displayHour}:00 ${period}`;
+}
+
+function formatTimeFrame(timeFrame: string): string {
+  const parts = timeFrame.split("-");
+  if (parts.length === 2) {
+    return `${parseTimeFrameSlot(parts[0])} - ${parseTimeFrameSlot(parts[1])}`;
+  }
+  return timeFrame;
+}
+
+function calculateEndTime(startTime: string, durationHours: number): string {
+  if (!startTime) return "";
+  const [hours, minutes] = startTime.split(":").map(Number);
+  if (isNaN(hours) || isNaN(minutes)) return "";
+  const totalMinutes = hours * 60 + minutes + Math.round(durationHours * 60);
+  const endHours = Math.floor(totalMinutes / 60) % 24;
+  const endMinutes = totalMinutes % 60;
+  return `${endHours.toString().padStart(2, "0")}:${endMinutes.toString().padStart(2, "0")}`;
+}
+
+function formatScheduleTimeRange(job: Job): string {
+  if (job.timeFrame && job.timeFrame !== "custom") {
+    return formatTimeFrame(job.timeFrame);
+  }
+  
+  if (!job.installTime) {
+    return "N/A";
+  }
+  
+  const startFormatted = formatTimeTo12Hour(job.installTime);
+  let endTime = job.installEndTime;
+  
+  if (!endTime && job.jobDuration) {
+    const duration = parseFloat(job.jobDuration);
+    if (!isNaN(duration)) {
+      endTime = calculateEndTime(job.installTime, duration);
+    }
+  }
+  
+  if (endTime) {
+    const endFormatted = formatTimeTo12Hour(endTime);
+    return `${startFormatted} - ${endFormatted}`;
+  }
+  
+  return startFormatted;
+}
+
 export default function TechDashboard() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
@@ -769,7 +834,7 @@ export default function TechDashboard() {
                           <div className="flex items-baseline gap-2">
                             <span className="text-sm text-gray-600">Schedule Time</span>
                             <span className="text-sm font-medium text-gray-900 ml-auto">
-                              {job.installTime || job.timeFrame?.replace(/-/g, " - ") || "N/A"}
+                              {formatScheduleTimeRange(job)}
                             </span>
                           </div>
                           <div className="flex items-baseline gap-2">
