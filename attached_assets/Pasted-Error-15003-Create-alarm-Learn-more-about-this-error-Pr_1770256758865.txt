@@ -1,0 +1,246 @@
+Error - 15003
+Create alarm
+Learn more about this error
+Properties
+Debug event SID
+
+NOd05e3d3b0ba01f04ae06e9c3ead3d4b3
+
+Service SID
+
+--
+
+Resource SID
+
+CA7d1998c77a63095eac71e3a85634894b
+
+Timestamp
+
+1:54am UTC 2026-Feb-05
+
+Message
+
+Got HTTP 502 response to https://autoglass-pro-crm-abpandit.replit.dev/api/voice/status-callback
+
+Error Description
+Possible Solutions
+Ensure your application responds to callbacks with:
+
+200 OK
+Content-Type: text/xml
+Valid TwiML
+Or respond with 204 No Content and an empty response body.
+
+Possible Causes
+Your application returned a 4xx or 5xx HTTP response to Twilio.
+Request Inspector
+URL
+
+https://autoglass-pro-crm-abpandit.replit.dev/api/voice/status-callback
+
+Product
+
+Programmable Voice
+
+Timestamp
+
+2026-02-05 01:54:20
+
+HTTP status
+
+502
+
+Post
+
+Collapse All
+
+Replay request
+
+Clear
+Request
+URL
+https://autoglass-pro-crm-abpandit.replit.dev/api/voice/status-callback
+
+Parameters
+
+Show raw data
+Called
+
++12109402081
+
+ToState
+
+TX
+
+CallerCountry
+
+US
+
+Direction
+
+inbound
+
+Timestamp
+
+Thu, 05 Feb 2026 01:54:20 +0000
+
+CallbackSource
+
+call-progress-events
+
+CallerState
+
+TX
+
+ToZip
+
+SequenceNumber
+
+0
+
+CallSid
+
+CA7d1998c77a63095eac71e3a85634894b
+
+To
+
++12109402081
+
+CallerZip
+
+78217
+
+ToCountry
+
+US
+
+CalledZip
+
+ApiVersion
+
+2010-04-01
+
+CalledCity
+
+CallStatus
+
+busy
+
+Duration
+
+0
+
+From
+
++19567757266
+
+CallDuration
+
+0
+
+AccountSid
+
+ACfb21d906ed4d6619f56f818794b561a8
+
+CalledCountry
+
+US
+
+CallerCity
+
+SAN ANTONIO
+
+ToCity
+
+FromCountry
+
+US
+
+Caller
+
++19567757266
+
+FromCity
+
+SAN ANTONIO
+
+CalledState
+
+TX
+
+FromZip
+
+78217
+
+FromState
+
+TX
+
+Message text
+
+Show raw data
+Msg
+
+Got HTTP 502 response to https://autoglass-pro-crm-abpandit.replit.dev/api/voice/status-callback
+
+statusCallback
+
+https://autoglass-pro-crm-abpandit.replit.dev/api/voice/status-callback
+
+ErrorCode
+
+15003
+
+LogLevel
+
+WARNING
+
+Response
+Headers
+x-envoy-upstream-service-time
+
+42
+
+Server
+
+envoy
+
+x-twilio-reason
+
+Unknown host
+
+x-twilio-webhookretriable
+
+true
+
+Content-Length
+
+504
+
+Date
+
+Thu, 05 Feb 2026 01:54:19 GMT
+
+x-twilio-webhookattempt
+
+2
+
+Content-Type
+
+text/html
+
+Body
+
+Show raw data
+
+Copy response body
+Twilio was unable to fetch content from: https://autoglass-pro-crm-abpandit.replit.dev/api/voice/status-callback
+Error: Unknown host autoglass-pro-crm-abpandit.replit.dev
+Account SID: ACfb21d906ed4d6619f56f818794b561a8
+SID: CA7d1998c77a63095eac71e3a85634894b
+Request ID: 48d98236-c41b-4351-b8de-c985a4fc49a0
+Remote Host: autoglass-pro-crm-abpandit.replit.dev
+Request Method: POST
+Request URI: https://autoglass-pro-crm-abpandit.replit.dev/api/voice/status-callback
+SSL Version: TLSv1.3
+URL Fragment: true
