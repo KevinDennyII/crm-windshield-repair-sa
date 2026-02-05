@@ -37,7 +37,6 @@ export default function TechJobDetail() {
   const { toast } = useToast();
   const jobId = params?.id;
   const [tasksExpanded, setTasksExpanded] = useState(false);
-  const [partsExpanded, setPartsExpanded] = useState(false);
   const [paymentExpanded, setPaymentExpanded] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentSource, setPaymentSource] = useState<string>("cash");
@@ -55,7 +54,6 @@ export default function TechJobDetail() {
   });
 
   const taskStatus = techData?.taskStatus || { onMyWay: false, onSite: false, takePayment: false };
-  const partsChecklist = techData?.partsChecklist || {};
 
   // Mutation to update tech data
   const updateTechDataMutation = useMutation({
@@ -303,11 +301,6 @@ export default function TechJobDetail() {
     }
   };
 
-  const togglePartChecklist = (partId: string) => {
-    const currentValue = partsChecklist[partId] || false;
-    const newPartsChecklist = { ...partsChecklist, [partId]: !currentValue };
-    updateTechDataMutation.mutate({ partsChecklist: newPartsChecklist });
-  };
 
   const handleRecordPayment = () => {
     const amount = parseFloat(paymentAmount);
@@ -476,60 +469,6 @@ export default function TechJobDetail() {
                 Take Payment
               </span>
             </button>
-          </div>
-        )}
-
-        {/* Parts Checklist Section */}
-        <div className="px-4 py-3">
-          <button
-            onClick={() => setPartsExpanded(!partsExpanded)}
-            className="w-full py-3 rounded-full font-semibold text-white flex items-center justify-center gap-2"
-            style={{ backgroundColor: "#10B981" }}
-            data-testid="button-parts-checklist"
-          >
-            Parts Checklist
-            {partsExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </button>
-        </div>
-
-        {partsExpanded && (
-          <div className="px-4 pb-4 space-y-2">
-            {vehicles.map((veh, vehIndex) => {
-              const vehParts = veh.parts || [];
-              return vehParts.map((part: any, partIndex: number) => {
-                const partKey = `${vehIndex}-${partIndex}`;
-                const isChecked = partsChecklist[partKey] || false;
-                return (
-                  <button
-                    key={partKey}
-                    onClick={() => togglePartChecklist(partKey)}
-                    className="w-full flex items-center gap-4 p-4 bg-gray-50 rounded-lg border"
-                    data-testid={`part-check-${partKey}`}
-                  >
-                    <div 
-                      className={`w-7 h-7 rounded border-2 flex items-center justify-center transition-colors ${
-                        isChecked 
-                          ? "bg-green-500 border-green-500" 
-                          : "border-gray-400 bg-white"
-                      }`}
-                    >
-                      {isChecked && <Check className="w-5 h-5 text-white" />}
-                    </div>
-                    <div className="flex flex-col items-start">
-                      <span className={`text-base font-medium ${isChecked ? "text-gray-500 line-through" : "text-gray-800"}`}>
-                        {part?.glassType?.replace(/_/g, " ") || "Part"} - {part?.serviceType?.replace(/_/g, " ") || "Service"}
-                      </span>
-                      {part?.glassPartNumber && (
-                        <span className="text-sm text-gray-500">Part# {part.glassPartNumber}</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              });
-            })}
-            {vehicles.flatMap(v => v.parts || []).length === 0 && (
-              <div className="text-center text-gray-500 py-4">No parts on this job</div>
-            )}
           </div>
         )}
 
