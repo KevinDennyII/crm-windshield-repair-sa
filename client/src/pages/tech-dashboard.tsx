@@ -111,7 +111,7 @@ function calculateEndTime(startTime: string, durationHours: number): string {
 
 function formatScheduleTimeRange(job: Job): string {
   if (job.timeFrame && job.timeFrame !== "custom") {
-    return formatTimeFrame(job.timeFrame);
+    return job.timeFrame;
   }
   
   if (!job.installTime) {
