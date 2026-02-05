@@ -158,6 +158,28 @@ export default function TechDashboard() {
     queryKey: ["/api/pickup-checklist"],
   });
 
+  // Supplies checklist for the Pickup List tab
+  interface TechSupplyItem {
+    id: string;
+    name: string;
+    isChecked: boolean;
+    sortOrder: number;
+  }
+
+  const { data: suppliesData = [] } = useQuery<TechSupplyItem[]>({
+    queryKey: ["/api/tech-supplies"],
+  });
+
+  const toggleSupplyMutation = useMutation({
+    mutationFn: async (data: { id: string; isChecked: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/tech-supplies/${data.id}`, { isChecked: data.isChecked });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tech-supplies"] });
+    },
+  });
+
   const togglePickupMutation = useMutation({
     mutationFn: async (data: { jobId: string; vehicleIndex: number; partIndex: number; isPickedUp: boolean }) => {
       const res = await apiRequest("POST", "/api/pickup-checklist/toggle", data);
@@ -507,6 +529,46 @@ export default function TechDashboard() {
       <main className="flex-1 overflow-auto">
         {activeTab === "pickup" ? (
           <div className="p-4 space-y-4">
+            {/* Supplies Checklist */}
+            <div className="space-y-2" data-testid="section-supplies-checklist">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide px-1" data-testid="text-supplies-header">Supplies Checklist</h3>
+              {suppliesData.length === 0 ? (
+                <div className="text-center py-4 text-gray-400" data-testid="text-supplies-empty">Loading supplies...</div>
+              ) : (
+                suppliesData.map((supply) => (
+                  <div 
+                    key={supply.id} 
+                    className={`p-4 rounded-lg border ${supply.isChecked ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}
+                    data-testid={`card-supply-${supply.id}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={supply.isChecked}
+                        onCheckedChange={(checked) => {
+                          toggleSupplyMutation.mutate({
+                            id: supply.id,
+                            isChecked: !!checked,
+                          });
+                        }}
+                        data-testid={`checkbox-supply-${supply.id}`}
+                      />
+                      <span className={`font-medium ${supply.isChecked ? 'text-green-700 dark:text-green-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} data-testid={`text-supply-name-${supply.id}`}>
+                        {supply.name}
+                      </span>
+                      {supply.isChecked && <Check className="w-5 h-5 text-green-600 dark:text-green-400 ml-auto" />}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Divider between supplies and parts */}
+            {(pickupList.mygrant.length > 0 || pickupList.pgw.length > 0 || pickupList.other.length > 0) && (
+              <div className="border-t border-gray-300 pt-4">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide px-1 mb-2">Parts Pickup</h3>
+              </div>
+            )}
+
             {pickupList.mygrant.length > 0 && (
               <div className="border rounded-lg overflow-hidden">
                 <button
