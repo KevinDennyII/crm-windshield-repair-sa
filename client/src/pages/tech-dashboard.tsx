@@ -158,10 +158,6 @@ export default function TechDashboard() {
     queryKey: ["/api/pickup-checklist"],
   });
 
-  const { data: materials = [] } = useQuery<any[]>({
-    queryKey: ["/api/tech-materials"],
-  });
-
   const togglePickupMutation = useMutation({
     mutationFn: async (data: { jobId: string; vehicleIndex: number; partIndex: number; isPickedUp: boolean }) => {
       const res = await apiRequest("POST", "/api/pickup-checklist/toggle", data);
@@ -169,16 +165,6 @@ export default function TechDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pickup-checklist"] });
-    },
-  });
-
-  const toggleMaterialMutation = useMutation({
-    mutationFn: async (data: { id: string; isChecked: boolean }) => {
-      const res = await apiRequest("PATCH", `/api/tech-materials/${data.id}`, { isChecked: data.isChecked });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tech-materials"] });
     },
   });
 
@@ -303,7 +289,6 @@ export default function TechDashboard() {
       case "last": return "Last Week";
       case "yearly": return "Yearly";
       case "pickup": return "Today's Pickup List";
-      case "materials": return "Materials Checklist";
     }
   };
 
@@ -404,17 +389,6 @@ export default function TechDashboard() {
               <Package className="w-5 h-5 text-white" />
               <span className="text-white font-medium">Pickup List</span>
               <span className="text-white/70 text-sm ml-auto">{sortedTodaysJobs.length}</span>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab("materials"); setSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                activeTab === "materials" ? "bg-white/20" : "hover:bg-white/10"
-              }`}
-              data-testid="nav-materials-checklist"
-            >
-              <ClipboardCheck className="w-5 h-5 text-white" />
-              <span className="text-white font-medium">Materials Checklist</span>
             </button>
 
             <button
@@ -729,41 +703,6 @@ export default function TechDashboard() {
                 <Package className="w-12 h-12 mb-3 text-gray-300" />
                 <p>No parts to pick up today</p>
               </div>
-            )}
-          </div>
-        ) : activeTab === "materials" ? (
-          <div className="p-4 space-y-2">
-            <p className="text-sm text-gray-500 mb-4">Check off supplies you have ready in your vehicle</p>
-            {materials.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                <ClipboardCheck className="w-12 h-12 mb-3 text-gray-300" />
-                <p>No materials in checklist</p>
-              </div>
-            ) : (
-              materials.map((material) => (
-                <div 
-                  key={material.id} 
-                  className={`p-4 rounded-lg border ${material.isChecked ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Checkbox
-                      checked={material.isChecked}
-                      onCheckedChange={(checked) => {
-                        toggleMaterialMutation.mutate({
-                          id: material.id,
-                          isChecked: !!checked,
-                        });
-                      }}
-                      className="h-5 w-5"
-                      data-testid={`checkbox-material-${material.id}`}
-                    />
-                    <span className={`font-medium ${material.isChecked ? 'text-green-700 line-through' : 'text-gray-900'}`}>
-                      {material.name}
-                    </span>
-                    {material.isChecked && <Check className="w-5 h-5 text-green-600 ml-auto" />}
-                  </div>
-                </div>
-              ))
             )}
           </div>
         ) : filteredJobs.length === 0 ? (
