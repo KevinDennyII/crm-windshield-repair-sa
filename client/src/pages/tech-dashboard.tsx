@@ -144,7 +144,8 @@ export default function TechDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("current");
   const [pickupExpanded, setPickupExpanded] = useState<Record<string, boolean>>({
     mygrant: true,
-    pgw: true
+    pgw: true,
+    supplies: false
   });
   const [isCallCenterOpen, setIsCallCenterOpen] = useState(false);
 
@@ -529,46 +530,7 @@ export default function TechDashboard() {
       <main className="flex-1 overflow-auto">
         {activeTab === "pickup" ? (
           <div className="p-4 space-y-4">
-            {/* Supplies Checklist */}
-            <div className="space-y-2" data-testid="section-supplies-checklist">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide px-1" data-testid="text-supplies-header">Supplies Checklist</h3>
-              {suppliesData.length === 0 ? (
-                <div className="text-center py-4 text-gray-400" data-testid="text-supplies-empty">Loading supplies...</div>
-              ) : (
-                suppliesData.map((supply) => (
-                  <div 
-                    key={supply.id} 
-                    className={`p-4 rounded-lg border ${supply.isChecked ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}
-                    data-testid={`card-supply-${supply.id}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Checkbox
-                        checked={supply.isChecked}
-                        onCheckedChange={(checked) => {
-                          toggleSupplyMutation.mutate({
-                            id: supply.id,
-                            isChecked: !!checked,
-                          });
-                        }}
-                        data-testid={`checkbox-supply-${supply.id}`}
-                      />
-                      <span className={`font-medium ${supply.isChecked ? 'text-green-700 dark:text-green-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} data-testid={`text-supply-name-${supply.id}`}>
-                        {supply.name}
-                      </span>
-                      {supply.isChecked && <Check className="w-5 h-5 text-green-600 dark:text-green-400 ml-auto" />}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Divider between supplies and parts */}
-            {(pickupList.mygrant.length > 0 || pickupList.pgw.length > 0 || pickupList.other.length > 0) && (
-              <div className="border-t border-gray-300 pt-4">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide px-1 mb-2">Parts Pickup</h3>
-              </div>
-            )}
-
+            {/* Parts Pickup Section - At Top */}
             {pickupList.mygrant.length > 0 && (
               <div className="border rounded-lg overflow-hidden">
                 <button
@@ -761,11 +723,63 @@ export default function TechDashboard() {
             )}
 
             {pickupList.mygrant.length === 0 && pickupList.pgw.length === 0 && pickupList.other.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+              <div className="flex flex-col items-center justify-center h-32 text-gray-500">
                 <Package className="w-12 h-12 mb-3 text-gray-300" />
                 <p>No parts to pick up today</p>
               </div>
             )}
+
+            {/* Supplies Checklist - At Bottom as Collapsible Dropdown */}
+            <div className="border rounded-lg overflow-hidden dark:border-gray-700" data-testid="section-supplies-checklist">
+              <button
+                onClick={() => setPickupExpanded(prev => ({ ...prev, supplies: !prev.supplies }))}
+                className="w-full px-4 py-3 flex items-center justify-between bg-purple-50 dark:bg-purple-900/30 transition-colors"
+                data-testid="button-expand-supplies"
+              >
+                <div className="flex items-center gap-3">
+                  <ClipboardCheck className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <h3 className="font-bold text-gray-900 dark:text-gray-100" data-testid="text-supplies-header">Supplies Checklist</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-purple-600 dark:text-purple-400" data-testid="text-supplies-count">
+                    {suppliesData.filter(s => s.isChecked).length}
+                  </span>
+                  {pickupExpanded.supplies ? <ChevronUp className="w-5 h-5 text-gray-600 dark:text-gray-300" /> : <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-300" />}
+                </div>
+              </button>
+              {pickupExpanded.supplies && (
+                <div className="divide-y dark:divide-gray-700">
+                  {suppliesData.length === 0 ? (
+                    <div className="text-center py-4 text-gray-400" data-testid="text-supplies-empty">Loading supplies...</div>
+                  ) : (
+                    suppliesData.map((supply) => (
+                      <div 
+                        key={supply.id} 
+                        className={`px-4 py-3 ${supply.isChecked ? 'bg-green-50 dark:bg-green-900/20' : 'bg-white dark:bg-gray-800'}`}
+                        data-testid={`card-supply-${supply.id}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={supply.isChecked}
+                            onCheckedChange={(checked) => {
+                              toggleSupplyMutation.mutate({
+                                id: supply.id,
+                                isChecked: !!checked,
+                              });
+                            }}
+                            data-testid={`checkbox-supply-${supply.id}`}
+                          />
+                          <span className={`font-medium ${supply.isChecked ? 'text-green-700 dark:text-green-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} data-testid={`text-supply-name-${supply.id}`}>
+                            {supply.name}
+                          </span>
+                          {supply.isChecked && <Check className="w-5 h-5 text-green-600 dark:text-green-400 ml-auto" />}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         ) : filteredJobs.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-gray-500">
