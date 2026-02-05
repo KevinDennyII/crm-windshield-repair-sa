@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -140,7 +139,6 @@ export default function TechDashboard() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("current");
   const [pickupExpanded, setPickupExpanded] = useState<Record<string, boolean>>({
     mygrant: true,
@@ -489,12 +487,6 @@ export default function TechDashboard() {
 
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-bold text-white">Dashboard</h1>
-          {isOnline && (
-            <div 
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: "#4ADE80" }}
-            />
-          )}
         </div>
 
         <CallCenterButton 
@@ -508,23 +500,6 @@ export default function TechDashboard() {
         style={{ backgroundColor: "#1B8EB8" }}
       >
         <h2 className="text-white text-lg font-semibold">{getTabLabel()}</h2>
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={isOnline}
-            onCheckedChange={setIsOnline}
-            className="data-[state=checked]:bg-green-500"
-            data-testid="switch-online"
-          />
-          <span 
-            className="text-xs font-medium px-2 py-1 rounded"
-            style={{ 
-              backgroundColor: isOnline ? "#4ADE80" : "#94A3B8", 
-              color: "white" 
-            }}
-          >
-            {isOnline ? "Online" : "Offline"}
-          </span>
-        </div>
       </div>
 
       <main className="flex-1 overflow-auto">
