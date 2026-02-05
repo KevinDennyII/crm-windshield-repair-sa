@@ -833,6 +833,20 @@ export default function TechDashboard() {
                               {job.paymentMethod?.join(", ")?.replace(/_/g, " ") || "N/A"}
                             </span>
                           </div>
+                          {/* Part Numbers */}
+                          {(() => {
+                            const partNumbers = job.vehicles?.flatMap((v: any) => 
+                              v.parts?.map((p: any) => p.glassPartNumber).filter(Boolean)
+                            ) || [];
+                            return partNumbers.length > 0 ? (
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-sm text-gray-600">Part #</span>
+                                <span className="text-sm font-medium text-gray-900 ml-auto">
+                                  {partNumbers.join(", ")}
+                                </span>
+                              </div>
+                            ) : null;
+                          })()}
                           {job.streetAddress && (
                             <div className="flex items-center gap-2 mt-2">
                               <MapPin className="w-4 h-4 text-gray-400" />
