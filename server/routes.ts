@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, validateTwilioSignature } from "./twilio";
@@ -2218,6 +2218,41 @@ Please let us know of any changes.`;
     } catch (error: any) {
       console.error("Error toggling pickup status:", error);
       res.status(500).json({ message: error.message || "Failed to toggle pickup status" });
+    }
+  });
+
+  // ==================== Technician Supplies Checklist ====================
+  
+  // Get all supplies in the checklist
+  app.get("/api/tech-supplies", async (req, res) => {
+    try {
+      const supplies = await db.select().from(techSuppliesChecklist).orderBy(techSuppliesChecklist.sortOrder);
+      res.json(supplies);
+    } catch (error: any) {
+      console.error("Error fetching supplies checklist:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch supplies checklist" });
+    }
+  });
+
+  // Toggle a supply's checked status
+  app.patch("/api/tech-supplies/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const toggleSchema = z.object({
+        isChecked: z.boolean(),
+      });
+
+      const { isChecked } = toggleSchema.parse(req.body);
+
+      await db.update(techSuppliesChecklist)
+        .set({ isChecked, updatedAt: new Date() })
+        .where(eq(techSuppliesChecklist.id, id));
+
+      const supplies = await db.select().from(techSuppliesChecklist).orderBy(techSuppliesChecklist.sortOrder);
+      res.json(supplies);
+    } catch (error: any) {
+      console.error("Error toggling supply:", error);
+      res.status(500).json({ message: error.message || "Failed to toggle supply" });
     }
   });
 

@@ -565,3 +565,22 @@ export const insertPickupChecklistSchema = createInsertSchema(pickupChecklist).o
 
 export type PickupChecklistItem = typeof pickupChecklist.$inferSelect;
 export type InsertPickupChecklistItem = z.infer<typeof insertPickupChecklistSchema>;
+
+// Technician supplies checklist - permanent checklist in the Pickup List tab
+export const techSuppliesChecklist = pgTable("tech_supplies_checklist", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  isChecked: boolean("is_checked").default(false),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTechSuppliesChecklistSchema = createInsertSchema(techSuppliesChecklist).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TechSupplyItem = typeof techSuppliesChecklist.$inferSelect;
+export type InsertTechSupplyItem = z.infer<typeof insertTechSuppliesChecklistSchema>;
