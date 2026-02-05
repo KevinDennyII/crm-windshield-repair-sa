@@ -96,7 +96,7 @@ A mobile-optimized interface for field technicians featuring:
   - **Door Glass**: Park near outlet for vacuuming, be present with keys, warning about window elevator
   - **Back Glass**: Park facing house/building, clear trunk/bed area
   - All messages include payment reminder about cash/exact change
-- **Materials List**: Global inventory list of technician supplies (glass cleaner, paper towels, urethane, primer, daubers, blades, sponges, cloth towels) stored in `tech_materials_list` table.
+- **Supplies Checklist**: Permanent checklist inside the Pickup List tab showing technician supplies (Urethane, Glass Cleaner, Paper Towels, Primer, Small Daubers, Large Daubers, Blades, White Sponges, Cloth Towels). Checkboxes persist their state across page refreshes, stored in `tech_supplies_checklist` database table.
 - **Design**: Blue header theme (#29ABE2), large touch-friendly buttons.
 
 ### Data Layer
