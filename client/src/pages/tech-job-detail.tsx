@@ -614,12 +614,6 @@ export default function TechJobDetail() {
                     </span>
                   </div>
                   <div className="px-4 py-3 flex justify-between">
-                    <span className="text-gray-600">Warehouse Order#</span>
-                    <span className="font-semibold text-gray-900">
-                      {part?.glassPartNumber || "N/A"}
-                    </span>
-                  </div>
-                  <div className="px-4 py-3 flex justify-between">
                     <span className="text-gray-600">Accessories</span>
                     <span className="font-semibold text-gray-900">
                       {part?.accessories || "None"}
@@ -759,7 +753,7 @@ export default function TechJobDetail() {
           <div className="px-4 py-3 grid grid-cols-2">
             <span style={{ color: "#29ABE2" }} className="font-semibold">Schedule Time</span>
             <span className="text-gray-900 text-right">
-              {job.installTime || "N/A"}
+              {job.timeFrame || "N/A"}
             </span>
           </div>
         </div>
