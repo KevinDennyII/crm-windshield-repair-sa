@@ -11,17 +11,25 @@ import connectPg from "connect-pg-simple";
 const PostgresSessionStore = connectPg(session);
 
 function getSession() {
-  const sessionSecret = process.env.SESSION_SECRET;
-  if (!sessionSecret) {
-    throw new Error("SESSION_SECRET environment variable is not set");
-  }
+  const sessionSecret = process.env.SESSION_SECRET || "dev-session-secret";
+  // if (!sessionSecret) {
+  //   throw new Error("SESSION_SECRET environment variable is not set");
+  // }
 
-  const store = new PostgresSessionStore({
-    conObject: {
-      connectionString: process.env.DATABASE_URL,
-    },
-    createTableIfMissing: true,
-  });
+  const useMockDb = process.env.USE_MOCK_DB === "true";
+  let store;
+
+  if (useMockDb) {
+    console.log("Using in-memory session store for local development...");
+    store = new session.MemoryStore();
+  } else {
+    store = new PostgresSessionStore({
+      conObject: {
+        connectionString: process.env.DATABASE_URL,
+      },
+      createTableIfMissing: true,
+    });
+  }
 
   return session({
     store,

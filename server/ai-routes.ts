@@ -5,7 +5,7 @@ import { conversations, messages, jobs, activityLogs, type Conversation, type Me
 import { eq, desc, sql, gte, and, lte, count } from "drizzle-orm";
 
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy-key",
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 

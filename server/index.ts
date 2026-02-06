@@ -1,3 +1,4 @@
+import "dotenv/config";
 // Build timestamp: 2026-02-05T02:35:00Z - Force redeploy with voice routes
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
