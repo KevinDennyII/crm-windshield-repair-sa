@@ -1,7 +1,7 @@
 import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, type ActivityLog, type InsertActivityLog, type ProcessedLead, type InsertProcessedLead, type TechnicianJobData, type InsertTechnicianJobData, type TechMaterial, type InsertTechMaterial, jobs, users, customerReminders, contacts, activityLogs, processedLeads, technicianJobData, techMaterialsList } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, sql, max, and, gte, lte } from "drizzle-orm";
+import { eq, desc, sql, max, and, gte, lte, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -42,7 +42,8 @@ export interface IStorage {
   
   // Processed leads (for preventing duplicate lead processing)
   isLeadProcessed(emailId: string): Promise<boolean>;
-  markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string): Promise<boolean>;
+  markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string, customerPhone?: string): Promise<boolean>;
+  isPhoneRecentlyProcessed(phone: string): Promise<boolean>;
   getAllProcessedLeadIds(): Promise<string[]>;
 }
 
@@ -604,23 +605,37 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
   
-  async markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string): Promise<boolean> {
+  async markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string, customerPhone?: string): Promise<boolean> {
     try {
-      // Use INSERT ON CONFLICT DO NOTHING to safely handle race conditions
-      // The UNIQUE constraint on email_id ensures no duplicates even with concurrent processing
-      // Returns true if insert succeeded (we should process), false if already exists (skip)
       const result = await db.insert(processedLeads).values({
         emailId,
         emailSubject: emailSubject || null,
         customerEmail: customerEmail || null,
+        customerPhone: customerPhone || null,
       }).onConflictDoNothing({ target: processedLeads.emailId }).returning({ id: processedLeads.id });
       
-      // If result is empty, the row already existed (conflict occurred)
       return result.length > 0;
     } catch (error) {
-      // If insert fails for any reason, consider it already processed to be safe
       return false;
     }
+  }
+  
+  async isPhoneRecentlyProcessed(phone: string): Promise<boolean> {
+    const normalized = phone.replace(/\D/g, '').slice(-10);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const result = await db
+      .select({ customerPhone: processedLeads.customerPhone })
+      .from(processedLeads)
+      .where(
+        and(
+          isNotNull(processedLeads.customerPhone),
+          gte(processedLeads.processedAt, oneDayAgo)
+        )
+      );
+    return result.some((r: { customerPhone: string | null }) => {
+      const rNormalized = (r.customerPhone || '').replace(/\D/g, '').slice(-10);
+      return rNormalized === normalized && normalized.length >= 10;
+    });
   }
   
   async getAllProcessedLeadIds(): Promise<string[]> {

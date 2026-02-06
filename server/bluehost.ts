@@ -111,8 +111,11 @@ async function fetchFolder(folderName: string): Promise<BluehostEmail[]> {
                 const htmlContent = parsed.html;
                 const bodyText = parsed.text || (typeof htmlContent === 'string' ? htmlContent.replace(/<[^>]*>/g, '') : '') || '';
                 
+                const stableId = parsed.messageId 
+                  ? `bluehost-msgid-${parsed.messageId}` 
+                  : `bluehost-${folderName}-${seqno}-${parsed.date?.toISOString() || 'nodate'}`;
                 emails.push({
-                  id: `bluehost-${folderName}-${seqno}`,
+                  id: stableId,
                   from: name || fromEmail,
                   fromEmail,
                   to: toText,

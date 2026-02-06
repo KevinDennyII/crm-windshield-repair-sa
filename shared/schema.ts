@@ -438,6 +438,7 @@ export const processedLeads = pgTable("processed_leads", {
   emailId: varchar("email_id").notNull().unique(), // The unique email ID from Bluehost
   emailSubject: varchar("email_subject"), // For debugging/tracking
   customerEmail: varchar("customer_email"), // For debugging/tracking
+  customerPhone: varchar("customer_phone"), // For phone-based dedup of SMS
   processedAt: timestamp("processed_at").defaultNow(),
 });
 

@@ -315,26 +315,17 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
     errors: [] as string[],
   };
 
+  const phonesContactedThisRun = new Set<string>();
+
   try {
     const threads = await getBluehostEmails(50);
     
     for (const thread of threads) {
       for (const email of thread.messages) {
-        // Skip non-lead emails without marking (they might be other types of emails)
         if (!isLeadEmail(email)) {
           continue;
         }
 
-        // ATOMIC CLAIM: Try to insert into processed_leads table FIRST
-        // This is the single authoritative gate - if insert succeeds, we own this email
-        // If insert fails (conflict), another process already claimed it or it was processed before
-        const claimed = await storage.markLeadProcessed(email.id, email.subject);
-        if (!claimed) {
-          // Already processed or claimed by another process - skip
-          continue;
-        }
-
-        // SAFETY: Skip emails received before the cutoff date (already marked as processed above)
         const emailDate = new Date(email.date);
         if (emailDate < LEAD_PROCESSING_CUTOFF_DATE) {
           continue;
@@ -342,19 +333,41 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
 
         const lead = parseLeadEmail(email);
         if (!lead) {
-          results.errors.push(`Failed to parse lead from email: ${email.subject}`);
           continue;
         }
 
+        const normalizedPhone = lead.phone.replace(/\D/g, '').slice(-10);
+
+        // Same-run dedup: if we already processed this phone in this polling cycle, skip
+        if (normalizedPhone.length >= 10 && phonesContactedThisRun.has(normalizedPhone)) {
+          await storage.markLeadProcessed(email.id, email.subject, lead.email, lead.phone);
+          continue;
+        }
+
+        // DB-based phone dedup: check if this phone was contacted in the last 24 hours
+        const phoneAlreadyContacted = await storage.isPhoneRecentlyProcessed(lead.phone);
+        if (phoneAlreadyContacted) {
+          await storage.markLeadProcessed(email.id, email.subject, lead.email, lead.phone);
+          continue;
+        }
+
+        // ATOMIC CLAIM: Try to insert into processed_leads table
+        const claimed = await storage.markLeadProcessed(email.id, email.subject, lead.email, lead.phone);
+        if (!claimed) {
+          continue;
+        }
+
+        // Job-based dedup: check if a job already exists for this phone number recently
         const existingJobs = await storage.getAllJobs();
-        const alreadyExists = existingJobs.some(job => 
-          job.phone === lead.phone && 
-          job.pipelineStage === 'new_lead' &&
-          new Date(job.createdAt || '').getTime() > Date.now() - 24 * 60 * 60 * 1000
-        );
+        const alreadyExists = existingJobs.some(job => {
+          const jobPhone = (job.phone || '').replace(/\D/g, '').slice(-10);
+          return jobPhone === normalizedPhone && 
+            normalizedPhone.length >= 10 &&
+            job.pipelineStage === 'new_lead' &&
+            new Date(job.createdAt || '').getTime() > Date.now() - 24 * 60 * 60 * 1000;
+        });
 
         if (alreadyExists) {
-          // Job already exists for this customer - we've marked as processed, just skip
           continue;
         }
 
@@ -366,6 +379,9 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
             sendLeadConfirmationSms(lead),
           ]);
 
+          if (normalizedPhone.length >= 10) {
+            phonesContactedThisRun.add(normalizedPhone);
+          }
           results.processed++;
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
