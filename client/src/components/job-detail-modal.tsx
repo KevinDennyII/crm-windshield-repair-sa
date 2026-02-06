@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { triggerOutboundCall } from "@/App";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -477,6 +478,7 @@ export function JobDetailModal({
   onAddPayment,
   isNew = false,
 }: JobDetailModalProps) {
+  const [, navigate] = useLocation();
   const [formData, setFormData] = useState<InsertJob>(getDefaultFormData());
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [calculatedMobileFee, setCalculatedMobileFee] = useState<number | null>(null);
@@ -1090,15 +1092,14 @@ export function JobDetailModal({
                             <Button
                               variant="outline"
                               size="sm"
-                              asChild
+                              onClick={() => {
+                                onClose();
+                                navigate(`/conversations?phone=${encodeURIComponent(formData.phone)}`);
+                              }}
+                              data-testid="button-text-customer"
                             >
-                              <a
-                                href={`sms:${formData.phone}`}
-                                data-testid="button-text-customer"
-                              >
-                                <MessageSquare className="h-3 w-3 mr-1" />
-                                Text
-                              </a>
+                              <MessageSquare className="h-3 w-3 mr-1" />
+                              Text
                             </Button>
                             {formData.email && job && (
                               <Button

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { type Job } from "@shared/schema";
+import { useSearch } from "wouter";
 
 interface SmsStatus {
   configured: boolean;
@@ -102,12 +103,16 @@ interface ConversationContact {
 export default function Conversations() {
   const { toast } = useToast();
   const { setSelectedEntity, clearSelectedEntity } = useAIContext();
-  const [activeTab, setActiveTab] = useState<string>("all");
+  const searchString = useSearch();
+  const urlParams = new URLSearchParams(searchString);
+  const phoneParam = urlParams.get("phone");
+  const [activeTab, setActiveTab] = useState<string>(phoneParam ? "sms" : "all");
   const [selectedConversation, setSelectedConversation] = useState<EmailThread | null>(null);
   const [selectedSmsConversation, setSelectedSmsConversation] = useState<SmsConversation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [replyText, setReplyText] = useState("");
   const [smsText, setSmsText] = useState("");
+  const phoneParamHandled = useRef(false);
 
   const [selectedBluehostConversation, setSelectedBluehostConversation] = useState<BluehostThread | null>(null);
   const [bluehostReplyText, setBluehostReplyText] = useState("");
@@ -175,6 +180,29 @@ export default function Conversations() {
   const { data: jobs } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
+
+  useEffect(() => {
+    if (!phoneParam || phoneParamHandled.current) return;
+    if (smsStatus && !smsStatus.configured) {
+      phoneParamHandled.current = true;
+      setActiveTab("sms");
+      toast({ title: "Twilio SMS is not configured yet.", variant: "destructive" });
+      return;
+    }
+    if (!smsConversations) return;
+    phoneParamHandled.current = true;
+    const normalizedPhone = phoneParam.replace(/\D/g, "");
+    const match = smsConversations.find((c) => {
+      const convPhone = c.phoneNumber.replace(/\D/g, "");
+      return convPhone.includes(normalizedPhone) || normalizedPhone.includes(convPhone);
+    });
+    if (match) {
+      setSelectedSmsConversation(match);
+    } else {
+      toast({ title: "No SMS thread found for this number. You can start a new conversation." });
+    }
+    setActiveTab("sms");
+  }, [phoneParam, smsConversations, smsStatus]);
 
   const sendReplyMutation = useMutation({
     mutationFn: async ({ threadId, to, subject, body }: { threadId: string; to: string; subject: string; body: string }) => {

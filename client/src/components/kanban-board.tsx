@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,7 @@ export function KanbanBoard({
   onMoveJob,
 }: KanbanBoardProps) {
   const isMobile = useIsMobile();
+  const [, navigate] = useLocation();
   const [draggedJob, setDraggedJob] = useState<Job | null>(null);
   const [dragOverStage, setDragOverStage] = useState<PipelineStage | null>(null);
   const [emailJob, setEmailJob] = useState<Job | null>(null);
@@ -191,12 +193,13 @@ export function KanbanBoard({
             <Button
               variant="ghost"
               size="icon"
-              asChild
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/conversations?phone=${encodeURIComponent(job.phone)}`);
+              }}
+              data-testid={`button-text-${job.id}`}
             >
-              <a href={`sms:${job.phone}`} data-testid={`button-text-${job.id}`}>
-                <MessageSquare className="h-4 w-4 text-blue-600" />
-              </a>
+              <MessageSquare className="h-4 w-4 text-blue-600" />
             </Button>
           </div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -273,16 +276,14 @@ export function KanbanBoard({
               <Button
                 variant="outline"
                 size="sm"
-                asChild
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/conversations?phone=${encodeURIComponent(job.phone)}`);
+                }}
+                data-testid={`button-text-${job.id}`}
               >
-                <a
-                  href={`sms:${job.phone}`}
-                  data-testid={`button-text-${job.id}`}
-                >
-                  <MessageSquare className="h-3 w-3 mr-1" />
-                  Text
-                </a>
+                <MessageSquare className="h-3 w-3 mr-1" />
+                Text
               </Button>
               {job.email && (
                 <Button
