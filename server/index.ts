@@ -1,5 +1,5 @@
 import "dotenv/config";
-// Build timestamp: 2026-02-05T02:35:00Z - Force redeploy with voice routes
+// Build timestamp: 2026-02-07T04:25:00Z - Fix API routes in production deployment
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";

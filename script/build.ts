@@ -6,23 +6,34 @@ import { rm, readFile } from "fs/promises";
 // which helps cold start times
 const allowlist = [
   "@google/generative-ai",
+  "@neondatabase/serverless",
   "axios",
   "connect-pg-simple",
   "cors",
   "date-fns",
+  "dotenv",
   "drizzle-orm",
   "drizzle-zod",
   "express",
   "express-rate-limit",
   "express-session",
+  "googleapis",
+  "helmet",
+  "imap",
   "jsonwebtoken",
+  "mailparser",
+  "memoizee",
   "memorystore",
   "multer",
   "nanoid",
   "nodemailer",
   "openai",
+  "openid-client",
+  "p-limit",
+  "p-retry",
   "passport",
   "passport-local",
+  "passport-openidconnect",
   "pg",
   "stripe",
   "twilio",
@@ -32,6 +43,7 @@ const allowlist = [
   "zod",
   "zod-validation-error",
 ];
+// NOTE: bcrypt is intentionally NOT in allowlist - it has native binaries that can't be bundled
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
