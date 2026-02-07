@@ -165,7 +165,7 @@ export default function TechDashboard() {
     sortOrder: number;
   }
 
-  const { data: suppliesData = [] } = useQuery<TechSupplyItem[]>({
+  const { data: suppliesData = [], isLoading: suppliesLoading, isError: suppliesError } = useQuery<TechSupplyItem[]>({
     queryKey: ["/api/tech-supplies"],
   });
 
@@ -724,8 +724,12 @@ export default function TechDashboard() {
               </button>
               {pickupExpanded.supplies && (
                 <div className="divide-y dark:divide-gray-700">
-                  {suppliesData.length === 0 ? (
-                    <div className="text-center py-4 text-gray-400" data-testid="text-supplies-empty">Loading supplies...</div>
+                  {suppliesLoading ? (
+                    <div className="text-center py-4 text-gray-400" data-testid="text-supplies-loading">Loading supplies...</div>
+                  ) : suppliesError ? (
+                    <div className="text-center py-4 text-red-400" data-testid="text-supplies-error">Failed to load supplies. Please refresh.</div>
+                  ) : suppliesData.length === 0 ? (
+                    <div className="text-center py-4 text-gray-400" data-testid="text-supplies-empty">No supplies found.</div>
                   ) : (
                     suppliesData.map((supply) => (
                       <div 
