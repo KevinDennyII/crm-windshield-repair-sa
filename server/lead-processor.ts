@@ -357,14 +357,14 @@ export async function processNewLeads(): Promise<{ processed: number; errors: st
           continue;
         }
 
-        // Job-based dedup: check if a job already exists for this phone number recently
+        // Job-based dedup: check if a job already exists for this phone number within 7 days (any stage)
         const existingJobs = await storage.getAllJobs();
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
         const alreadyExists = existingJobs.some(job => {
           const jobPhone = (job.phone || '').replace(/\D/g, '').slice(-10);
           return jobPhone === normalizedPhone && 
             normalizedPhone.length >= 10 &&
-            job.pipelineStage === 'new_lead' &&
-            new Date(job.createdAt || '').getTime() > Date.now() - 24 * 60 * 60 * 1000;
+            new Date(job.createdAt || '').getTime() > sevenDaysAgo;
         });
 
         if (alreadyExists) {
