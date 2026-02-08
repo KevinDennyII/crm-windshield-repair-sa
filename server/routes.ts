@@ -20,16 +20,20 @@ import bcrypt from "bcrypt";
 
 // Helper to get current user from session or OIDC
 async function getCurrentUser(req: any): Promise<{ id: string; username: string; role: string } | null> {
-  // Check session-based auth first
   if (req.session?.userId) {
     const [user] = await db.select().from(users).where(eq(users.id, req.session.userId));
     if (user) {
       return { id: user.id, username: user.username || '', role: user.role || 'technician' };
     }
   }
-  // Fall back to OIDC auth
   if (req.user?.claims?.sub) {
     const [user] = await db.select().from(users).where(eq(users.id, req.user.claims.sub));
+    if (user) {
+      return { id: user.id, username: user.username || '', role: user.role || 'technician' };
+    }
+  }
+  if (req.user?.id) {
+    const [user] = await db.select().from(users).where(eq(users.id, req.user.id));
     if (user) {
       return { id: user.id, username: user.username || '', role: user.role || 'technician' };
     }
@@ -123,6 +127,14 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         lastName: user.lastName,
         role: user.role,
       };
+
+      // Establish Passport session so req.isAuthenticated() returns true
+      await new Promise<void>((resolve, reject) => {
+        req.login(user, (err: any) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
 
       // Log login activity
       await logActivity(

@@ -124,5 +124,8 @@ export const isAuthenticated: RequestHandler = (req, res, next) => {
   if (req.isAuthenticated()) {
     return next();
   }
+  if ((req.session as any)?.userId) {
+    return next();
+  }
   res.status(401).json({ message: "Unauthorized" });
 };
