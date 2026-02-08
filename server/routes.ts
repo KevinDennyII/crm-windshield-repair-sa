@@ -1361,6 +1361,7 @@ Please let us know of any changes.`;
 
   // Incoming call webhook - Twilio calls this when someone dials the number OR when browser initiates outbound
   app.post("/api/voice/incoming", async (req, res) => {
+    res.set("Content-Type", "text/xml");
     try {
       console.log("Voice webhook received:", req.body);
 
@@ -1370,25 +1371,18 @@ Please let us know of any changes.`;
         const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
         if (!validateTwilioSignature(url, req.body, twilioSignature)) {
           console.warn("Invalid Twilio signature - possible spoofing attempt");
-          return res.status(403).send("Forbidden");
+          return res.status(403).send(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
         }
       }
 
       const { CallSid, From, To, CallStatus } = req.body;
       
-      // Detect outbound call from browser:
-      // When browser calls device.connect({ params: { To: "..." } }), Twilio sends:
-      // - From: "client:crm_agent" (the browser client identity)
-      // - To: the phone number the user wants to call
-      // For inbound calls, From is the caller's phone number and To is our Twilio number
       const isOutboundFromBrowser = From && From.startsWith("client:");
       
       if (isOutboundFromBrowser && To) {
-        // This is an outbound call from browser - dial the customer
         const toNumber = To;
         console.log("Outbound call from browser detected, dialing:", toNumber);
         
-        // Format number for Twilio
         let formattedNumber = toNumber.replace(/\D/g, "");
         if (formattedNumber.length === 10) {
           formattedNumber = "+1" + formattedNumber;
@@ -1396,68 +1390,73 @@ Please let us know of any changes.`;
           formattedNumber = "+" + formattedNumber;
         }
         
-        // Look up contact name
-        let contactName = "Unknown";
-        const jobs = await storage.getAllJobs();
-        const matchingJob = jobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedNumber.replace(/\D/g, ""));
-        if (matchingJob) {
-          contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
+        const twiml = generateOutboundCallTwiml(formattedNumber);
+        res.send(twiml);
+
+        // Log outbound call asynchronously after response is sent
+        try {
+          let contactName = "Unknown";
+          const jobs = await storage.getAllJobs();
+          const matchingJob = jobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedNumber.replace(/\D/g, ""));
+          if (matchingJob) {
+            contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
+          }
+          await db.insert(phoneCalls).values({
+            callSid: CallSid,
+            direction: 'outbound',
+            fromNumber: getTwilioPhoneNumber() || "",
+            toNumber: formattedNumber,
+            status: 'initiated',
+            contactName: contactName,
+          }).onConflictDoUpdate({
+            target: phoneCalls.callSid,
+            set: { status: 'initiated' }
+          });
+        } catch (logErr) {
+          console.error("Failed to log outbound call:", logErr);
         }
-        
-        // Log outbound call
+        return;
+      }
+
+      // Handle inbound call - send TwiML response FIRST, then log asynchronously
+      let contactName = "Unknown Caller";
+      try {
+        const formattedFrom = From?.replace(/\D/g, "");
+        if (formattedFrom) {
+          const jobs = await storage.getAllJobs();
+          const matchingJob = jobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedFrom);
+          if (matchingJob) {
+            contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
+          }
+        }
+      } catch (lookupErr) {
+        console.error("Contact lookup failed, using default name:", lookupErr);
+      }
+
+      const twiml = generateIncomingCallTwiml(contactName);
+      res.send(twiml);
+
+      // Log the incoming call asynchronously after response is sent
+      try {
         await db.insert(phoneCalls).values({
           callSid: CallSid,
-          direction: 'outbound',
-          fromNumber: getTwilioPhoneNumber() || "",
-          toNumber: formattedNumber,
-          status: 'initiated',
+          direction: 'inbound',
+          fromNumber: From,
+          toNumber: To,
+          status: CallStatus || 'ringing',
           contactName: contactName,
         }).onConflictDoUpdate({
           target: phoneCalls.callSid,
-          set: { status: 'initiated' }
+          set: { status: CallStatus || 'ringing' }
         });
-        
-        // Generate TwiML to dial the customer
-        const twiml = generateOutboundCallTwiml(formattedNumber);
-        res.type("text/xml");
-        return res.send(twiml);
+      } catch (logErr) {
+        console.error("Failed to log incoming call:", logErr);
       }
-
-      // Handle inbound call - look up caller in contacts/jobs
-      let contactName = "Unknown Caller";
-      const formattedFrom = From?.replace(/\D/g, "");
-      if (formattedFrom) {
-        const jobs = await storage.getAllJobs();
-        const matchingJob = jobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedFrom);
-        if (matchingJob) {
-          contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
-        }
-      }
-
-      // Log the incoming call - use insert with onConflictDoUpdate
-      await db.insert(phoneCalls).values({
-        callSid: CallSid,
-        direction: 'inbound',
-        fromNumber: From,
-        toNumber: To,
-        status: CallStatus || 'ringing',
-        contactName: contactName,
-      }).onConflictDoUpdate({
-        target: phoneCalls.callSid,
-        set: { status: CallStatus || 'ringing' }
-      });
-
-      // Generate TwiML to route call to all connected browser clients (shared identity)
-      // Contact name is passed as a parameter so browser UI can display it
-      const twiml = generateIncomingCallTwiml(contactName);
-
-      res.type("text/xml");
-      res.send(twiml);
     } catch (error: any) {
       console.error("Incoming call webhook error:", error);
-      // Return empty TwiML to prevent call from failing
-      res.type("text/xml");
-      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say>We are experiencing technical difficulties. Please try again later.</Say></Response>`);
+      if (!res.headersSent) {
+        res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say>We are experiencing technical difficulties. Please try again later.</Say></Response>`);
+      }
     }
   });
 
@@ -1470,14 +1469,13 @@ Please let us know of any changes.`;
         const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
         if (!validateTwilioSignature(url, req.body, twilioSignature)) {
           console.warn("Invalid Twilio signature on status callback");
-          return res.status(403).send("Forbidden");
+          return res.status(204).end();
         }
       }
 
       const { CallSid, CallStatus, CallDuration } = req.body;
       console.log("Call status callback:", { CallSid, CallStatus, CallDuration });
 
-      // Update call record in database
       const updateData: any = { status: CallStatus };
       if (CallDuration) {
         updateData.duration = parseInt(CallDuration);
@@ -1493,10 +1491,10 @@ Please let us know of any changes.`;
         .set(updateData)
         .where(eq(phoneCalls.callSid, CallSid));
 
-      res.sendStatus(200);
+      res.status(204).end();
     } catch (error: any) {
       console.error("Call status callback error:", error);
-      res.sendStatus(500);
+      res.status(204).end();
     }
   });
 
