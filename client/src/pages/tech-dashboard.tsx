@@ -149,12 +149,19 @@ export default function TechDashboard() {
 
   const queryClient = useQueryClient();
 
-  const { data: jobs = [], isLoading } = useQuery<Job[]>({
+  const { data: jobs = [], isLoading, isError: jobsError } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 60,
+    refetchOnWindowFocus: true,
+    retry: 2,
   });
 
   const { data: pickupChecklistData = [] } = useQuery<PickupChecklistItem[]>({
     queryKey: ["/api/pickup-checklist"],
+    staleTime: 1000 * 30,
+    refetchOnWindowFocus: true,
+    retry: 2,
   });
 
   // Supplies checklist for the Pickup List tab
@@ -167,6 +174,9 @@ export default function TechDashboard() {
 
   const { data: suppliesData = [], isLoading: suppliesLoading, isError: suppliesError } = useQuery<TechSupplyItem[]>({
     queryKey: ["/api/tech-supplies"],
+    staleTime: 1000 * 30,
+    refetchOnWindowFocus: true,
+    retry: 2,
   });
 
   const toggleSupplyMutation = useMutation({
@@ -760,9 +770,29 @@ export default function TechDashboard() {
               )}
             </div>
           </div>
+        ) : jobsError ? (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-500 gap-3">
+            <p>Unable to load jobs</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/jobs"] })}
+              data-testid="button-retry-jobs"
+            >
+              Tap to Retry
+            </Button>
+          </div>
         ) : filteredJobs.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-gray-500">
-            No jobs for this period
+          <div className="flex flex-col items-center justify-center h-64 text-gray-500 gap-3">
+            <p>No jobs for this period</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/jobs"] })}
+              data-testid="button-refresh-jobs"
+            >
+              Refresh
+            </Button>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
