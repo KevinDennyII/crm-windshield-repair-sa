@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,8 @@ import {
   Truck,
   Phone,
   ClipboardCheck,
-  Check
+  Check,
+  RefreshCw
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CallCenter, CallCenterButton } from "@/components/call-center";
@@ -148,16 +149,23 @@ export default function TechDashboard() {
     supplies: false
   });
   const [isCallCenterOpen, setIsCallCenterOpen] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const queryClient = useQueryClient();
 
-  const { data: jobs = [], isLoading, isError: jobsError } = useQuery<Job[]>({
+  const { data: jobs = [], isLoading, isError: jobsError, dataUpdatedAt } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
     staleTime: 1000 * 30,
     refetchInterval: 1000 * 60,
     refetchOnWindowFocus: true,
     retry: 2,
   });
+
+  useEffect(() => {
+    if (dataUpdatedAt > 0) {
+      setLastUpdated(new Date(dataUpdatedAt));
+    }
+  }, [dataUpdatedAt]);
 
   const { data: pickupChecklistData = [] } = useQuery<PickupChecklistItem[]>({
     queryKey: ["/api/pickup-checklist"],
@@ -508,15 +516,36 @@ export default function TechDashboard() {
       </header>
 
       <div 
-        className="px-4 py-3 flex items-center justify-between gap-2"
+        className="px-4 py-2 flex items-center justify-between gap-2"
         style={{ backgroundColor: "#1B8EB8" }}
       >
-        <h2 className="text-white text-lg font-semibold">{getTabLabel()}</h2>
-        {activeTab !== "pickup" && activeTab !== "materials" && (
-          <span className="text-white/70 text-sm" data-testid="text-job-count">
-            {filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""}
-          </span>
-        )}
+        <div className="flex flex-col">
+          <h2 className="text-white text-lg font-semibold">{getTabLabel()}</h2>
+          {lastUpdated && (
+            <span className="text-white/60 text-xs" data-testid="text-last-updated">
+              Updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {activeTab !== "pickup" && activeTab !== "materials" && (
+            <span className="text-white/70 text-sm" data-testid="text-job-count">
+              {filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/pickup-checklist"] });
+            }}
+            className="text-white hover:bg-white/20"
+            data-testid="button-refresh-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       </div>
 
       <main className="flex-1 overflow-auto">
