@@ -62,11 +62,13 @@ function getStopLabel(index: number): string {
 
 function parseLocalDate(dateStr: string | null | undefined): Date | null {
   if (!dateStr) return null;
-  const parts = dateStr.split("-");
+  const trimmed = dateStr.trim();
+  const parts = trimmed.split("-");
   if (parts.length !== 3) return null;
   const year = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10) - 1;
   const day = parseInt(parts[2], 10);
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
   return new Date(year, month, day);
 }
 
@@ -506,10 +508,15 @@ export default function TechDashboard() {
       </header>
 
       <div 
-        className="px-4 py-3 flex items-center justify-between"
+        className="px-4 py-3 flex items-center justify-between gap-2"
         style={{ backgroundColor: "#1B8EB8" }}
       >
         <h2 className="text-white text-lg font-semibold">{getTabLabel()}</h2>
+        {activeTab !== "pickup" && activeTab !== "materials" && (
+          <span className="text-white/70 text-sm" data-testid="text-job-count">
+            {filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
 
       <main className="flex-1 overflow-auto">
