@@ -193,26 +193,38 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   // Get current user with role (supports both session and OIDC auth)
   app.get("/api/auth/user-with-role", async (req: any, res) => {
     try {
+      const stripPassword = (user: any) => {
+        const { password, ...safe } = user;
+        return safe;
+      };
+
       // First check session-based auth
       if ((req.session as any)?.userId) {
         const userId = (req.session as any).userId;
         const [user] = await db.select().from(users).where(eq(users.id, userId));
         if (user) {
-          return res.json(user);
+          return res.json(stripPassword(user));
         }
       }
 
-      // Fall back to OIDC auth
-      if (!req.user?.claims?.sub) {
-        return res.status(401).json({ message: "Unauthorized" });
+      // Check OIDC auth
+      if (req.user?.claims?.sub) {
+        const userId = req.user.claims.sub;
+        const [user] = await db.select().from(users).where(eq(users.id, userId));
+        if (user) {
+          return res.json(stripPassword(user));
+        }
       }
 
-      const userId = req.user.claims.sub;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
+      // Check Passport-deserialized local auth (req.user populated by deserializeUser)
+      if (req.user?.id) {
+        const [user] = await db.select().from(users).where(eq(users.id, req.user.id));
+        if (user) {
+          return res.json(stripPassword(user));
+        }
       }
-      res.json(user);
+
+      return res.status(401).json({ message: "Unauthorized" });
     } catch (error) {
       console.error("Error fetching user with role:", error);
       res.status(500).json({ message: "Failed to fetch user" });
