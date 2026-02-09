@@ -271,6 +271,7 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
         setActiveCall(null);
         setOutboundNumber(null);
         setOutboundContactName(null);
+        setShowDialPad(false);
         queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
       });
 
