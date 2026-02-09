@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded } from "lucide-react";
+import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded, Grid3X3, Delete } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -47,6 +47,8 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
   const [isConnecting, setIsConnecting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showDialPad, setShowDialPad] = useState(false);
+  const [dialPadNumber, setDialPadNumber] = useState("");
   const [fwdNumber, setFwdNumber] = useState("");
   const [fwdTimeout, setFwdTimeout] = useState("5");
   const [fwdWhisper, setFwdWhisper] = useState("");
@@ -358,7 +360,16 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => { setShowSettings(!showSettings); setShowHistory(false); }}
+              onClick={() => { setShowDialPad(!showDialPad); setShowSettings(false); setShowHistory(false); }}
+              className={showDialPad ? "toggle-elevate toggle-elevated" : ""}
+              data-testid="button-dial-pad"
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => { setShowSettings(!showSettings); setShowHistory(false); setShowDialPad(false); }}
               data-testid="button-call-forwarding-settings"
             >
               <PhoneForwarded className="h-4 w-4" />
@@ -366,7 +377,7 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => { setShowHistory(!showHistory); setShowSettings(false); }}
+              onClick={() => { setShowHistory(!showHistory); setShowSettings(false); setShowDialPad(false); }}
               data-testid="button-call-history"
             >
               <History className="h-4 w-4" />
@@ -426,12 +437,41 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
             {/* Outbound calling state */}
             {(callStatus === "calling" || (callStatus === "in-call" && outboundNumber)) && (
               <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Phone className="h-5 w-5 text-blue-600" />
-                  <span className="font-medium">{callStatus === "calling" ? "Calling..." : "Outbound Call"}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-5 w-5 text-blue-600" />
+                    <span className="font-medium">{callStatus === "calling" ? "Calling..." : "Outbound Call"}</span>
+                  </div>
+                  {callStatus === "in-call" && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setShowDialPad(!showDialPad)}
+                      className={showDialPad ? "toggle-elevate toggle-elevated" : ""}
+                      data-testid="button-outbound-dialpad"
+                    >
+                      <Grid3X3 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
                 {outboundContactName && <p className="text-sm font-medium">{outboundContactName}</p>}
                 <p className="text-xs text-muted-foreground">{formatPhoneNumber(outboundNumber || "")}</p>
+                {showDialPad && callStatus === "in-call" && (
+                  <div className="grid grid-cols-3 gap-1 mt-2 mb-2">
+                    {["1","2","3","4","5","6","7","8","9","*","0","#"].map((digit) => (
+                      <Button
+                        key={digit}
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => activeCall?.sendDigits(digit)}
+                        data-testid={`button-out-dtmf-${digit === "*" ? "star" : digit === "#" ? "hash" : digit}`}
+                      >
+                        {digit}
+                      </Button>
+                    ))}
+                  </div>
+                )}
                 <div className="flex gap-2 mt-3">
                   <Button
                     onClick={toggleMute}
@@ -486,12 +526,39 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
               </div>
             )}
 
-            {callStatus === "in-call" && (
+            {callStatus === "in-call" && !outboundNumber && (
               <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Phone className="h-5 w-5 text-blue-600 animate-pulse" />
-                  <span className="font-medium">Active Call</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-5 w-5 text-blue-600 animate-pulse" />
+                    <span className="font-medium">Active Call</span>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setShowDialPad(!showDialPad)}
+                    className={showDialPad ? "toggle-elevate toggle-elevated" : ""}
+                    data-testid="button-in-call-dialpad"
+                  >
+                    <Grid3X3 className="h-4 w-4" />
+                  </Button>
                 </div>
+                {showDialPad && (
+                  <div className="grid grid-cols-3 gap-1 mb-2">
+                    {["1","2","3","4","5","6","7","8","9","*","0","#"].map((digit) => (
+                      <Button
+                        key={digit}
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => activeCall?.sendDigits(digit)}
+                        data-testid={`button-dtmf-${digit === "*" ? "star" : digit === "#" ? "hash" : digit}`}
+                      >
+                        {digit}
+                      </Button>
+                    ))}
+                  </div>
+                )}
                 <div className="flex gap-2 mt-3">
                   <Button
                     onClick={toggleMute}
@@ -519,6 +586,72 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                   >
                     <PhoneOff className="h-4 w-4 mr-1" />
                     Hang Up
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {showDialPad && callStatus === "ready" && (
+              <div className="border-t pt-3 mt-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex-1 relative">
+                    <Input
+                      value={dialPadNumber}
+                      onChange={(e) => setDialPadNumber(e.target.value)}
+                      placeholder="Enter number"
+                      className="text-center text-lg font-mono pr-9"
+                      data-testid="input-dial-pad-number"
+                    />
+                    {dialPadNumber && (
+                      <button
+                        onClick={() => setDialPadNumber(dialPadNumber.slice(0, -1))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        data-testid="button-dial-pad-backspace"
+                      >
+                        <Delete className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { digit: "1", sub: "" },
+                    { digit: "2", sub: "ABC" },
+                    { digit: "3", sub: "DEF" },
+                    { digit: "4", sub: "GHI" },
+                    { digit: "5", sub: "JKL" },
+                    { digit: "6", sub: "MNO" },
+                    { digit: "7", sub: "PQRS" },
+                    { digit: "8", sub: "TUV" },
+                    { digit: "9", sub: "WXYZ" },
+                    { digit: "*", sub: "" },
+                    { digit: "0", sub: "+" },
+                    { digit: "#", sub: "" },
+                  ].map(({ digit, sub }) => (
+                    <Button
+                      key={digit}
+                      variant="outline"
+                      className="h-12 flex flex-col items-center justify-center"
+                      onClick={() => setDialPadNumber(prev => prev + digit)}
+                      data-testid={`button-dial-${digit === "*" ? "star" : digit === "#" ? "hash" : digit}`}
+                    >
+                      <span className="text-lg font-semibold leading-none">{digit}</span>
+                      {sub && <span className="text-[9px] text-muted-foreground leading-none mt-0.5">{sub}</span>}
+                    </Button>
+                  ))}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    disabled={!dialPadNumber.replace(/\D/g, "")}
+                    onClick={() => {
+                      makeOutboundCall(dialPadNumber);
+                      setShowDialPad(false);
+                    }}
+                    data-testid="button-dial-call"
+                  >
+                    <Phone className="h-4 w-4 mr-2" />
+                    Call
                   </Button>
                 </div>
               </div>
