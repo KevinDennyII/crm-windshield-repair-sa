@@ -3,7 +3,10 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -43,6 +46,10 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
   const [isMuted, setIsMuted] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [fwdNumber, setFwdNumber] = useState("");
+  const [fwdTimeout, setFwdTimeout] = useState("5");
+  const [fwdWhisper, setFwdWhisper] = useState("");
   const [outboundNumber, setOutboundNumber] = useState<string | null>(null);
   const [outboundContactName, setOutboundContactName] = useState<string | null>(null);
   const deviceRef = useRef<any>(null);
@@ -60,6 +67,39 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
     queryKey: ["/api/voice/calls"],
     enabled: showHistory,
   });
+
+  const { data: forwardingSettings } = useQuery<{
+    id?: string;
+    forwardingNumber: string;
+    isEnabled: boolean;
+    timeoutSeconds: number;
+    whisperMessage: string;
+  }>({
+    queryKey: ["/api/voice/forwarding"],
+    enabled: showSettings,
+  });
+
+  const forwardingMutation = useMutation({
+    mutationFn: async (data: { forwardingNumber?: string; isEnabled?: boolean; timeoutSeconds?: number; whisperMessage?: string }) => {
+      const res = await apiRequest("PUT", "/api/voice/forwarding", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/voice/forwarding"] });
+      toast({ title: "Forwarding settings updated" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to update settings", description: err.message, variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    if (forwardingSettings) {
+      setFwdNumber(forwardingSettings.forwardingNumber || "");
+      setFwdTimeout(String(forwardingSettings.timeoutSeconds ?? 5));
+      setFwdWhisper(forwardingSettings.whisperMessage || "");
+    }
+  }, [forwardingSettings]);
 
   const tokenMutation = useMutation({
     mutationFn: async () => {
@@ -318,8 +358,15 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => setShowHistory(!showHistory)}
-              className="h-7 w-7"
+              onClick={() => { setShowSettings(!showSettings); setShowHistory(false); }}
+              data-testid="button-call-forwarding-settings"
+            >
+              <PhoneForwarded className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => { setShowHistory(!showHistory); setShowSettings(false); }}
               data-testid="button-call-history"
             >
               <History className="h-4 w-4" />
@@ -328,7 +375,6 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
               size="icon"
               variant="ghost"
               onClick={onClose}
-              className="h-7 w-7"
               data-testid="button-close-call-center"
             >
               <X className="h-4 w-4" />
@@ -474,6 +520,80 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                     <PhoneOff className="h-4 w-4 mr-1" />
                     Hang Up
                   </Button>
+                </div>
+              </div>
+            )}
+
+            {showSettings && (
+              <div className="border-t pt-3 mt-3">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <PhoneForwarded className="h-4 w-4" />
+                  Call Forwarding
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="forwarding-enabled" className="text-sm">Enable Forwarding</Label>
+                    <Switch
+                      id="forwarding-enabled"
+                      checked={forwardingSettings?.isEnabled ?? false}
+                      onCheckedChange={(checked) => forwardingMutation.mutate({ isEnabled: checked })}
+                      data-testid="switch-forwarding-enabled"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="forwarding-number" className="text-xs text-muted-foreground">Forward to Number</Label>
+                    <Input
+                      id="forwarding-number"
+                      placeholder="(210) 890-0210"
+                      value={fwdNumber}
+                      onChange={(e) => setFwdNumber(e.target.value)}
+                      onBlur={() => {
+                        const val = fwdNumber.replace(/\D/g, "");
+                        if (val !== forwardingSettings?.forwardingNumber) {
+                          forwardingMutation.mutate({ forwardingNumber: val });
+                        }
+                      }}
+                      data-testid="input-forwarding-number"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="forwarding-timeout" className="text-xs text-muted-foreground">Ring Browser For (seconds)</Label>
+                    <Input
+                      id="forwarding-timeout"
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={fwdTimeout}
+                      onChange={(e) => setFwdTimeout(e.target.value)}
+                      onBlur={() => {
+                        const val = parseInt(fwdTimeout);
+                        if (!isNaN(val) && val !== forwardingSettings?.timeoutSeconds) {
+                          forwardingMutation.mutate({ timeoutSeconds: val });
+                        }
+                      }}
+                      data-testid="input-forwarding-timeout"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="forwarding-whisper" className="text-xs text-muted-foreground">Whisper Message (heard when answering)</Label>
+                    <Input
+                      id="forwarding-whisper"
+                      placeholder="Incoming call from Windshield Repair SA"
+                      value={fwdWhisper}
+                      onChange={(e) => setFwdWhisper(e.target.value)}
+                      onBlur={() => {
+                        if (fwdWhisper !== forwardingSettings?.whisperMessage) {
+                          forwardingMutation.mutate({ whisperMessage: fwdWhisper });
+                        }
+                      }}
+                      data-testid="input-forwarding-whisper"
+                    />
+                  </div>
+                  {forwardingSettings?.isEnabled && (
+                    <p className="text-xs text-muted-foreground">
+                      Calls will ring in browser for {forwardingSettings.timeoutSeconds}s, then forward to {formatPhoneNumber(forwardingSettings.forwardingNumber)}.
+                    </p>
+                  )}
                 </div>
               </div>
             )}

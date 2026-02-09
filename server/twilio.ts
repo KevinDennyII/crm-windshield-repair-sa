@@ -60,16 +60,59 @@ export function generateVoiceToken(identity: string): string {
   return accessToken.toJwt();
 }
 
-export function generateIncomingCallTwiml(contactName: string): string {
+export interface CallForwardingConfig {
+  forwardingNumber: string;
+  isEnabled: boolean;
+  timeoutSeconds: number;
+  whisperMessage: string;
+}
+
+export function generateIncomingCallTwiml(contactName: string, forwarding?: CallForwardingConfig, baseUrl?: string): string {
   const response = new twilio.twiml.VoiceResponse();
+  
+  if (forwarding?.isEnabled && forwarding.forwardingNumber) {
+    const actionUrl = baseUrl ? `${baseUrl}/api/voice/dial-action` : "/api/voice/dial-action";
+    const dial = response.dial({
+      callerId: twilioPhoneNumber || undefined,
+      timeout: forwarding.timeoutSeconds || 5,
+      action: actionUrl,
+      method: "POST",
+    });
+    
+    const clientEl = dial.client({});
+    clientEl.identity(SHARED_AGENT_IDENTITY);
+    clientEl.parameter({ name: "contactName", value: contactName });
+  } else {
+    const dial = response.dial({
+      callerId: twilioPhoneNumber || undefined,
+    });
+    
+    const clientEl = dial.client({});
+    clientEl.identity(SHARED_AGENT_IDENTITY);
+    clientEl.parameter({ name: "contactName", value: contactName });
+  }
+  
+  return response.toString();
+}
+
+export function generateForwardTwiml(forwardingNumber: string, whisperMessage: string, baseUrl?: string): string {
+  const response = new twilio.twiml.VoiceResponse();
+  
+  let formattedNumber = forwardingNumber.replace(/\D/g, "");
+  if (formattedNumber.length === 10) {
+    formattedNumber = "+1" + formattedNumber;
+  } else if (!formattedNumber.startsWith("+")) {
+    formattedNumber = "+" + formattedNumber;
+  }
+  
+  const whisperUrl = baseUrl ? `${baseUrl}/api/voice/whisper` : "/api/voice/whisper";
   const dial = response.dial({
     callerId: twilioPhoneNumber || undefined,
   });
-  
-  // Dial the shared agent identity with caller info as parameter
-  const clientEl = dial.client({});
-  clientEl.identity(SHARED_AGENT_IDENTITY);
-  clientEl.parameter({ name: "contactName", value: contactName });
+  dial.number({
+    url: whisperUrl,
+    method: "POST",
+  }, formattedNumber);
   
   return response.toString();
 }

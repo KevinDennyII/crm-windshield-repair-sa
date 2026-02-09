@@ -1,10 +1,11 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
-import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, validateTwilioSignature } from "./twilio";
+import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, generateForwardTwiml, validateTwilioSignature } from "./twilio";
+import type { CallForwardingConfig } from "./twilio";
 import { isBluehostConfigured, getBluehostEmail, getBluehostEmails, sendBluehostEmail, replyToBluehostEmail } from "./bluehost";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
 import { decodeVIN } from "./vin-decoder";
@@ -1457,7 +1458,25 @@ Please let us know of any changes.`;
         console.error("Contact lookup failed, using default name:", lookupErr);
       }
 
-      const twiml = generateIncomingCallTwiml(contactName);
+      // Get call forwarding settings
+      let forwarding: CallForwardingConfig | undefined;
+      try {
+        const [fwdSettings] = await db.select().from(callForwardingSettings).limit(1);
+        if (fwdSettings && fwdSettings.isEnabled) {
+          forwarding = {
+            forwardingNumber: fwdSettings.forwardingNumber,
+            isEnabled: fwdSettings.isEnabled,
+            timeoutSeconds: fwdSettings.timeoutSeconds,
+            whisperMessage: fwdSettings.whisperMessage || "Incoming call from Windshield Repair SA",
+          };
+        }
+      } catch (fwdErr) {
+        console.error("Failed to get call forwarding settings:", fwdErr);
+      }
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const twiml = generateIncomingCallTwiml(contactName, forwarding, baseUrl);
+      console.log("Generated TwiML for incoming call:", twiml);
       res.send(twiml);
 
       // Log the incoming call asynchronously after response is sent
@@ -1519,6 +1538,119 @@ Please let us know of any changes.`;
     } catch (error: any) {
       console.error("Call status callback error:", error);
       res.status(204).end();
+    }
+  });
+
+  // Dial action - called by Twilio when browser client doesn't answer (timeout/no-answer)
+  app.post("/api/voice/dial-action", async (req, res) => {
+    res.set("Content-Type", "text/xml");
+    try {
+      const { DialCallStatus, CallSid } = req.body;
+      console.log("Dial action received:", { DialCallStatus, CallSid });
+
+      // If the browser client answered, we're done
+      if (DialCallStatus === "completed" || DialCallStatus === "answered") {
+        const response = new (await import("twilio")).default.twiml.VoiceResponse();
+        res.send(response.toString());
+        return;
+      }
+
+      // Browser didn't answer - forward to backup number
+      const [fwdSettings] = await db.select().from(callForwardingSettings).limit(1);
+      if (fwdSettings && fwdSettings.isEnabled && fwdSettings.forwardingNumber) {
+        console.log(`Forwarding call ${CallSid} to ${fwdSettings.forwardingNumber}`);
+        const fwdBaseUrl = `${req.protocol}://${req.get('host')}`;
+        const twiml = generateForwardTwiml(
+          fwdSettings.forwardingNumber,
+          fwdSettings.whisperMessage || "Incoming call from Windshield Repair SA",
+          fwdBaseUrl
+        );
+        console.log("Forward TwiML:", twiml);
+        res.send(twiml);
+
+        // Update call log with forwarding info
+        try {
+          await db.update(phoneCalls)
+            .set({ notes: `Forwarded to ${fwdSettings.forwardingNumber}` })
+            .where(eq(phoneCalls.callSid, CallSid));
+        } catch (logErr) {
+          console.error("Failed to update call log with forwarding info:", logErr);
+        }
+      } else {
+        // No forwarding configured, just end the call with a message
+        const twilio = (await import("twilio")).default;
+        const response = new twilio.twiml.VoiceResponse();
+        response.say({ voice: "Polly.Joanna" }, "We're sorry, no one is available to take your call right now. Please try again later or leave a message after the beep.");
+        response.record({ maxLength: 120, transcribe: false });
+        res.send(response.toString());
+      }
+    } catch (error: any) {
+      console.error("Dial action error:", error);
+      if (!res.headersSent) {
+        res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say>An error occurred. Please try again later.</Say></Response>`);
+      }
+    }
+  });
+
+  // Whisper endpoint - plays a message to the person answering the forwarded call
+  app.post("/api/voice/whisper", async (req, res) => {
+    res.set("Content-Type", "text/xml");
+    try {
+      const [fwdSettings] = await db.select().from(callForwardingSettings).limit(1);
+      const whisperMessage = fwdSettings?.whisperMessage || "Incoming call from Windshield Repair SA";
+
+      const twilio = (await import("twilio")).default;
+      const response = new twilio.twiml.VoiceResponse();
+      response.say({ voice: "Polly.Joanna" }, whisperMessage);
+      res.send(response.toString());
+    } catch (error: any) {
+      console.error("Whisper endpoint error:", error);
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
+    }
+  });
+
+  // Get call forwarding settings
+  app.get("/api/voice/forwarding", isAuthenticated, async (req, res) => {
+    try {
+      const [settings] = await db.select().from(callForwardingSettings).limit(1);
+      res.json(settings || { isEnabled: false, forwardingNumber: "", timeoutSeconds: 5, whisperMessage: "Incoming call from Windshield Repair SA" });
+    } catch (error: any) {
+      console.error("Failed to get forwarding settings:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update call forwarding settings
+  app.put("/api/voice/forwarding", isAuthenticated, async (req: any, res) => {
+    try {
+      const { forwardingNumber, isEnabled, timeoutSeconds, whisperMessage } = req.body;
+      
+      const [existing] = await db.select().from(callForwardingSettings).limit(1);
+      
+      if (existing) {
+        const [updated] = await db.update(callForwardingSettings)
+          .set({
+            forwardingNumber: forwardingNumber !== undefined ? forwardingNumber : existing.forwardingNumber,
+            isEnabled: isEnabled !== undefined ? isEnabled : existing.isEnabled,
+            timeoutSeconds: timeoutSeconds !== undefined ? timeoutSeconds : existing.timeoutSeconds,
+            whisperMessage: whisperMessage !== undefined ? whisperMessage : existing.whisperMessage,
+            updatedAt: new Date(),
+          })
+          .where(eq(callForwardingSettings.id, existing.id))
+          .returning();
+        res.json(updated);
+      } else {
+        const [created] = await db.insert(callForwardingSettings).values({
+          forwardingNumber: forwardingNumber || "",
+          isEnabled: isEnabled !== undefined ? isEnabled : true,
+          timeoutSeconds: timeoutSeconds || 5,
+          whisperMessage: whisperMessage || "Incoming call from Windshield Repair SA",
+        }).returning();
+        res.json(created);
+      }
+    } catch (error: any) {
+      console.error("Failed to update forwarding settings:", error);
+      res.status(500).json({ message: error.message });
     }
   });
 

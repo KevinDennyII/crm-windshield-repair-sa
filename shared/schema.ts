@@ -585,3 +585,20 @@ export const insertTechSuppliesChecklistSchema = createInsertSchema(techSupplies
 
 export type TechSupplyItem = typeof techSuppliesChecklist.$inferSelect;
 export type InsertTechSupplyItem = z.infer<typeof insertTechSuppliesChecklistSchema>;
+
+export const callForwardingSettings = pgTable("call_forwarding_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  forwardingNumber: varchar("forwarding_number").notNull(),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  timeoutSeconds: integer("timeout_seconds").notNull().default(5),
+  whisperMessage: text("whisper_message").default("Incoming call from Windshield Repair SA"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCallForwardingSchema = createInsertSchema(callForwardingSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type CallForwardingSettings = typeof callForwardingSettings.$inferSelect;
+export type InsertCallForwardingSettings = z.infer<typeof insertCallForwardingSchema>;
