@@ -153,7 +153,22 @@ export async function transferActiveCall(callSid: string, transferTo: string, ba
   const twilioClient = getClient();
   const fallbackUrl = `${baseUrl}/api/voice/transfer-fallback`;
   const twiml = generateTransferTwiml(transferTo, fallbackUrl);
-  await twilioClient.calls(callSid).update({ twiml });
+
+  // The callSid from the browser is the child leg. We need to update the
+  // parent call (the PSTN caller) so the customer stays connected while
+  // the transfer number rings. If there's no parent, fall back to the
+  // provided callSid (e.g. for outbound calls where this IS the parent).
+  let targetCallSid = callSid;
+  try {
+    const call = await twilioClient.calls(callSid).fetch();
+    if (call.parentCallSid) {
+      targetCallSid = call.parentCallSid;
+    }
+  } catch (err) {
+    console.error("Could not fetch call details, using provided callSid:", err);
+  }
+
+  await twilioClient.calls(targetCallSid).update({ twiml });
 }
 
 export function validateTwilioSignature(url: string, params: Record<string, string>, signature: string): boolean {

@@ -261,9 +261,6 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
         description: `Call is being transferred to ${transferTo}. If unanswered, it will return to you.`,
       });
 
-      activeCall.disconnect();
-      setActiveCall(null);
-      setCallStatus("ready");
       setShowTransfer(false);
       setCustomTransferNumber("");
     } catch (error: any) {
