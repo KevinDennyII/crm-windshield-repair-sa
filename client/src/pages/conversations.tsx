@@ -12,6 +12,9 @@ import {
   Mail,
   MessageSquare,
   Phone,
+  PhoneMissed,
+  PhoneIncoming,
+  PhoneOutgoing,
   Send,
   RefreshCw,
   Search,
@@ -25,7 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { type Job } from "@shared/schema";
+import { type Job, type PhoneCall } from "@shared/schema";
 import { useSearch } from "wouter";
 
 interface SmsStatus {
@@ -179,6 +182,10 @@ export default function Conversations() {
 
   const { data: jobs } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
+  });
+
+  const { data: callLogs, isLoading: loadingCalls, refetch: refetchCalls } = useQuery<PhoneCall[]>({
+    queryKey: ["/api/voice/calls"],
   });
 
   useEffect(() => {
@@ -356,6 +363,21 @@ export default function Conversations() {
     return true;
   }) || [];
 
+  const filteredCallLogs = callLogs?.filter(call => {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchingJob = findMatchingJobByPhone(call.fromNumber);
+      return (
+        call.fromNumber.includes(query) ||
+        (call.contactName?.toLowerCase().includes(query)) ||
+        `${matchingJob?.firstName} ${matchingJob?.lastName}`.toLowerCase().includes(query)
+      );
+    }
+    return true;
+  }) || [];
+
+  const missedCallCount = callLogs?.filter(c => c.status === "ringing" || c.status === "missed" || c.status === "no-answer").length || 0;
+
   return (
     <div className="flex-1 flex flex-col h-full">
       <div className="flex items-center justify-between gap-4 p-4 border-b bg-background flex-shrink-0">
@@ -372,11 +394,12 @@ export default function Conversations() {
             refetchEmails();
             if (smsStatus?.configured) refetchSms();
             if (bluehostStatus?.configured) refetchBluehost();
+            refetchCalls();
           }}
-          disabled={loadingEmails || loadingSms || loadingBluehost}
+          disabled={loadingEmails || loadingSms || loadingBluehost || loadingCalls}
           data-testid="button-refresh-conversations"
         >
-          <RefreshCw className={cn("h-4 w-4 mr-2", (loadingEmails || loadingSms || loadingBluehost) && "animate-spin")} />
+          <RefreshCw className={cn("h-4 w-4 mr-2", (loadingEmails || loadingSms || loadingBluehost || loadingCalls) && "animate-spin")} />
           Refresh
         </Button>
       </div>
@@ -397,7 +420,7 @@ export default function Conversations() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <TabsList className="grid w-full grid-cols-5 px-2 pt-2 flex-shrink-0">
+            <TabsList className="grid w-full grid-cols-6 px-2 pt-2 flex-shrink-0">
               <TabsTrigger value="all" className="text-xs" data-testid="tab-all">
                 <Inbox className="h-3 w-3 mr-1" />
                 All
@@ -413,6 +436,15 @@ export default function Conversations() {
               <TabsTrigger value="sms" className="text-xs" data-testid="tab-sms">
                 <MessageSquare className="h-3 w-3 mr-1" />
                 SMS
+              </TabsTrigger>
+              <TabsTrigger value="calls" className="text-xs relative" data-testid="tab-calls">
+                <PhoneMissed className="h-3 w-3 mr-1" />
+                Calls
+                {missedCallCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-medium" data-testid="badge-missed-call-count">
+                    {missedCallCount > 9 ? "9+" : missedCallCount}
+                  </span>
+                )}
               </TabsTrigger>
               <TabsTrigger value="social" className="text-xs" data-testid="tab-social">
                 <Facebook className="h-3 w-3 mr-1" />
@@ -524,6 +556,18 @@ export default function Conversations() {
                   <Badge variant="secondary" className="mt-3">Coming Soon</Badge>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="calls" className="flex-1 m-0 overflow-hidden min-h-0">
+              <div className="h-full overflow-y-auto">
+                <CallLogList
+                  calls={filteredCallLogs}
+                  formatDate={formatDate}
+                  formatPhoneNumber={formatPhoneNumber}
+                  findMatchingJob={findMatchingJobByPhone}
+                  isLoading={loadingCalls}
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="social" className="flex-1 m-0 p-4">
@@ -1090,6 +1134,156 @@ function BluehostConversationList({
               </div>
             </div>
           </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface CallLogListProps {
+  calls: PhoneCall[];
+  formatDate: (date: string) => string;
+  formatPhoneNumber: (phone: string) => string;
+  findMatchingJob: (phone: string) => Job | undefined;
+  isLoading: boolean;
+}
+
+function CallLogList({
+  calls,
+  formatDate,
+  formatPhoneNumber,
+  findMatchingJob,
+  isLoading,
+}: CallLogListProps) {
+  if (isLoading) {
+    return (
+      <div className="p-4 space-y-3">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex gap-3 animate-pulse">
+            <div className="h-10 w-10 rounded-full bg-muted" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-muted rounded w-3/4" />
+              <div className="h-3 bg-muted rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (calls.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <Phone className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
+        <p className="text-sm text-muted-foreground">No call logs found</p>
+      </div>
+    );
+  }
+
+  const isMissed = (status: string) => status === "ringing" || status === "missed" || status === "no-answer";
+
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds || seconds === 0) return null;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins === 0) return `${secs}s`;
+    return `${mins}m ${secs}s`;
+  };
+
+  const getCallIcon = (call: PhoneCall) => {
+    if (isMissed(call.status)) return PhoneMissed;
+    if (call.direction === "inbound") return PhoneIncoming;
+    return PhoneOutgoing;
+  };
+
+  const getCallColor = (call: PhoneCall) => {
+    if (isMissed(call.status)) return "text-destructive bg-destructive/10";
+    if (call.direction === "inbound") return "text-green-600 bg-green-500/10";
+    return "text-blue-600 bg-blue-500/10";
+  };
+
+  const getStatusLabel = (call: PhoneCall) => {
+    if (isMissed(call.status)) return "Missed";
+    if (call.status === "completed") return "Completed";
+    if (call.status === "busy") return "Busy";
+    if (call.status === "failed") return "Failed";
+    if (call.status === "in-progress") return "In Progress";
+    return call.status;
+  };
+
+  return (
+    <div className="divide-y">
+      {calls.map((call) => {
+        const matchingJob = findMatchingJob(call.fromNumber);
+        const CallIcon = getCallIcon(call);
+        const colorClasses = getCallColor(call);
+        const missed = isMissed(call.status);
+        const duration = formatDuration(call.duration);
+
+        return (
+          <div
+            key={call.id}
+            className={cn(
+              "w-full p-3 text-left transition-colors",
+              missed && "bg-destructive/5"
+            )}
+            data-testid={`call-log-item-${call.id}`}
+          >
+            <div className="flex gap-3">
+              <div className={cn("flex h-10 w-10 items-center justify-center rounded-full flex-shrink-0", colorClasses)}>
+                <CallIcon className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={cn(
+                    "font-medium truncate text-sm",
+                    missed && "font-semibold"
+                  )}>
+                    {call.contactName || (matchingJob ? `${matchingJob.firstName} ${matchingJob.lastName}` : formatPhoneNumber(call.fromNumber))}
+                  </span>
+                  <span className="text-xs text-muted-foreground flex-shrink-0">
+                    {call.startedAt ? formatDate(String(call.startedAt)) : ""}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground truncate">
+                  {formatPhoneNumber(call.fromNumber)}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <Badge
+                    variant={missed ? "destructive" : "secondary"}
+                    className="text-xs"
+                    data-testid={`call-status-${call.id}`}
+                  >
+                    {getStatusLabel(call)}
+                  </Badge>
+                  {call.direction === "outbound" && (
+                    <Badge variant="outline" className="text-xs">
+                      Outbound
+                    </Badge>
+                  )}
+                  {duration && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {duration}
+                    </span>
+                  )}
+                  {matchingJob && (
+                    <Badge variant="outline" className="text-xs">
+                      Job #{matchingJob.jobNumber}
+                    </Badge>
+                  )}
+                </div>
+                {call.notes && (
+                  <p className="text-xs text-muted-foreground/70 truncate mt-1">
+                    {call.notes}
+                  </p>
+                )}
+              </div>
+              {missed && (
+                <div className="w-2 h-2 rounded-full bg-destructive flex-shrink-0 mt-2" />
+              )}
+            </div>
+          </div>
         );
       })}
     </div>
