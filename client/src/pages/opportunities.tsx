@@ -73,7 +73,16 @@ export default function Opportunities() {
 
   const updateJobMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: InsertJob }) => {
-      const response = await apiRequest("PATCH", `/api/jobs/${id}`, data);
+      const response = await fetch(`/api/jobs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw errorData;
+      }
       return response.json();
     },
     onSuccess: (savedJob: Job) => {
@@ -84,7 +93,6 @@ export default function Opportunities() {
         description: "Job details have been saved.",
       });
       
-      // Check if we should show confirmation modal (stage changed to scheduled for retail)
       if (pendingSaveData && 
           pendingSaveData.newData.pipelineStage === 'scheduled' &&
           pendingSaveData.previousStage !== 'scheduled' &&
@@ -94,12 +102,21 @@ export default function Opportunities() {
       }
       setPendingSaveData(null);
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update job. Please try again.",
-        variant: "destructive",
-      });
+    onError: (error: any) => {
+      if (error?.missingFields?.length > 0) {
+        toast({
+          title: "Cannot Save as Scheduled",
+          description: `Missing required fields: ${error.missingFields.join(", ")}`,
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error?.message || "Failed to update job. Please try again.",
+          variant: "destructive",
+        });
+      }
       setPendingSaveData(null);
     },
   });
@@ -112,20 +129,36 @@ export default function Opportunities() {
       id: string;
       pipelineStage: PipelineStage;
     }) => {
-      const response = await apiRequest("PATCH", `/api/jobs/${id}/stage`, {
-        pipelineStage,
+      const response = await fetch(`/api/jobs/${id}/stage`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipelineStage }),
+        credentials: "include",
       });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw errorData;
+      }
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to move job. Please try again.",
-        variant: "destructive",
-      });
+    onError: (error: any) => {
+      if (error?.missingFields?.length > 0) {
+        toast({
+          title: "Cannot Move to Scheduled",
+          description: `Missing required fields: ${error.missingFields.join(", ")}`,
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error?.message || "Failed to move job. Please try again.",
+          variant: "destructive",
+        });
+      }
     },
   });
 

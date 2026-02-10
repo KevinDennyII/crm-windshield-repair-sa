@@ -69,6 +69,54 @@ async function logActivity(
   }
 }
 
+function getScheduleValidationErrors(job: any): string[] {
+  const missing: string[] = [];
+
+  if (!job.firstName?.trim()) missing.push("First Name");
+  if (!job.lastName?.trim()) missing.push("Last Name");
+  if (!job.phone?.trim()) missing.push("Phone");
+  if (!job.email?.trim()) missing.push("Email");
+  if (!job.streetAddress?.trim()) missing.push("Street Address");
+  if (!job.city?.trim()) missing.push("City");
+  if (!job.state?.trim()) missing.push("State");
+  if (!job.zipCode?.trim()) missing.push("Zip Code");
+  if (!job.installDate?.trim()) missing.push("Install Date");
+  if (!job.timeFrame?.trim()) missing.push("Time Frame");
+
+  const vehicles = Array.isArray(job.vehicles) ? job.vehicles : [];
+  if (vehicles.length === 0) {
+    missing.push("Vehicle (Year, Make, Model, Body Style)");
+    missing.push("Part (Job Type, Glass Type, Glass Part #, Distributor, Accessories)");
+  } else {
+    for (let vi = 0; vi < vehicles.length; vi++) {
+      const v = vehicles[vi];
+      const vLabel = vehicles.length > 1 ? ` (Vehicle ${vi + 1})` : "";
+      if (!v.vehicleYear?.trim()) missing.push(`Year${vLabel}`);
+      if (!v.vehicleMake?.trim()) missing.push(`Make${vLabel}`);
+      if (!v.vehicleModel?.trim()) missing.push(`Model${vLabel}`);
+      if (!v.bodyStyle?.trim()) missing.push(`Body Style${vLabel}`);
+
+      const parts = Array.isArray(v.parts) ? v.parts : [];
+      if (parts.length === 0) {
+        missing.push(`Part (Job Type, Glass Type, Glass Part #, Distributor, Accessories)${vLabel}`);
+      } else {
+        for (let pi = 0; pi < parts.length; pi++) {
+          const p = parts[pi];
+          const pLabel = parts.length > 1 ? ` (Part ${pi + 1})` : "";
+          const label = `${pLabel}${vLabel}`;
+          if (!p.serviceType?.trim()) missing.push(`Job Type${label}`);
+          if (!p.glassType?.trim()) missing.push(`Glass Type${label}`);
+          if (!p.glassPartNumber?.trim()) missing.push(`Glass Part #${label}`);
+          if (!p.distributor?.trim()) missing.push(`Distributor${label}`);
+          if (!p.accessories?.trim()) missing.push(`Accessories${label}`);
+        }
+      }
+    }
+  }
+
+  return missing;
+}
+
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Setup authentication BEFORE other routes
   await setupAuth(app);
@@ -662,6 +710,21 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
           errors: parsed.error.errors 
         });
       }
+
+      if (parsed.data.pipelineStage === "scheduled") {
+        const currentJob = await storage.getJob(req.params.id);
+        if (currentJob) {
+          const merged = { ...currentJob, ...parsed.data };
+          const missingFields = getScheduleValidationErrors(merged);
+          if (missingFields.length > 0) {
+            return res.status(400).json({
+              message: "Cannot move to Scheduled. The following fields are required:",
+              missingFields,
+            });
+          }
+        }
+      }
+
       const job = await storage.updateJob(req.params.id, parsed.data);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
@@ -689,6 +752,16 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       const currentJob = await storage.getJob(req.params.id);
       if (!currentJob) {
         return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (parsed.data.pipelineStage === "scheduled") {
+        const missingFields = getScheduleValidationErrors(currentJob);
+        if (missingFields.length > 0) {
+          return res.status(400).json({
+            message: "Cannot move to Scheduled. The following fields are required:",
+            missingFields,
+          });
+        }
       }
       
       const previousStage = currentJob.pipelineStage;
