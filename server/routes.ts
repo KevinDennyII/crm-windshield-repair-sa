@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, generateForwardTwiml, validateTwilioSignature } from "./twilio";
@@ -13,7 +13,7 @@ import { isPlacesConfigured, getAutocomplete, getPlaceDetails } from "./places";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { db } from "./db";
 import { users } from "@shared/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, gte } from "drizzle-orm";
 import { COMPANY_LOGO_BASE64 } from "./logo";
 import { processNewLeads, startLeadPolling, stopLeadPolling } from "./lead-processor";
 import { registerAIRoutes } from "./ai-routes";
@@ -526,6 +526,72 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error: any) {
       console.error("Health check DB error:", error?.message || error);
       res.json({ status: "error", dbConnected: false, error: error?.message || "Unknown error" });
+    }
+  });
+
+  app.get("/api/notifications", isAuthenticated, async (req, res) => {
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      const missedCalls = await db.select({
+        id: phoneCalls.id,
+        fromNumber: phoneCalls.fromNumber,
+        contactName: phoneCalls.contactName,
+        startedAt: phoneCalls.startedAt,
+      }).from(phoneCalls)
+        .where(eq(phoneCalls.status, "ringing"))
+        .orderBy(desc(phoneCalls.startedAt))
+        .limit(10);
+
+      const newLeads = await db.select({
+        id: jobs.id,
+        jobNumber: jobs.jobNumber,
+        firstName: jobs.firstName,
+        lastName: jobs.lastName,
+        phone: jobs.phone,
+        createdAt: jobs.createdAt,
+      }).from(jobs)
+        .where(and(
+          eq(jobs.pipelineStage, "new_lead"),
+          gte(jobs.createdAt, sevenDaysAgo),
+        ))
+        .orderBy(desc(jobs.createdAt))
+        .limit(10);
+
+      const recentSms = await db.select({
+        id: activityLogs.id,
+        actionType: activityLogs.actionType,
+        details: activityLogs.details,
+        jobNumber: activityLogs.jobNumber,
+        createdAt: activityLogs.createdAt,
+      }).from(activityLogs)
+        .where(eq(activityLogs.actionType, "sms_sent"))
+        .orderBy(desc(activityLogs.createdAt))
+        .limit(10);
+
+      const recentEmails = await db.select({
+        id: activityLogs.id,
+        actionType: activityLogs.actionType,
+        details: activityLogs.details,
+        jobNumber: activityLogs.jobNumber,
+        createdAt: activityLogs.createdAt,
+      }).from(activityLogs)
+        .where(eq(activityLogs.actionType, "email_sent"))
+        .orderBy(desc(activityLogs.createdAt))
+        .limit(10);
+
+      const totalCount = missedCalls.length + newLeads.length + recentSms.length + recentEmails.length;
+
+      res.json({
+        totalCount,
+        missedCalls,
+        newLeads,
+        recentSms,
+        recentEmails,
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch notifications:", error?.message || error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
     }
   });
 

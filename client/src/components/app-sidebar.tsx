@@ -20,6 +20,7 @@ import {
   Activity,
   Bot,
 } from "lucide-react";
+import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -240,6 +241,7 @@ export function MobileHeader() {
         </span>
       </div>
       <div className="flex items-center gap-1">
+        <NotificationBell />
         <ThemeToggle />
         <Button
           variant="ghost"

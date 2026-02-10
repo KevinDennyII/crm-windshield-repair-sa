@@ -9,6 +9,7 @@ import { ReportsSidebar, ReportsMobileHeader } from "@/components/reports-sideba
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FloatingAIAssistant } from "@/components/floating-ai-assistant";
 import { CallCenter, CallCenterButton } from "@/components/call-center";
+import { NotificationBell } from "@/components/notification-bell";
 import { AIContextProvider } from "@/contexts/ai-context";
 import { useState, useEffect } from "react";
 import NotFound from "@/pages/not-found";
@@ -187,7 +188,10 @@ function AuthenticatedApp() {
             <ReportsMobileHeader />
             <header className="hidden md:flex items-center justify-between gap-4 h-12 px-4 border-b bg-background flex-shrink-0">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
-              <ThemeToggle />
+              <div className="flex items-center gap-2">
+                <NotificationBell />
+                <ThemeToggle />
+              </div>
             </header>
             <main className="flex-1 overflow-auto bg-background">
               <ReportsRouter />
@@ -209,6 +213,7 @@ function AuthenticatedApp() {
             <header className="hidden md:flex items-center justify-between gap-4 h-12 px-4 border-b bg-background flex-shrink-0">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <div className="flex items-center gap-2">
+                <NotificationBell />
                 <CallCenterButton onClick={() => setIsCallCenterOpen(true)} />
                 <ThemeToggle />
               </div>
