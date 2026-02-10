@@ -519,13 +519,24 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  app.get("/api/health", async (req, res) => {
+    try {
+      const jobs = await storage.getAllJobs();
+      res.json({ status: "ok", jobCount: jobs.length, dbConnected: true });
+    } catch (error: any) {
+      console.error("Health check DB error:", error?.message || error);
+      res.json({ status: "error", dbConnected: false, error: error?.message || "Unknown error" });
+    }
+  });
+
   // Get all jobs
   app.get("/api/jobs", async (req, res) => {
     try {
       const jobs = await storage.getAllJobs();
       res.json(jobs);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch jobs" });
+    } catch (error: any) {
+      console.error("Failed to fetch jobs:", error?.message || error);
+      res.status(500).json({ message: "Failed to fetch jobs", error: error?.message });
     }
   });
 
