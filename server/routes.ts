@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
-import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, generateForwardTwiml, validateTwilioSignature, transferActiveCall, generateTransferFallbackTwiml } from "./twilio";
+import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, generateForwardTwiml, validateTwilioSignature, transferActiveCall, generateTransferFallbackTwiml, holdCall, unholdCall, getClient } from "./twilio";
 import type { CallForwardingConfig } from "./twilio";
 import { isBluehostConfigured, getBluehostEmail, getBluehostEmails, sendBluehostEmail, replyToBluehostEmail } from "./bluehost";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
@@ -1775,6 +1775,49 @@ Please let us know of any changes.`;
     } catch (error: any) {
       console.error("Failed to transfer call:", error);
       res.status(500).json({ message: error.message || "Failed to transfer call" });
+    }
+  });
+
+  app.post("/api/voice/hold", isAuthenticated, async (req: any, res) => {
+    try {
+      const { callSid } = req.body;
+      if (!callSid) {
+        return res.status(400).json({ message: "callSid is required" });
+      }
+      const parentCallSid = await holdCall(callSid);
+      res.json({ success: true, message: "Call placed on hold", parentCallSid });
+    } catch (error: any) {
+      console.error("Failed to hold call:", error);
+      res.status(500).json({ message: error.message || "Failed to hold call" });
+    }
+  });
+
+  app.post("/api/voice/unhold", isAuthenticated, async (req: any, res) => {
+    try {
+      const { callSid } = req.body;
+      if (!callSid) {
+        return res.status(400).json({ message: "callSid is required" });
+      }
+      await unholdCall(callSid);
+      res.json({ success: true, message: "Call resumed from hold" });
+    } catch (error: any) {
+      console.error("Failed to unhold call:", error);
+      res.status(500).json({ message: error.message || "Failed to resume call" });
+    }
+  });
+
+  app.post("/api/voice/hangup-held", isAuthenticated, async (req: any, res) => {
+    try {
+      const { callSid } = req.body;
+      if (!callSid) {
+        return res.status(400).json({ message: "callSid is required" });
+      }
+      const twilioClient = getClient();
+      await twilioClient.calls(callSid).update({ status: "completed" });
+      res.json({ success: true, message: "Held call terminated" });
+    } catch (error: any) {
+      console.error("Failed to hang up held call:", error);
+      res.status(500).json({ message: error.message || "Failed to end held call" });
     }
   });
 

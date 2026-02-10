@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded, Grid3X3, Delete, ArrowRightLeft } from "lucide-react";
+import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded, Grid3X3, Delete, ArrowRightLeft, Pause, Play } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -58,8 +58,14 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
   const [showTransfer, setShowTransfer] = useState(false);
   const [customTransferNumber, setCustomTransferNumber] = useState("");
   const [isTransferring, setIsTransferring] = useState(false);
+  const [isOnHold, setIsOnHold] = useState(false);
+  const [isTogglingHold, setIsTogglingHold] = useState(false);
+  const [holdCallSid, setHoldCallSid] = useState<string | null>(null);
+  const [pendingResume, setPendingResume] = useState(false);
   const deviceRef = useRef<any>(null);
   const hasInitiatedDialRef = useRef<string | null>(null);
+  const isOnHoldRef = useRef(false);
+  const pendingResumeRef = useRef(false);
 
   const { data: voiceStatus } = useQuery<{
     configured: boolean;
@@ -149,8 +155,49 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
         console.log("Call parameters:", call.parameters);
         console.log("Custom parameters:", call.customParameters);
         
-        // Get contact name from custom parameters passed via TwiML
         const contactName = call.customParameters?.get("contactName") || "Unknown Caller";
+
+        if (isOnHoldRef.current && pendingResumeRef.current) {
+          console.log("Auto-accepting call resumed from hold");
+          setActiveCall(call);
+          call.accept();
+          setCallStatus("in-call");
+          setIsOnHold(false);
+          isOnHoldRef.current = false;
+          setHoldCallSid(null);
+          setPendingResume(false);
+          pendingResumeRef.current = false;
+
+          call.on("disconnect", () => {
+            if (isOnHoldRef.current) {
+              setActiveCall(null);
+              return;
+            }
+            setCallStatus("ready");
+            setActiveCall(null);
+            setIncomingCall(null);
+            setIsOnHold(false);
+            isOnHoldRef.current = false;
+            setHoldCallSid(null);
+          setPendingResume(false);
+          pendingResumeRef.current = false;
+            queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
+          });
+
+          call.on("cancel", () => {
+            setCallStatus("ready");
+            setActiveCall(null);
+            setIncomingCall(null);
+            setIsOnHold(false);
+            isOnHoldRef.current = false;
+            setHoldCallSid(null);
+          setPendingResume(false);
+          pendingResumeRef.current = false;
+            queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
+          });
+
+          return;
+        }
         
         setIncomingCall({
           callSid: call.parameters.CallSid,
@@ -161,14 +208,30 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
         setCallStatus("ringing");
 
         call.on("accept", () => {
+          if (isOnHoldRef.current) {
+            setIsOnHold(false);
+            isOnHoldRef.current = false;
+            setHoldCallSid(null);
+          setPendingResume(false);
+          pendingResumeRef.current = false;
+          }
           setCallStatus("in-call");
           setIncomingCall(null);
         });
 
         call.on("disconnect", () => {
+          if (isOnHoldRef.current) {
+            setActiveCall(null);
+            return;
+          }
           setCallStatus("ready");
           setActiveCall(null);
           setIncomingCall(null);
+          setIsOnHold(false);
+          isOnHoldRef.current = false;
+          setHoldCallSid(null);
+          setPendingResume(false);
+          pendingResumeRef.current = false;
           queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
         });
 
@@ -176,6 +239,11 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
           setCallStatus("ready");
           setActiveCall(null);
           setIncomingCall(null);
+          setIsOnHold(false);
+          isOnHoldRef.current = false;
+          setHoldCallSid(null);
+          setPendingResume(false);
+          pendingResumeRef.current = false;
           toast({
             title: "Missed Call",
             description: `Call from ${call.parameters.From} was missed`,
@@ -218,6 +286,7 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
       activeCall.disconnect();
       setCallStatus("ready");
       setActiveCall(null);
+      setIsOnHold(false);
     }
   }, [activeCall]);
 
@@ -228,6 +297,92 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
       setIsMuted(newMuted);
     }
   }, [activeCall, isMuted]);
+
+  const toggleHold = useCallback(async () => {
+    if (isOnHold && holdCallSid) {
+      try {
+        setIsTogglingHold(true);
+        setPendingResume(true);
+        pendingResumeRef.current = true;
+
+        const response = await fetch("/api/voice/unhold", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ callSid: holdCallSid }),
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          setPendingResume(false);
+          pendingResumeRef.current = false;
+          throw new Error(err.message || "Resume failed");
+        }
+
+        toast({
+          title: "Resuming Call",
+          description: "Reconnecting to the caller...",
+        });
+      } catch (error: any) {
+        toast({
+          title: "Resume Failed",
+          description: error.message || "Failed to resume call.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsTogglingHold(false);
+      }
+      return;
+    }
+
+    if (!activeCall) return;
+
+    const callSid = activeCall.parameters?.CallSid;
+    if (!callSid) {
+      toast({
+        title: "Hold Failed",
+        description: "Cannot identify active call.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsTogglingHold(true);
+      isOnHoldRef.current = true;
+
+      const response = await fetch("/api/voice/hold", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callSid }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        isOnHoldRef.current = false;
+        setHoldCallSid(null);
+        throw new Error(err.message || "Hold failed");
+      }
+
+      const data = await response.json();
+      setHoldCallSid(data.parentCallSid || callSid);
+      setIsOnHold(true);
+      setCallStatus("in-call");
+      toast({
+        title: "Call On Hold",
+        description: "Caller is hearing hold music.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Hold Failed",
+        description: error.message || "Failed to hold call.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTogglingHold(false);
+    }
+  }, [activeCall, isOnHold, holdCallSid, toast]);
 
   const transferCall = useCallback(async (transferTo: string) => {
     if (!activeCall) return;
@@ -314,11 +469,18 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
 
       call.on("disconnect", () => {
         console.log("Outbound call disconnected");
+        if (isOnHoldRef.current) {
+          setActiveCall(null);
+          return;
+        }
         setCallStatus("ready");
         setActiveCall(null);
         setOutboundNumber(null);
         setOutboundContactName(null);
         setShowDialPad(false);
+        setIsOnHold(false);
+        isOnHoldRef.current = false;
+        setHoldCallSid(null);
         queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
       });
 
@@ -328,6 +490,9 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
         setActiveCall(null);
         setOutboundNumber(null);
         setOutboundContactName(null);
+        setIsOnHold(false);
+        isOnHoldRef.current = false;
+        setHoldCallSid(null);
       });
 
       call.on("error", (error: any) => {
@@ -472,7 +637,8 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                 {callStatus === "ready" && "Ready"}
                 {callStatus === "ringing" && "Incoming Call"}
                 {callStatus === "calling" && "Dialing..."}
-                {callStatus === "in-call" && "On Call"}
+                {callStatus === "in-call" && !isOnHold && "On Call"}
+                {callStatus === "in-call" && isOnHold && "On Hold"}
                 {callStatus === "error" && "Error"}
               </Badge>
               {voiceStatus.phoneNumber && (
@@ -530,6 +696,18 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                   >
                     {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                   </Button>
+                  {callStatus === "in-call" && (
+                    <Button
+                      onClick={toggleHold}
+                      variant="outline"
+                      size="sm"
+                      disabled={isTogglingHold}
+                      className={isOnHold ? "flex-1 toggle-elevate toggle-elevated" : "flex-1"}
+                      data-testid="button-hold-outbound"
+                    >
+                      {isOnHold ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                    </Button>
+                  )}
                   {callStatus === "in-call" && (
                     <Button
                       onClick={() => setShowTransfer(!showTransfer)}
@@ -600,6 +778,61 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {isOnHold && !activeCall && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Pause className="h-5 w-5 text-amber-600" />
+                  <span className="font-medium">Call On Hold</span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Caller is hearing hold music
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={toggleHold}
+                    disabled={isTogglingHold}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    data-testid="button-resume-hold"
+                  >
+                    <Play className="h-4 w-4 mr-1" />
+                    {isTogglingHold ? "Resuming..." : "Resume Call"}
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (holdCallSid) {
+                        try {
+                          await fetch("/api/voice/hangup-held", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ callSid: holdCallSid }),
+                            credentials: "include",
+                          });
+                        } catch (err) {
+                          console.error("Failed to terminate held call:", err);
+                        }
+                      }
+                      setIsOnHold(false);
+                      isOnHoldRef.current = false;
+                      setHoldCallSid(null);
+          setPendingResume(false);
+          pendingResumeRef.current = false;
+                      setCallStatus("ready");
+                      setActiveCall(null);
+                      setOutboundNumber(null);
+                      setOutboundContactName(null);
+                      queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
+                    }}
+                    variant="destructive"
+                    className="flex-1"
+                    data-testid="button-end-held-call"
+                  >
+                    <PhoneOff className="h-4 w-4 mr-1" />
+                    End Call
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -685,6 +918,27 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                       </>
                     )}
                   </Button>
+                  <Button
+                    onClick={toggleHold}
+                    variant="outline"
+                    disabled={isTogglingHold}
+                    className={isOnHold ? "flex-1 toggle-elevate toggle-elevated" : "flex-1"}
+                    data-testid="button-hold-incoming"
+                  >
+                    {isOnHold ? (
+                      <>
+                        <Play className="h-4 w-4 mr-1" />
+                        Resume
+                      </>
+                    ) : (
+                      <>
+                        <Pause className="h-4 w-4 mr-1" />
+                        Hold
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <div className="flex gap-2 mt-2">
                   <Button
                     onClick={() => setShowTransfer(!showTransfer)}
                     variant="outline"

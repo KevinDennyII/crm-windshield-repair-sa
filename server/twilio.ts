@@ -13,7 +13,7 @@ const apiKeySecret = process.env.TWILIO_API_KEY_SECRET;
 
 let client: twilio.Twilio | null = null;
 
-function getClient(): twilio.Twilio {
+export function getClient(): twilio.Twilio {
   if (!accountSid || !authToken) {
     throw new Error("Twilio credentials not configured. Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.");
   }
@@ -166,6 +166,58 @@ export async function transferActiveCall(callSid: string, transferTo: string, ba
     }
   } catch (err) {
     console.error("Could not fetch call details, using provided callSid:", err);
+  }
+
+  await twilioClient.calls(targetCallSid).update({ twiml });
+}
+
+export function generateHoldTwiml(): string {
+  const response = new twilio.twiml.VoiceResponse();
+  response.play({ loop: 0 }, "https://api.twilio.com/cowbell.mp3");
+  return response.toString();
+}
+
+export function generateUnholdTwiml(): string {
+  const response = new twilio.twiml.VoiceResponse();
+  const dial = response.dial({
+    callerId: twilioPhoneNumber || undefined,
+  });
+  const clientEl = dial.client({});
+  clientEl.identity(SHARED_AGENT_IDENTITY);
+  clientEl.parameter({ name: "contactName", value: "Resumed from hold" });
+  return response.toString();
+}
+
+export async function holdCall(callSid: string): Promise<string> {
+  const twilioClient = getClient();
+  const twiml = generateHoldTwiml();
+
+  let targetCallSid = callSid;
+  try {
+    const call = await twilioClient.calls(callSid).fetch();
+    if (call.parentCallSid) {
+      targetCallSid = call.parentCallSid;
+    }
+  } catch (err) {
+    console.error("Could not fetch call details for hold, using provided callSid:", err);
+  }
+
+  await twilioClient.calls(targetCallSid).update({ twiml });
+  return targetCallSid;
+}
+
+export async function unholdCall(callSid: string): Promise<void> {
+  const twilioClient = getClient();
+  const twiml = generateUnholdTwiml();
+
+  let targetCallSid = callSid;
+  try {
+    const call = await twilioClient.calls(callSid).fetch();
+    if (call.parentCallSid) {
+      targetCallSid = call.parentCallSid;
+    }
+  } catch (err) {
+    console.error("Could not fetch call details for unhold, using provided callSid:", err);
   }
 
   await twilioClient.calls(targetCallSid).update({ twiml });
