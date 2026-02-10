@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs } from "@shared/schema";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
-import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, generateForwardTwiml, validateTwilioSignature } from "./twilio";
+import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, generateForwardTwiml, validateTwilioSignature, transferActiveCall, generateTransferFallbackTwiml } from "./twilio";
 import type { CallForwardingConfig } from "./twilio";
 import { isBluehostConfigured, getBluehostEmail, getBluehostEmails, sendBluehostEmail, replyToBluehostEmail } from "./bluehost";
 import { isCalendarConfigured, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } from "./calendar";
@@ -1756,6 +1756,45 @@ Please let us know of any changes.`;
     } catch (error: any) {
       console.error("Whisper endpoint error:", error);
       res.send(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
+    }
+  });
+
+  app.post("/api/voice/transfer", isAuthenticated, async (req: any, res) => {
+    try {
+      const { callSid, transferTo } = req.body;
+      if (!callSid || !transferTo) {
+        return res.status(400).json({ message: "callSid and transferTo are required" });
+      }
+
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host;
+      const baseUrl = `${protocol}://${host}`;
+
+      await transferActiveCall(callSid, transferTo, baseUrl);
+      res.json({ success: true, message: `Transferring call to ${transferTo}` });
+    } catch (error: any) {
+      console.error("Failed to transfer call:", error);
+      res.status(500).json({ message: error.message || "Failed to transfer call" });
+    }
+  });
+
+  app.post("/api/voice/transfer-fallback", async (req, res) => {
+    res.set("Content-Type", "text/xml");
+    try {
+      const { DialCallStatus } = req.body;
+      console.log("Transfer fallback - DialCallStatus:", DialCallStatus);
+
+      if (DialCallStatus === "completed") {
+        const response = new (await import("twilio")).default.twiml.VoiceResponse();
+        response.hangup();
+        return res.send(response.toString());
+      }
+
+      const twiml = generateTransferFallbackTwiml();
+      res.send(twiml);
+    } catch (error: any) {
+      console.error("Transfer fallback error:", error);
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say>Transfer failed. Please hold.</Say></Response>`);
     }
   });
 

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded, Grid3X3, Delete } from "lucide-react";
+import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded, Grid3X3, Delete, ArrowRightLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -55,6 +55,9 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
   const [fwdWhisper, setFwdWhisper] = useState("");
   const [outboundNumber, setOutboundNumber] = useState<string | null>(null);
   const [outboundContactName, setOutboundContactName] = useState<string | null>(null);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [customTransferNumber, setCustomTransferNumber] = useState("");
+  const [isTransferring, setIsTransferring] = useState(false);
   const deviceRef = useRef<any>(null);
   const hasInitiatedDialRef = useRef<string | null>(null);
 
@@ -225,6 +228,54 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
       setIsMuted(newMuted);
     }
   }, [activeCall, isMuted]);
+
+  const transferCall = useCallback(async (transferTo: string) => {
+    if (!activeCall) return;
+
+    const callSid = activeCall.parameters?.CallSid;
+    if (!callSid) {
+      toast({
+        title: "Transfer Failed",
+        description: "Cannot identify active call for transfer.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsTransferring(true);
+      const response = await fetch("/api/voice/transfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callSid, transferTo }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || "Transfer failed");
+      }
+
+      toast({
+        title: "Call Transferred",
+        description: `Call is being transferred to ${transferTo}. If unanswered, it will return to you.`,
+      });
+
+      activeCall.disconnect();
+      setActiveCall(null);
+      setCallStatus("ready");
+      setShowTransfer(false);
+      setCustomTransferNumber("");
+    } catch (error: any) {
+      toast({
+        title: "Transfer Failed",
+        description: error.message || "Failed to transfer the call.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTransferring(false);
+    }
+  }, [activeCall, toast]);
 
   // Initiate an outbound call
   const makeOutboundCall = useCallback(async (phoneNumber: string, contactName?: string) => {
@@ -482,6 +533,18 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                   >
                     {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                   </Button>
+                  {callStatus === "in-call" && (
+                    <Button
+                      onClick={() => setShowTransfer(!showTransfer)}
+                      variant="outline"
+                      size="sm"
+                      className={showTransfer ? "flex-1 toggle-elevate toggle-elevated" : "flex-1"}
+                      data-testid="button-transfer-outbound"
+                    >
+                      <ArrowRightLeft className="h-4 w-4 mr-1" />
+                      Transfer
+                    </Button>
+                  )}
                   <Button
                     onClick={hangup}
                     variant="destructive"
@@ -493,6 +556,53 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                     End
                   </Button>
                 </div>
+                {showTransfer && callStatus === "in-call" && (
+                  <div className="mt-3 border rounded-lg p-3 space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Transfer to:</p>
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="justify-start"
+                        disabled={isTransferring}
+                        onClick={() => transferCall("702-325-1702")}
+                        data-testid="button-transfer-sara"
+                      >
+                        <PhoneForwarded className="h-4 w-4 mr-2" />
+                        Sara (702-325-1702)
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="justify-start"
+                        disabled={isTransferring}
+                        onClick={() => transferCall("956-775-7266")}
+                        data-testid="button-transfer-christian"
+                      >
+                        <PhoneForwarded className="h-4 w-4 mr-2" />
+                        Christian (956-775-7266)
+                      </Button>
+                    </div>
+                    <div className="flex gap-1 mt-1">
+                      <Input
+                        placeholder="Custom number"
+                        value={customTransferNumber}
+                        onChange={(e) => setCustomTransferNumber(e.target.value)}
+                        className="text-sm"
+                        data-testid="input-transfer-custom-number"
+                      />
+                      <Button
+                        variant="default"
+                        size="sm"
+                        disabled={isTransferring || !customTransferNumber.trim()}
+                        onClick={() => transferCall(customTransferNumber)}
+                        data-testid="button-transfer-custom"
+                      >
+                        {isTransferring ? "..." : "Go"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -579,6 +689,15 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                     )}
                   </Button>
                   <Button
+                    onClick={() => setShowTransfer(!showTransfer)}
+                    variant="outline"
+                    className={showTransfer ? "flex-1 toggle-elevate toggle-elevated" : "flex-1"}
+                    data-testid="button-transfer-incoming"
+                  >
+                    <ArrowRightLeft className="h-4 w-4 mr-1" />
+                    Transfer
+                  </Button>
+                  <Button
                     onClick={hangup}
                     variant="destructive"
                     className="flex-1"
@@ -588,6 +707,53 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                     Hang Up
                   </Button>
                 </div>
+                {showTransfer && (
+                  <div className="mt-3 border rounded-lg p-3 space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Transfer to:</p>
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="justify-start"
+                        disabled={isTransferring}
+                        onClick={() => transferCall("702-325-1702")}
+                        data-testid="button-transfer-sara-incoming"
+                      >
+                        <PhoneForwarded className="h-4 w-4 mr-2" />
+                        Sara (702-325-1702)
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="justify-start"
+                        disabled={isTransferring}
+                        onClick={() => transferCall("956-775-7266")}
+                        data-testid="button-transfer-christian-incoming"
+                      >
+                        <PhoneForwarded className="h-4 w-4 mr-2" />
+                        Christian (956-775-7266)
+                      </Button>
+                    </div>
+                    <div className="flex gap-1 mt-1">
+                      <Input
+                        placeholder="Custom number"
+                        value={customTransferNumber}
+                        onChange={(e) => setCustomTransferNumber(e.target.value)}
+                        className="text-sm"
+                        data-testid="input-transfer-custom-incoming"
+                      />
+                      <Button
+                        variant="default"
+                        size="sm"
+                        disabled={isTransferring || !customTransferNumber.trim()}
+                        onClick={() => transferCall(customTransferNumber)}
+                        data-testid="button-transfer-custom-incoming"
+                      >
+                        {isTransferring ? "..." : "Go"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -117,6 +117,45 @@ export function generateForwardTwiml(forwardingNumber: string, whisperMessage: s
   return response.toString();
 }
 
+export function generateTransferTwiml(transferTo: string, fallbackUrl: string): string {
+  const response = new twilio.twiml.VoiceResponse();
+
+  let formattedNumber = transferTo.replace(/\D/g, "");
+  if (formattedNumber.length === 10) {
+    formattedNumber = "+1" + formattedNumber;
+  } else if (!formattedNumber.startsWith("+")) {
+    formattedNumber = "+" + formattedNumber;
+  }
+
+  const dial = response.dial({
+    callerId: twilioPhoneNumber || undefined,
+    timeout: 30,
+    action: fallbackUrl,
+    method: "POST",
+  });
+  dial.number(formattedNumber);
+
+  return response.toString();
+}
+
+export function generateTransferFallbackTwiml(): string {
+  const response = new twilio.twiml.VoiceResponse();
+  const dial = response.dial({
+    callerId: twilioPhoneNumber || undefined,
+  });
+  const clientEl = dial.client({});
+  clientEl.identity(SHARED_AGENT_IDENTITY);
+  clientEl.parameter({ name: "contactName", value: "Transferred call returned" });
+  return response.toString();
+}
+
+export async function transferActiveCall(callSid: string, transferTo: string, baseUrl: string): Promise<void> {
+  const twilioClient = getClient();
+  const fallbackUrl = `${baseUrl}/api/voice/transfer-fallback`;
+  const twiml = generateTransferTwiml(transferTo, fallbackUrl);
+  await twilioClient.calls(callSid).update({ twiml });
+}
+
 export function validateTwilioSignature(url: string, params: Record<string, string>, signature: string): boolean {
   if (!authToken) return false;
   return twilio.validateRequest(authToken, signature, url, params);
