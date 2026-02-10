@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Device } from "@twilio/voice-sdk";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -119,8 +120,6 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
       setIsConnecting(true);
       const { token, identity } = await tokenMutation.mutateAsync();
 
-      const { Device } = await import("@twilio/voice-sdk");
-      
       const newDevice = new Device(token, {
         edge: "ashburn",
         logLevel: 1,
