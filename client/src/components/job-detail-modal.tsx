@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { triggerOutboundCall } from "@/App";
 import { useQuery } from "@tanstack/react-query";
+import { type Contact } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -572,6 +573,70 @@ export function JobDetailModal({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const [customerSuggestions, setCustomerSuggestions] = useState<Contact[]>([]);
+  const [activeSearchField, setActiveSearchField] = useState<string | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const businessDropdownRef = useRef<HTMLDivElement | null>(null);
+  const lastNameDropdownRef = useRef<HTMLDivElement | null>(null);
+  const phoneDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const searchCustomers = useCallback((query: string, field: "businessName" | "lastName" | "phone") => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (!query || query.trim().length < 2) {
+      setCustomerSuggestions([]);
+      setActiveSearchField(null);
+      return;
+    }
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search-customers?q=${encodeURIComponent(query)}&field=${field}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCustomerSuggestions(data);
+          setActiveSearchField(field);
+        }
+      } catch {
+        setCustomerSuggestions([]);
+      }
+    }, 300);
+  }, []);
+
+  const selectCustomer = useCallback((contact: Contact) => {
+    setFormData((prev) => ({
+      ...prev,
+      firstName: contact.firstName || prev.firstName,
+      lastName: contact.lastName || prev.lastName,
+      phone: contact.phone || prev.phone,
+      email: contact.email || prev.email || "",
+      streetAddress: contact.streetAddress || prev.streetAddress || "",
+      city: contact.city || prev.city || "",
+      state: contact.state || prev.state || "",
+      zipCode: contact.zipCode || prev.zipCode || "",
+      businessName: contact.businessName || prev.businessName || "",
+      isBusiness: contact.isBusiness || prev.isBusiness || false,
+      customerType: (contact.category === "dealer" || contact.category === "fleet" || contact.category === "subcontractor")
+        ? contact.category as any
+        : prev.customerType,
+    }));
+    setCustomerSuggestions([]);
+    setActiveSearchField(null);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const isInsideDropdown = [businessDropdownRef, lastNameDropdownRef, phoneDropdownRef].some(
+        (ref) => ref.current && ref.current.contains(target)
+      );
+      if (!isInsideDropdown) {
+        setCustomerSuggestions([]);
+        setActiveSearchField(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleAddVehicle = () => {
     const newVehicle = createDefaultVehicle();
     setVehicles((prev) => [...prev, newVehicle]);
@@ -883,15 +948,35 @@ export function JobDetailModal({
 
                     {formData.isBusiness && (
                       <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="grid gap-2">
+                        <div className="grid gap-2 relative">
                           <Label htmlFor="businessName">Business Name</Label>
                           <Input
                             id="businessName"
                             value={formData.businessName}
-                            onChange={(e) => handleChange("businessName", e.target.value)}
+                            onChange={(e) => {
+                              handleChange("businessName", e.target.value);
+                              searchCustomers(e.target.value, "businessName");
+                            }}
                             placeholder="Company Name"
+                            autoComplete="off"
                             data-testid="input-business-name"
                           />
+                          {activeSearchField === "businessName" && customerSuggestions.length > 0 && (
+                            <div ref={businessDropdownRef} className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto" data-testid="dropdown-customer-suggestions-business">
+                              {customerSuggestions.map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-sm hover-elevate cursor-pointer flex flex-col"
+                                  onClick={() => selectCustomer(c)}
+                                  data-testid={`suggestion-customer-${c.id}`}
+                                >
+                                  <span className="font-medium">{c.businessName || `${c.firstName} ${c.lastName}`}</span>
+                                  <span className="text-xs text-muted-foreground">{c.phone} {c.email ? `· ${c.email}` : ""}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="grid gap-2">
                           <Label>Account Type</Label>
@@ -1030,16 +1115,36 @@ export function JobDetailModal({
                           data-testid="input-first-name"
                         />
                       </div>
-                      <div className="grid gap-2">
+                      <div className="grid gap-2 relative">
                         <Label htmlFor="lastName">Last Name *</Label>
                         <Input
                           id="lastName"
                           value={formData.lastName}
-                          onChange={(e) => handleChange("lastName", e.target.value)}
+                          onChange={(e) => {
+                            handleChange("lastName", e.target.value);
+                            searchCustomers(e.target.value, "lastName");
+                          }}
                           placeholder="Smith"
                           required
+                          autoComplete="off"
                           data-testid="input-last-name"
                         />
+                        {activeSearchField === "lastName" && customerSuggestions.length > 0 && (
+                          <div ref={lastNameDropdownRef} className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto" data-testid="dropdown-customer-suggestions-lastname">
+                            {customerSuggestions.map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover-elevate cursor-pointer flex flex-col"
+                                onClick={() => selectCustomer(c)}
+                                data-testid={`suggestion-customer-${c.id}`}
+                              >
+                                <span className="font-medium">{c.firstName} {c.lastName}</span>
+                                <span className="text-xs text-muted-foreground">{c.phone} {c.email ? `· ${c.email}` : ""}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1065,16 +1170,36 @@ export function JobDetailModal({
                     )}
 
                     <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="grid gap-2">
+                      <div className="grid gap-2 relative">
                         <Label htmlFor="phone">Phone *</Label>
                         <Input
                           id="phone"
                           value={formData.phone}
-                          onChange={(e) => handleChange("phone", e.target.value)}
+                          onChange={(e) => {
+                            handleChange("phone", e.target.value);
+                            searchCustomers(e.target.value, "phone");
+                          }}
                           placeholder="(555) 123-4567"
                           required
+                          autoComplete="off"
                           data-testid="input-phone"
                         />
+                        {activeSearchField === "phone" && customerSuggestions.length > 0 && (
+                          <div ref={phoneDropdownRef} className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto" data-testid="dropdown-customer-suggestions-phone">
+                            {customerSuggestions.map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover-elevate cursor-pointer flex flex-col"
+                                onClick={() => selectCustomer(c)}
+                                data-testid={`suggestion-customer-${c.id}`}
+                              >
+                                <span className="font-medium">{c.firstName} {c.lastName}</span>
+                                <span className="text-xs text-muted-foreground">{c.phone} {c.email ? `· ${c.email}` : ""}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {formData.phone && (
                           <div className="flex items-center gap-2 flex-wrap">
                             <Button

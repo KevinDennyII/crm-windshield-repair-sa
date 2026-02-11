@@ -2263,6 +2263,27 @@ Please let us know of any changes.`;
     }
   });
 
+  // ============ CUSTOMER SEARCH (Auto-Populate) ============
+
+  app.get("/api/search-customers", isAuthenticated, async (req, res) => {
+    try {
+      const query = (req.query.q as string) || "";
+      const field = (req.query.field as string) || "lastName";
+      const validFields = ["businessName", "lastName", "phone"];
+      if (!validFields.includes(field)) {
+        return res.status(400).json({ message: "Invalid field. Must be businessName, lastName, or phone" });
+      }
+      if (!query || query.trim().length < 2) {
+        return res.json([]);
+      }
+      const results = await storage.searchContacts(query, field as "businessName" | "lastName" | "phone");
+      res.json(results);
+    } catch (error: any) {
+      console.error("Search customers error:", error);
+      res.status(500).json({ message: error.message || "Failed to search customers" });
+    }
+  });
+
   // ============ CONTACTS ROUTES ============
   
   app.get("/api/contacts", async (req, res) => {

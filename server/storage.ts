@@ -1,7 +1,7 @@
 import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, type ActivityLog, type InsertActivityLog, type ProcessedLead, type InsertProcessedLead, type TechnicianJobData, type InsertTechnicianJobData, type TechMaterial, type InsertTechMaterial, jobs, users, customerReminders, contacts, activityLogs, processedLeads, technicianJobData, techMaterialsList } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, sql, max, and, gte, lte, isNotNull } from "drizzle-orm";
+import { eq, desc, sql, max, and, gte, lte, isNotNull, ilike, or } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -24,6 +24,7 @@ export interface IStorage {
   
   // Contacts
   getAllContacts(): Promise<Contact[]>;
+  searchContacts(query: string, field: "businessName" | "lastName" | "phone"): Promise<Contact[]>;
   getContact(id: string): Promise<Contact | undefined>;
   getContactByPhone(phone: string): Promise<Contact | undefined>;
   createContact(contact: InsertContact): Promise<Contact>;
@@ -345,6 +346,39 @@ export class DatabaseStorage implements IStorage {
   // Contact methods
   async getAllContacts(): Promise<Contact[]> {
     const rows = await db.select().from(contacts).orderBy(desc(contacts.createdAt));
+    return rows.map(row => ({
+      id: row.id,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      phone: row.phone,
+      email: row.email ?? undefined,
+      streetAddress: row.streetAddress ?? undefined,
+      city: row.city ?? undefined,
+      state: row.state ?? undefined,
+      zipCode: row.zipCode ?? undefined,
+      category: (row.category as Contact["category"]) ?? "customer",
+      isBusiness: row.isBusiness ?? false,
+      businessName: row.businessName ?? undefined,
+      notes: row.notes ?? undefined,
+      autoSynced: row.autoSynced ?? false,
+      createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+      updatedAt: row.updatedAt?.toISOString() ?? new Date().toISOString(),
+    }));
+  }
+
+  async searchContacts(query: string, field: "businessName" | "lastName" | "phone"): Promise<Contact[]> {
+    if (!query || query.trim().length < 2) return [];
+    const searchTerm = `%${query.trim()}%`;
+    const columnMap = {
+      businessName: contacts.businessName,
+      lastName: contacts.lastName,
+      phone: contacts.phone,
+    };
+    const column = columnMap[field];
+    const rows = await db.select().from(contacts)
+      .where(ilike(column, searchTerm))
+      .orderBy(desc(contacts.updatedAt))
+      .limit(10);
     return rows.map(row => ({
       id: row.id,
       firstName: row.firstName,
