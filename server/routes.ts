@@ -1666,8 +1666,8 @@ Please let us know of any changes.`;
         }
       }
 
-      const { CallSid, CallStatus, CallDuration } = req.body;
-      console.log("Call status callback:", { CallSid, CallStatus, CallDuration });
+      const { CallSid, CallStatus, CallDuration, From, Direction } = req.body;
+      console.log("Call status callback:", { CallSid, CallStatus, CallDuration, From, Direction });
 
       const updateData: any = { status: CallStatus };
       if (CallDuration) {
@@ -1683,6 +1683,36 @@ Please let us know of any changes.`;
       await db.update(phoneCalls)
         .set(updateData)
         .where(eq(phoneCalls.callSid, CallSid));
+
+      if (['no-answer', 'busy', 'failed'].includes(CallStatus) && From && Direction === 'inbound') {
+        const twilioNumber = getTwilioPhoneNumber();
+        const callerNumber = From.replace(/\D/g, '');
+        const ownNumber = twilioNumber?.replace(/\D/g, '');
+        if (callerNumber && callerNumber !== ownNumber && isTwilioConfigured()) {
+          const [existingCall] = await db.select({ notes: phoneCalls.notes })
+            .from(phoneCalls)
+            .where(eq(phoneCalls.callSid, CallSid))
+            .limit(1);
+          const alreadySent = existingCall?.notes?.includes('auto-reply sent');
+          if (!alreadySent) {
+            try {
+              const autoReplyMessage =
+                "Thanks for reaching out to Windshield Repair SA! Sorry we missed your call\u2014we're currently assisting another customer. We'll call you back shortly!\n\n" +
+                "For a faster response, feel free to text us your VIN (or Year/Make/Model) and the service you're inquiring about. We will get back to you ASAP. Reply STOP to opt out.";
+              await sendSms(From, autoReplyMessage);
+              const currentNotes = existingCall?.notes || '';
+              await db.update(phoneCalls)
+                .set({ notes: currentNotes ? `${currentNotes} | auto-reply sent` : 'auto-reply sent' })
+                .where(eq(phoneCalls.callSid, CallSid));
+              console.log(`Auto-reply SMS sent to ${From} for missed call ${CallSid}`);
+            } catch (smsError: any) {
+              console.error(`Failed to send auto-reply SMS to ${From}:`, smsError.message);
+            }
+          } else {
+            console.log(`Auto-reply already sent for call ${CallSid}, skipping`);
+          }
+        }
+      }
 
       res.status(204).end();
     } catch (error: any) {
