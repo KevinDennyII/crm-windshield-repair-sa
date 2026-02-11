@@ -1725,8 +1725,8 @@ Please let us know of any changes.`;
   app.post("/api/voice/dial-action", async (req, res) => {
     res.set("Content-Type", "text/xml");
     try {
-      const { DialCallStatus, CallSid } = req.body;
-      console.log("Dial action received:", { DialCallStatus, CallSid });
+      const { DialCallStatus, CallSid, From } = req.body;
+      console.log("Dial action received:", { DialCallStatus, CallSid, From });
 
       // If the browser client answered, we're done
       if (DialCallStatus === "completed" || DialCallStatus === "answered") {
@@ -1757,12 +1757,43 @@ Please let us know of any changes.`;
           console.error("Failed to update call log with forwarding info:", logErr);
         }
       } else {
-        // No forwarding configured, just end the call with a message
+        // No forwarding configured - send auto-reply SMS and play voicemail
         const twilio = (await import("twilio")).default;
         const response = new twilio.twiml.VoiceResponse();
         response.say({ voice: "Polly.Joanna" }, "We're sorry, no one is available to take your call right now. Please try again later or leave a message after the beep.");
         response.record({ maxLength: 120, transcribe: false });
         res.send(response.toString());
+
+        if (From && isTwilioConfigured()) {
+          const twilioNumber = getTwilioPhoneNumber();
+          const callerDigits = From.replace(/\D/g, '');
+          const ownDigits = twilioNumber?.replace(/\D/g, '');
+          if (callerDigits && callerDigits !== ownDigits) {
+            (async () => {
+              try {
+                const [existingCall] = await db.select({ notes: phoneCalls.notes })
+                  .from(phoneCalls)
+                  .where(eq(phoneCalls.callSid, CallSid))
+                  .limit(1);
+                if (existingCall?.notes?.includes('auto-reply sent')) {
+                  console.log(`Auto-reply already sent for call ${CallSid}, skipping`);
+                  return;
+                }
+                const autoReplyMessage =
+                  "Thanks for reaching out to Windshield Repair SA! Sorry we missed your call\u2014we're currently assisting another customer. We'll call you back shortly!\n\n" +
+                  "For a faster response, feel free to text us your VIN (or Year/Make/Model) and the service you're inquiring about. We will get back to you ASAP. Reply STOP to opt out.";
+                await sendSms(From, autoReplyMessage);
+                const currentNotes = existingCall?.notes || '';
+                await db.update(phoneCalls)
+                  .set({ notes: currentNotes ? `${currentNotes} | auto-reply sent` : 'auto-reply sent' })
+                  .where(eq(phoneCalls.callSid, CallSid));
+                console.log(`Auto-reply SMS sent to ${From} for missed call ${CallSid} (via dial-action)`);
+              } catch (smsError: any) {
+                console.error(`Failed to send auto-reply SMS to ${From}:`, smsError.message);
+              }
+            })();
+          }
+        }
       }
     } catch (error: any) {
       console.error("Dial action error:", error);
