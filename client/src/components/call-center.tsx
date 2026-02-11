@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded, Grid3X3, Delete, ArrowRightLeft, Pause, Play } from "lucide-react";
+import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded, Grid3X3, Delete, ArrowRightLeft, Pause, Play, MessageSquare, Send } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -49,6 +50,10 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showDialPad, setShowDialPad] = useState(false);
+  const [showSms, setShowSms] = useState(false);
+  const [smsNumber, setSmsNumber] = useState("");
+  const [smsMessage, setSmsMessage] = useState("");
+  const [isSendingSms, setIsSendingSms] = useState(false);
   const [dialPadNumber, setDialPadNumber] = useState("");
   const [fwdNumber, setFwdNumber] = useState("");
   const [fwdTimeout, setFwdTimeout] = useState("5");
@@ -573,7 +578,7 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => { setShowDialPad(!showDialPad); setShowSettings(false); setShowHistory(false); }}
+              onClick={() => { setShowDialPad(!showDialPad); setShowSettings(false); setShowHistory(false); setShowSms(false); }}
               className={showDialPad ? "toggle-elevate toggle-elevated" : ""}
               data-testid="button-dial-pad"
             >
@@ -582,7 +587,26 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => { setShowSettings(!showSettings); setShowHistory(false); setShowDialPad(false); }}
+              onClick={() => {
+                const newShow = !showSms;
+                setShowSms(newShow);
+                setShowDialPad(false);
+                setShowSettings(false);
+                setShowHistory(false);
+                if (newShow && !smsNumber) {
+                  const callerNum = incomingCall?.from || outboundNumber || "";
+                  if (callerNum) setSmsNumber(callerNum);
+                }
+              }}
+              className={showSms ? "toggle-elevate toggle-elevated" : ""}
+              data-testid="button-sms-compose"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => { setShowSettings(!showSettings); setShowHistory(false); setShowDialPad(false); setShowSms(false); }}
               data-testid="button-call-forwarding-settings"
             >
               <PhoneForwarded className="h-4 w-4" />
@@ -590,7 +614,7 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => { setShowHistory(!showHistory); setShowSettings(false); setShowDialPad(false); }}
+              onClick={() => { setShowHistory(!showHistory); setShowSettings(false); setShowDialPad(false); setShowSms(false); }}
               data-testid="button-call-history"
             >
               <History className="h-4 w-4" />
@@ -1144,6 +1168,67 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                       Calls will ring in browser for {forwardingSettings.timeoutSeconds}s, then forward to {formatPhoneNumber(forwardingSettings.forwardingNumber)}.
                     </p>
                   )}
+                </div>
+              </div>
+            )}
+
+            {showSms && (
+              <div className="border-t pt-3 mt-3">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  Send SMS
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs">Phone Number</Label>
+                    <Input
+                      value={smsNumber}
+                      onChange={(e) => setSmsNumber(e.target.value)}
+                      placeholder="Enter phone number"
+                      data-testid="input-sms-number"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Message</Label>
+                    <Textarea
+                      value={smsMessage}
+                      onChange={(e) => setSmsMessage(e.target.value)}
+                      placeholder="Type your message..."
+                      rows={3}
+                      className="resize-none text-sm"
+                      data-testid="input-sms-message"
+                    />
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={!smsNumber.replace(/\D/g, "") || !smsMessage.trim() || isSendingSms}
+                    onClick={async () => {
+                      try {
+                        setIsSendingSms(true);
+                        await apiRequest("POST", "/api/sms/send", {
+                          to: smsNumber,
+                          body: smsMessage,
+                        });
+                        toast({
+                          title: "SMS Sent",
+                          description: `Message sent to ${smsNumber}`,
+                        });
+                        setSmsMessage("");
+                      } catch (error: any) {
+                        toast({
+                          title: "SMS Failed",
+                          description: error.message || "Failed to send SMS",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsSendingSms(false);
+                      }
+                    }}
+                    data-testid="button-send-sms"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    {isSendingSms ? "Sending..." : "Send SMS"}
+                  </Button>
                 </div>
               </div>
             )}
