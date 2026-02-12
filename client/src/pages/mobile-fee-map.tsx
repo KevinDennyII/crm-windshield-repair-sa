@@ -5,13 +5,66 @@ import { MapPin } from "lucide-react";
 
 const SA_CENTER = { lat: 29.4241, lng: -98.4936 };
 
-const ZONES = [
+const LOOP_1604_COORDS = [
+  { lat: 29.560, lng: -98.252 },
+  { lat: 29.540, lng: -98.280 },
+  { lat: 29.520, lng: -98.310 },
+  { lat: 29.495, lng: -98.335 },
+  { lat: 29.463, lng: -98.352 },
+  { lat: 29.430, lng: -98.365 },
+  { lat: 29.405, lng: -98.385 },
+  { lat: 29.380, lng: -98.415 },
+  { lat: 29.365, lng: -98.445 },
+  { lat: 29.350, lng: -98.470 },
+  { lat: 29.336, lng: -98.500 },
+  { lat: 29.332, lng: -98.538 },
+  { lat: 29.330, lng: -98.560 },
+  { lat: 29.335, lng: -98.590 },
+  { lat: 29.342, lng: -98.619 },
+  { lat: 29.355, lng: -98.650 },
+  { lat: 29.375, lng: -98.675 },
+  { lat: 29.393, lng: -98.689 },
+  { lat: 29.420, lng: -98.695 },
+  { lat: 29.453, lng: -98.688 },
+  { lat: 29.480, lng: -98.690 },
+  { lat: 29.510, lng: -98.690 },
+  { lat: 29.527, lng: -98.683 },
+  { lat: 29.550, lng: -98.670 },
+  { lat: 29.570, lng: -98.650 },
+  { lat: 29.584, lng: -98.625 },
+  { lat: 29.595, lng: -98.600 },
+  { lat: 29.610, lng: -98.570 },
+  { lat: 29.618, lng: -98.540 },
+  { lat: 29.620, lng: -98.510 },
+  { lat: 29.615, lng: -98.480 },
+  { lat: 29.612, lng: -98.450 },
+  { lat: 29.609, lng: -98.437 },
+  { lat: 29.603, lng: -98.410 },
+  { lat: 29.595, lng: -98.385 },
+  { lat: 29.590, lng: -98.360 },
+  { lat: 29.585, lng: -98.330 },
+  { lat: 29.578, lng: -98.300 },
+  { lat: 29.570, lng: -98.275 },
+  { lat: 29.560, lng: -98.252 },
+];
+
+const OUTER_ZONES = [
   { radius: 50, fee: "$50", color: "#EF4444", label: "Red Zone (50+ mi)", fillOpacity: 0.08 },
   { radius: 40, fee: "$35", color: "#EC4899", label: "Pink Zone (40-50 mi)", fillOpacity: 0.10 },
   { radius: 30, fee: "$25", color: "#8B5CF6", label: "Purple Zone (30-40 mi)", fillOpacity: 0.10 },
   { radius: 20, fee: "$20", color: "#3B82F6", label: "Blue Zone (20-30 mi)", fillOpacity: 0.10 },
   { radius: 15, fee: "$10", color: "#F59E0B", label: "Yellow Zone (15-20 mi)", fillOpacity: 0.12 },
-  { radius: 0,  fee: "$0",  color: "#22C55E", label: "Inside 1604 (0-15 mi)", fillOpacity: 0.12 },
+];
+
+const GREEN_ZONE = { fee: "$0", color: "#22C55E", label: "Inside 1604 (Loop)", fillOpacity: 0.12 };
+
+const ALL_ZONES_FOR_LEGEND = [
+  { fee: "$50", color: "#EF4444", label: "Red Zone (50+ mi)" },
+  { fee: "$35", color: "#EC4899", label: "Pink Zone (40-50 mi)" },
+  { fee: "$25", color: "#8B5CF6", label: "Purple Zone (30-40 mi)" },
+  { fee: "$20", color: "#3B82F6", label: "Blue Zone (20-30 mi)" },
+  { fee: "$10", color: "#F59E0B", label: "Yellow Zone (15-20 mi)" },
+  { fee: "$0",  color: "#22C55E", label: "Inside 1604 (Loop)" },
 ];
 
 const MILES_TO_METERS = 1609.34;
@@ -58,8 +111,7 @@ export default function MobileFeeMap() {
       ],
     });
 
-    const zoneCircles = ZONES.filter(z => z.radius > 0);
-    for (const zone of zoneCircles) {
+    for (const zone of OUTER_ZONES) {
       new google.maps.Circle({
         map,
         center: SA_CENTER,
@@ -72,15 +124,14 @@ export default function MobileFeeMap() {
       });
     }
 
-    const innerCircle = new google.maps.Circle({
+    new google.maps.Polygon({
       map,
-      center: SA_CENTER,
-      radius: 15 * MILES_TO_METERS,
-      strokeColor: "#22C55E",
+      paths: LOOP_1604_COORDS,
+      strokeColor: GREEN_ZONE.color,
       strokeOpacity: 0.9,
       strokeWeight: 3,
-      fillColor: "#22C55E",
-      fillOpacity: 0.08,
+      fillColor: GREEN_ZONE.color,
+      fillOpacity: GREEN_ZONE.fillOpacity,
     });
 
     new google.maps.Marker({
@@ -125,7 +176,7 @@ export default function MobileFeeMap() {
               <CardTitle className="text-base">Fee Zones</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {[...ZONES].reverse().map((zone) => (
+              {[...ALL_ZONES_FOR_LEGEND].reverse().map((zone) => (
                 <div
                   key={zone.label}
                   className="flex items-center justify-between gap-2 py-1.5"
