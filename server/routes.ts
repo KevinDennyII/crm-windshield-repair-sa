@@ -2284,6 +2284,10 @@ Please let us know of any changes.`;
     res.json({ configured: isPlacesConfigured() });
   });
 
+  app.get("/api/config/maps-key", (req, res) => {
+    res.json({ key: process.env.GOOGLE_MAPS_API_KEY || "" });
+  });
+
   // Google Places API - Autocomplete
   app.get("/api/places/autocomplete", async (req, res) => {
     try {

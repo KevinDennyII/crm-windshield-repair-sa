@@ -31,6 +31,7 @@ import Reports from "@/pages/reports";
 import Contacts from "@/pages/contacts";
 import AITools from "@/pages/ai-tools";
 import AIReceptionist from "@/pages/ai-receptionist";
+import MobileFeeMap from "@/pages/mobile-fee-map";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import {
@@ -95,6 +96,7 @@ function AdminCsrRouter() {
       <Route path="/csr-activity" component={CsrActivity} />
       <Route path="/ai-tools" component={AITools} />
       <Route path="/ai-receptionist" component={AIReceptionist} />
+      <Route path="/mobile-fee-map" component={MobileFeeMap} />
       <Route component={NotFound} />
     </Switch>
   );
