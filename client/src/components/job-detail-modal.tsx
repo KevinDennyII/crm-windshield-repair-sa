@@ -115,6 +115,7 @@ const stageLabels: Record<string, string> = {
   scheduled: "Scheduled",
   paid_completed: "Paid/Completed",
   lost_opportunity: "Lost Opportunity",
+  archived: "Archived",
 };
 
 const serviceTypeLabels: Record<string, string> = {

@@ -61,6 +61,7 @@ const stageLabels: Record<string, string> = {
   scheduled: "Scheduled",
   paid_completed: "Paid/Completed",
   lost_opportunity: "Lost",
+  archived: "Archived",
 };
 
 const leadSourceLabels: Record<string, string> = {
@@ -369,7 +370,7 @@ export default function Reports() {
     }
     
     return jobs.filter(job => {
-      const dateToCheck = job.pipelineStage === "paid_completed" 
+      const dateToCheck = (job.pipelineStage === "paid_completed" || job.pipelineStage === "archived")
         ? (job.installDate || job.createdAt) 
         : job.createdAt;
       if (!dateToCheck) return false;
@@ -378,7 +379,7 @@ export default function Reports() {
   }, [jobs, timePeriod, customStartDate, customEndDate]);
 
   const completedJobs = useMemo(() => 
-    filteredJobs.filter(job => job.pipelineStage === "paid_completed"),
+    filteredJobs.filter(job => job.pipelineStage === "paid_completed" || job.pipelineStage === "archived"),
   [filteredJobs]);
 
   // Financial metrics
@@ -466,7 +467,7 @@ export default function Reports() {
     };
     
     // Only include completed jobs with outstanding balance
-    jobs.filter(j => j.pipelineStage === "paid_completed").forEach(job => {
+    jobs.filter(j => j.pipelineStage === "paid_completed" || j.pipelineStage === "archived").forEach(job => {
       const outstanding = job.totalDue - job.amountPaid;
       if (outstanding <= 0) return;
       
@@ -501,7 +502,7 @@ export default function Reports() {
   const arByCustomer = useMemo(() => {
     const customerBalances: Record<string, { name: string; amount: 0; jobs: Job[] }> = {};
     
-    jobs.filter(j => j.pipelineStage === "paid_completed").forEach(job => {
+    jobs.filter(j => j.pipelineStage === "paid_completed" || j.pipelineStage === "archived").forEach(job => {
       const outstanding = job.totalDue - job.amountPaid;
       if (outstanding <= 0) return;
       
@@ -2105,6 +2106,7 @@ export default function Reports() {
                       <TableCell>
                         <Badge variant={
                           job.pipelineStage === "paid_completed" ? "default" :
+                          job.pipelineStage === "archived" ? "secondary" :
                           job.pipelineStage === "scheduled" ? "secondary" :
                           job.pipelineStage === "lost_opportunity" ? "destructive" :
                           "outline"

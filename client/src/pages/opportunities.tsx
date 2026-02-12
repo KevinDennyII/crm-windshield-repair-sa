@@ -9,6 +9,10 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAIContext } from "@/contexts/ai-context";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Archive, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
 
 export default function Opportunities() {
   const { toast } = useToast();
@@ -23,6 +27,7 @@ export default function Opportunities() {
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [jobForConfirmation, setJobForConfirmation] = useState<Job | null>(null);
   const [pendingSaveData, setPendingSaveData] = useState<{ previousStage: string; newData: InsertJob } | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   
   useEffect(() => {
     if (selectedJob && isModalOpen) {
@@ -211,6 +216,19 @@ export default function Opportunities() {
     },
   });
 
+  const unarchiveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/jobs/${id}/archive`, { action: "unarchive" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Job restored", description: "Job moved back to Paid/Completed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to restore job.", variant: "destructive" });
+    },
+  });
+
   const handleJobClick = (job: Job) => {
     setSelectedJob(job);
     setIsNewJob(false);
@@ -294,6 +312,13 @@ export default function Opportunities() {
     );
   }
 
+  const archivedJobs = jobs.filter(j => j.pipelineStage === "archived")
+    .sort((a, b) => {
+      const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+      const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+
   return (
     <>
       <KanbanBoard
@@ -302,6 +327,67 @@ export default function Opportunities() {
         onAddJob={handleAddJob}
         onMoveJob={handleMoveJob}
       />
+
+      {archivedJobs.length > 0 && (
+        <div className="px-4 pb-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowArchived(!showArchived)}
+            className="gap-2 text-muted-foreground"
+            data-testid="button-toggle-archived"
+          >
+            {showArchived ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            <Archive className="h-4 w-4" />
+            Archived Jobs
+            <Badge variant="secondary">{archivedJobs.length}</Badge>
+          </Button>
+
+          {showArchived && (
+            <Card className="mt-2">
+              <CardContent className="p-4">
+                <div className="space-y-2">
+                  {archivedJobs.map(job => (
+                    <div
+                      key={job.id}
+                      className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/50 hover-elevate cursor-pointer"
+                      onClick={() => handleJobClick(job)}
+                      data-testid={`archived-job-${job.id}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-xs text-muted-foreground font-mono">#{job.jobNumber}</span>
+                        <span className="font-medium truncate">
+                          {job.firstName} {job.lastName}
+                        </span>
+                        {job.completedAt && (
+                          <span className="text-xs text-muted-foreground">
+                            Completed {new Date(job.completedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">${Number(job.totalDue).toFixed(2)}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            unarchiveMutation.mutate(job.id);
+                          }}
+                          data-testid={`button-unarchive-${job.id}`}
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          Restore
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       <JobDetailModal
         job={selectedJob}

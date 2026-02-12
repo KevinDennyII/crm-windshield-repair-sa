@@ -122,8 +122,16 @@ A mobile-optimized interface for field technicians featuring:
 - **Date Cutoff**: Only processes emails received after Jan 31, 2026 noon UTC to avoid re-sending to already-contacted customers
 - **Auto-Response**: New leads automatically receive a confirmation email and SMS
 
+### Job Completion & Auto-Archiving
+- **completedAt Timestamp**: Automatically set when a job first transitions to "paid_completed" stage (not reset on subsequent edits)
+- **Sorting**: Paid/completed jobs are sorted by completedAt (newest first) in the kanban pipeline view
+- **Auto-Archive**: Background worker (hourly) moves jobs in "paid_completed" with completedAt > 2 weeks to "archived" stage
+- **Archived Jobs**: Hidden from main kanban pipeline, accessible via expandable "Archived Jobs" section on opportunities page
+- **Restore**: Archived jobs can be restored to paid_completed via the restore button; sets completedAt if missing
+- **Financial Reports**: Dashboard and reports include both paid_completed and archived jobs in calculations
+
 ### Shared Code
-The `shared/` directory contains common code including database schema definitions, TypeScript types, Zod validation schemas, pipeline stages (quote → scheduled → paid_completed → lost_opportunity), and payment statuses.
+The `shared/` directory contains common code including database schema definitions, TypeScript types, Zod validation schemas, pipeline stages (quote → scheduled → paid_completed → archived → lost_opportunity), and payment statuses.
 
 ### Data Model
 Supports multi-vehicle and multi-part jobs for fleet companies.

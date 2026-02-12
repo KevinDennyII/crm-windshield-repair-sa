@@ -735,6 +735,14 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         }
       }
 
+      // Auto-set completedAt only on transition to paid_completed (not on re-saves)
+      if (parsed.data.pipelineStage === "paid_completed") {
+        const currentJob = await storage.getJob(req.params.id);
+        if (currentJob && currentJob.pipelineStage !== "paid_completed" && !currentJob.completedAt) {
+          parsed.data.completedAt = new Date() as any;
+        }
+      }
+      
       const job = await storage.updateJob(req.params.id, parsed.data);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
@@ -1039,6 +1047,54 @@ Please let us know of any changes.`;
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete job" });
+    }
+  });
+
+  // Auto-archive completed jobs older than 2 weeks
+  app.post("/api/jobs/auto-archive", isAuthenticated, async (req, res) => {
+    try {
+      const allJobs = await storage.getAllJobs();
+      const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      let archivedCount = 0;
+      
+      for (const job of allJobs) {
+        if (job.pipelineStage === "paid_completed" && job.completedAt) {
+          const completedDate = new Date(job.completedAt);
+          if (completedDate < twoWeeksAgo) {
+            await storage.updateJob(job.id, { pipelineStage: "archived" });
+            archivedCount++;
+          }
+        }
+      }
+      
+      res.json({ archivedCount, message: `${archivedCount} jobs archived` });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to auto-archive jobs" });
+    }
+  });
+
+  // Manually archive/unarchive a job
+  app.patch("/api/jobs/:id/archive", isAuthenticated, async (req, res) => {
+    try {
+      const { action } = req.body;
+      if (action === "archive") {
+        const job = await storage.updateJob(req.params.id, { pipelineStage: "archived" });
+        if (!job) return res.status(404).json({ message: "Job not found" });
+        res.json(job);
+      } else if (action === "unarchive") {
+        const currentJob = await storage.getJob(req.params.id);
+        const updateData: any = { pipelineStage: "paid_completed" };
+        if (currentJob && !currentJob.completedAt) {
+          updateData.completedAt = new Date();
+        }
+        const job = await storage.updateJob(req.params.id, updateData);
+        if (!job) return res.status(404).json({ message: "Job not found" });
+        res.json(job);
+      } else {
+        res.status(400).json({ message: "Invalid action. Use 'archive' or 'unarchive'" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to archive/unarchive job" });
     }
   });
 
@@ -2987,8 +3043,8 @@ Please let us know of any changes.`;
         balanceDue: newBalanceDue,
         paymentStatus: newPaymentStatus,
         paymentMethod: updatedMethods,
-        // If fully paid, move to paid_completed stage
-        ...(newPaymentStatus === "paid" ? { pipelineStage: "paid_completed" } : {}),
+        // If fully paid, move to paid_completed stage and set completion timestamp (only if not already set)
+        ...(newPaymentStatus === "paid" ? { pipelineStage: "paid_completed", ...(!job.completedAt ? { completedAt: new Date() } : {}) } : {}),
       });
 
       // Log activity if we have a current user

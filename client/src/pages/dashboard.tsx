@@ -21,6 +21,7 @@ const stageLabels: Record<string, string> = {
   scheduled: "Scheduled",
   paid_completed: "Paid/Completed",
   lost_opportunity: "Lost Opportunity",
+  archived: "Archived",
 };
 
 // Get Monday-Saturday week boundaries (resets every Monday at midnight)
@@ -78,9 +79,9 @@ export default function Dashboard() {
   const scheduledJobs = jobs.filter((job) => job.pipelineStage === "scheduled").length;
   const totalCollected = jobs.reduce((sum, job) => sum + job.amountPaid, 0);
 
-  // Weekly metrics (Mon-Sat) - only count Paid/Completed jobs
+  // Weekly metrics (Mon-Sat) - count Paid/Completed and Archived jobs
   const weeklyCompletedJobs = jobs.filter(
-    (job) => job.pipelineStage === "paid_completed" && isInCurrentWeek(job.installDate)
+    (job) => (job.pipelineStage === "paid_completed" || job.pipelineStage === "archived") && isInCurrentWeek(job.installDate)
   );
   
   // Materials Cost: sum of glass (partPrice) + accessories + urethane from completed jobs this week

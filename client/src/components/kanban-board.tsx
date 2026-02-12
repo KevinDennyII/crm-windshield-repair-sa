@@ -59,7 +59,16 @@ const stageConfig: Record<
     bgColor: "bg-red-100 dark:bg-red-950/40",
     tabColor: "bg-gray-500",
   },
+  archived: {
+    label: "Archived",
+    shortLabel: "Arch",
+    color: "text-slate-500 dark:text-slate-400",
+    bgColor: "bg-slate-50 dark:bg-slate-950/30",
+    tabColor: "bg-slate-400",
+  },
 };
+
+const visiblePipelineStages = pipelineStages.filter(s => s !== "archived");
 
 interface KanbanBoardProps {
   jobs: Job[];
@@ -82,9 +91,11 @@ export function KanbanBoard({
   const [hideLostOpportunity, setHideLostOpportunity] = useState(false);
   const [activeStage, setActiveStage] = useState<PipelineStage>("new_lead");
 
-  const activeJobsCount = hideLostOpportunity 
-    ? jobs.filter(job => job.pipelineStage !== "lost_opportunity").length 
-    : jobs.length;
+  const activeJobsCount = jobs.filter(job => {
+    if (job.pipelineStage === "archived") return false;
+    if (hideLostOpportunity && job.pipelineStage === "lost_opportunity") return false;
+    return true;
+  }).length;
 
   const handleDragStart = (e: React.DragEvent, job: Job) => {
     setDraggedJob(job);
@@ -109,8 +120,17 @@ export function KanbanBoard({
     setDragOverStage(null);
   };
 
-  const getJobsByStage = (stage: PipelineStage) =>
-    jobs.filter((job) => job.pipelineStage === stage);
+  const getJobsByStage = (stage: PipelineStage) => {
+    const filtered = jobs.filter((job) => job.pipelineStage === stage);
+    if (stage === "paid_completed") {
+      return filtered.sort((a, b) => {
+        const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return bTime - aTime;
+      });
+    }
+    return filtered;
+  };
 
   const getPaymentBadge = (job: Job) => {
     switch (job.paymentStatus) {
@@ -339,7 +359,7 @@ export function KanbanBoard({
         <div className="border-b bg-muted/30">
           <ScrollArea className="w-full">
             <div className="flex p-2 gap-2">
-              {pipelineStages.map((stage) => {
+              {visiblePipelineStages.map((stage) => {
                 const stageConf = stageConfig[stage];
                 const count = getJobsByStage(stage).length;
                 const isActive = activeStage === stage;
@@ -447,7 +467,7 @@ export function KanbanBoard({
 
       <ScrollArea className="flex-1 p-4">
         <div className="flex gap-4 min-w-max pb-4 md:min-w-0 md:grid md:grid-cols-4">
-          {pipelineStages.map((stage) => {
+          {visiblePipelineStages.map((stage) => {
             const config = stageConfig[stage];
             const stageJobs = getJobsByStage(stage);
             const isDragOver = dragOverStage === stage;

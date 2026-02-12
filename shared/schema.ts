@@ -99,6 +99,8 @@ export const jobs = pgTable("jobs", {
   // Follow-up mode: auto sends SMS/Email automatically, manual creates notifications for CSRs
   followUpMode: varchar("follow_up_mode").default("manual"),
   
+  completedAt: timestamp("completed_at"),
+  
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -110,7 +112,8 @@ export const pipelineStages = [
   "quote",
   "scheduled",
   "paid_completed",
-  "lost_opportunity"
+  "lost_opportunity",
+  "archived"
 ] as const;
 
 export type PipelineStage = typeof pipelineStages[number];

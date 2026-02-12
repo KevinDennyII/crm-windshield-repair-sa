@@ -290,7 +290,12 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
     
-    await db.update(jobs).set({ pipelineStage: stage }).where(eq(jobs.id, id));
+    const updateData: any = { pipelineStage: stage };
+    if (stage === "paid_completed" && !existingJob.completedAt) {
+      updateData.completedAt = new Date();
+    }
+    
+    await db.update(jobs).set(updateData).where(eq(jobs.id, id));
     
     return this.getJob(id);
   }

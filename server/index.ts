@@ -8,6 +8,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedSampleUsers } from "./db";
 import { startFollowUpWorker } from "./follow-up-system";
+import { storage } from "./storage";
 
 const app = express();
 
@@ -86,6 +87,28 @@ app.use((req, res, next) => {
   
   // Start background follow-up worker
   startFollowUpWorker();
+  
+  // Auto-archive completed jobs older than 2 weeks (check every hour)
+  const runAutoArchive = async () => {
+    try {
+      const allJobs = await storage.getAllJobs();
+      const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      let count = 0;
+      for (const job of allJobs) {
+        if (job.pipelineStage === "paid_completed" && job.completedAt) {
+          if (new Date(job.completedAt) < twoWeeksAgo) {
+            await storage.updateJob(job.id, { pipelineStage: "archived" });
+            count++;
+          }
+        }
+      }
+      if (count > 0) console.log(`[AutoArchive] Archived ${count} completed jobs older than 2 weeks`);
+    } catch (err: any) {
+      console.error("[AutoArchive] Error:", err.message);
+    }
+  };
+  runAutoArchive();
+  setInterval(runAutoArchive, 60 * 60 * 1000);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
