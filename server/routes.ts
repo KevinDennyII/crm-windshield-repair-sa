@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs, scheduledTasks, followUpModes } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs, scheduledTasks, followUpModes, aiReceptionistSettings } from "@shared/schema";
 import { createFollowUpTasksForJob, archiveFollowUpsForJob, startFollowUpWorker, FOLLOW_UP_SEQUENCES } from "./follow-up-system";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
@@ -1821,7 +1821,18 @@ Please let us know of any changes.`;
         return;
       }
 
-      // Browser didn't answer - forward to backup number
+      // Browser didn't answer - check AI receptionist first, then forward to backup number
+      const [aiReceptionistConfig] = await db.select().from(aiReceptionistSettings).limit(1);
+      if (aiReceptionistConfig?.isEnabled) {
+        console.log(`No answer - routing call ${CallSid} to AI Receptionist`);
+        const twilio = (await import("twilio")).default;
+        const response = new twilio.twiml.VoiceResponse();
+        const aiBaseUrl = `${req.protocol}://${req.get('host')}`;
+        response.redirect({ method: "POST" }, `${aiBaseUrl}/api/voice/ai-receptionist`);
+        res.send(response.toString());
+        return;
+      }
+
       const [fwdSettings] = await db.select().from(callForwardingSettings).limit(1);
       if (fwdSettings && fwdSettings.isEnabled && fwdSettings.forwardingNumber) {
         console.log(`Forwarding call ${CallSid} to ${fwdSettings.forwardingNumber}`);

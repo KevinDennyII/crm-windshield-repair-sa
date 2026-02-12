@@ -30,6 +30,7 @@ import { PlaceholderPage } from "@/pages/placeholder-page";
 import Reports from "@/pages/reports";
 import Contacts from "@/pages/contacts";
 import AITools from "@/pages/ai-tools";
+import AIReceptionist from "@/pages/ai-receptionist";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import {
@@ -93,6 +94,7 @@ function AdminCsrRouter() {
       <Route path="/staff" component={StaffManagement} />
       <Route path="/csr-activity" component={CsrActivity} />
       <Route path="/ai-tools" component={AITools} />
+      <Route path="/ai-receptionist" component={AIReceptionist} />
       <Route component={NotFound} />
     </Switch>
   );

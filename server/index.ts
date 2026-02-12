@@ -8,6 +8,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedSampleUsers } from "./db";
 import { startFollowUpWorker } from "./follow-up-system";
+import { registerVoiceReceptionistRoutes } from "./voice-receptionist";
 import { storage } from "./storage";
 
 const app = express();
@@ -77,6 +78,8 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+  
+  registerVoiceReceptionistRoutes(app);
   
   // Seed sample users on startup (ensures they exist in production)
   try {

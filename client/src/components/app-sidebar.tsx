@@ -19,6 +19,7 @@ import {
   UserPlus,
   Activity,
   Bot,
+  PhoneCall,
 } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/hooks/use-auth";
@@ -49,6 +50,7 @@ const allNavItems = [
   { title: "Calendar", url: "/calendar", icon: Calendar },
   { title: "Contacts", url: "/contacts", icon: Users },
   { title: "AI Tools", url: "/ai-tools", icon: Bot },
+  { title: "AI Receptionist", url: "/ai-receptionist", icon: PhoneCall },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
   { title: "Automation", url: "/automation", icon: Zap },
   { title: "Sites", url: "/sites", icon: Globe },

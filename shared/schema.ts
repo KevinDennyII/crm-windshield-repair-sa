@@ -677,3 +677,41 @@ export const insertFollowUpLogSchema = createInsertSchema(followUpLogs).omit({
 
 export type FollowUpLog = typeof followUpLogs.$inferSelect;
 export type InsertFollowUpLog = z.infer<typeof insertFollowUpLogSchema>;
+
+export const aiReceptionistSettings = pgTable("ai_receptionist_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  isEnabled: boolean("is_enabled").default(false),
+  greeting: text("greeting").default("Hello! Thank you for calling Windshield Repair SA. How can I help you today?"),
+  systemPrompt: text("system_prompt").default(""),
+  businessContext: text("business_context").default(""),
+  voiceName: varchar("voice_name").default("Polly.Joanna"),
+  maxTurns: integer("max_turns").default(10),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAiReceptionistSettingsSchema = createInsertSchema(aiReceptionistSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+export type AiReceptionistSettings = typeof aiReceptionistSettings.$inferSelect;
+export type InsertAiReceptionistSettings = z.infer<typeof insertAiReceptionistSettingsSchema>;
+
+export const aiReceptionistCalls = pgTable("ai_receptionist_calls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  callSid: varchar("call_sid").unique(),
+  callerNumber: varchar("caller_number").notNull(),
+  transcript: jsonb("transcript").default([]),
+  extractedData: jsonb("extracted_data"),
+  leadCreated: boolean("lead_created").default(false),
+  jobId: varchar("job_id"),
+  status: varchar("status").default("in_progress"),
+  duration: integer("duration"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAiReceptionistCallSchema = createInsertSchema(aiReceptionistCalls).omit({
+  id: true,
+  createdAt: true,
+});
+export type AiReceptionistCall = typeof aiReceptionistCalls.$inferSelect;
+export type InsertAiReceptionistCall = z.infer<typeof insertAiReceptionistCallSchema>;
