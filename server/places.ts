@@ -33,19 +33,19 @@ const SAN_ANTONIO_CENTER = {
 };
 
 // Distance thresholds in miles and corresponding mobile fees
-// Based on the zone map:
-// - Inside Loop 1604 (~10 miles): $0
-// - Green zone (~15 miles): $10
-// - Blue zone (~25 miles): $20  
-// - Purple zone (~35 miles): $25
-// - Pink zone (~45 miles): $35
-// - Red zone (>45 miles): $50
+// Based on the zone map (Loop 1604 extends ~15 miles from downtown in all directions):
+// - Inside Loop 1604 (~15 miles): $0
+// - Green zone (~20 miles): $10
+// - Blue zone (~30 miles): $20  
+// - Purple zone (~40 miles): $25
+// - Pink zone (~50 miles): $35
+// - Red zone (>50 miles): $50
 function calculateMobileFee(distanceMiles: number): number {
-  if (distanceMiles <= 10) return 0;    // Inside 1604
-  if (distanceMiles <= 15) return 10;   // Green zone
-  if (distanceMiles <= 25) return 20;   // Blue zone
-  if (distanceMiles <= 35) return 25;   // Purple zone
-  if (distanceMiles <= 45) return 35;   // Pink zone
+  if (distanceMiles <= 15) return 0;    // Inside 1604
+  if (distanceMiles <= 20) return 10;   // Green zone
+  if (distanceMiles <= 30) return 20;   // Blue zone
+  if (distanceMiles <= 40) return 25;   // Purple zone
+  if (distanceMiles <= 50) return 35;   // Pink zone
   return 50;                             // Red zone
 }
 

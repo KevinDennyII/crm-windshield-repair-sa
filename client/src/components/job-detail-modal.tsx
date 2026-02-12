@@ -232,9 +232,9 @@ function calculateLaborPrice(
     return Math.round(partCost * 0.75);
   }
   
-  // Repair jobs - typically lower labor
+  // Repair jobs (rock chip repairs)
   if (serviceType === "repair") {
-    return 50; // Standard repair labor
+    return 85;
   }
   
   // Calibration-only jobs
@@ -1889,7 +1889,14 @@ export function JobDetailModal({
                                                       part.partPrice,
                                                       formData.customerType
                                                     );
-                                                    const updatedPart = { ...part, serviceType: value, laborPrice: newLaborPrice };
+                                                    const isRepair = value === "repair";
+                                                    const updatedPart = {
+                                                      ...part,
+                                                      serviceType: value,
+                                                      laborPrice: newLaborPrice,
+                                                      urethanePrice: isRepair ? 0 : part.urethanePrice || 15,
+                                                      salesTaxPercent: isRepair ? 0 : part.salesTaxPercent || 8.25,
+                                                    };
                                                     const { partsSubtotal, partTotal } = calculatePartTotals(updatedPart, formData.customerType);
                                                     setVehicles(prev => prev.map(v => 
                                                       v.id === vehicle.id 
