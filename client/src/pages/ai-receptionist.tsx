@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, Phone, Save, TestTube, Clock, User, Car, FileText, ChevronDown, ChevronRight, Plus, ArrowLeft, Send, PhoneIncoming, PhoneOff } from "lucide-react";
+import { Bot, Phone, Save, TestTube, Clock, User, Car, FileText, ChevronDown, ChevronRight, Plus, ArrowLeft, Send, PhoneIncoming, PhoneOff, PhoneCall, Mic, Volume2, VolumeX, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 const VOICE_OPTIONS = [
@@ -28,8 +28,6 @@ const VOICE_OPTIONS = [
 
 export default function AIReceptionist() {
   const { toast } = useToast();
-  const [testMessage, setTestMessage] = useState("");
-  const [testResponse, setTestResponse] = useState("");
   const [expandedCall, setExpandedCall] = useState<string | null>(null);
 
   const { data: settings, isLoading: settingsLoading } = useQuery<any>({
@@ -66,19 +64,6 @@ export default function AIReceptionist() {
     },
     onError: (err: any) => {
       toast({ title: "Error saving settings", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const testMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/ai-receptionist/test-prompt", data);
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      setTestResponse(data.response);
-    },
-    onError: (err: any) => {
-      toast({ title: "Test failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -250,66 +235,7 @@ export default function AIReceptionist() {
         </TabsContent>
 
         <TabsContent value="test" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TestTube className="w-4 h-4" />
-                Test Your AI Receptionist
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Type a message as if you were a customer calling. The AI will respond using your current system prompt and business context. Save your settings first before testing.
-              </p>
-              <div className="space-y-2">
-                <Label>Customer says:</Label>
-                <Input
-                  value={testMessage}
-                  onChange={(e) => setTestMessage(e.target.value)}
-                  placeholder='e.g. "Hi, I need a new windshield for my 2020 Toyota Camry"'
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && testMessage.trim()) {
-                      testMutation.mutate({
-                        message: testMessage,
-                        systemPrompt: formData.systemPrompt,
-                        businessContext: formData.businessContext,
-                      });
-                    }
-                  }}
-                  data-testid="input-test-message"
-                />
-              </div>
-              <Button
-                onClick={() => {
-                  if (testMessage.trim()) {
-                    testMutation.mutate({
-                      message: testMessage,
-                      systemPrompt: formData.systemPrompt,
-                      businessContext: formData.businessContext,
-                    });
-                  }
-                }}
-                disabled={testMutation.isPending || !testMessage.trim()}
-                data-testid="button-test-prompt"
-              >
-                <Send className="w-4 h-4 mr-2" />
-                {testMutation.isPending ? "Thinking..." : "Test Response"}
-              </Button>
-              {testResponse && (
-                <Card className="bg-muted/50">
-                  <CardContent className="pt-4">
-                    <div className="flex items-start gap-2">
-                      <Bot className="w-5 h-5 text-primary mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground mb-1">AI Receptionist responds:</p>
-                        <p className="text-sm" data-testid="text-test-response">{testResponse}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </CardContent>
-          </Card>
+          <SimulatedCall formData={formData} />
         </TabsContent>
 
         <TabsContent value="calls" className="space-y-4 mt-4">
@@ -447,5 +373,307 @@ export default function AIReceptionist() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+interface ConversationEntry {
+  role: "caller" | "assistant";
+  content: string;
+}
+
+const POLLY_TO_SPEECH_VOICE: Record<string, { lang: string; gender: string }> = {
+  "Polly.Joanna": { lang: "en-US", gender: "female" },
+  "Polly.Matthew": { lang: "en-US", gender: "male" },
+  "Polly.Salli": { lang: "en-US", gender: "female" },
+  "Polly.Joey": { lang: "en-US", gender: "male" },
+  "Polly.Kendra": { lang: "en-US", gender: "female" },
+  "Polly.Kimberly": { lang: "en-US", gender: "female" },
+  "Polly.Ivy": { lang: "en-US", gender: "female" },
+  "Polly.Lupe": { lang: "es-US", gender: "female" },
+  "Polly.Pedro": { lang: "es-US", gender: "male" },
+};
+
+function SimulatedCall({ formData }: { formData: any }) {
+  const { toast } = useToast();
+  const [callActive, setCallActive] = useState(false);
+  const [conversation, setConversation] = useState<ConversationEntry[]>([]);
+  const [message, setMessage] = useState("");
+  const [isThinking, setIsThinking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [conversation]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+  const speakText = useCallback((text: string, voiceName?: string) => {
+    if (isMuted || !window.speechSynthesis) return;
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voiceConfig = POLLY_TO_SPEECH_VOICE[voiceName || "Polly.Joanna"] || { lang: "en-US", gender: "female" };
+    utterance.lang = voiceConfig.lang;
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v =>
+      v.lang.startsWith(voiceConfig.lang.split("-")[0]) &&
+      v.name.toLowerCase().includes(voiceConfig.gender === "female" ? "female" : "male")
+    ) || voices.find(v =>
+      v.lang.startsWith(voiceConfig.lang.split("-")[0])
+    ) || voices.find(v =>
+      v.lang.startsWith("en")
+    );
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      inputRef.current?.focus();
+    };
+    utterance.onerror = () => setIsSpeaking(false);
+
+    window.speechSynthesis.speak(utterance);
+  }, [isMuted]);
+
+  const startCall = async () => {
+    setCallActive(true);
+    setConversation([]);
+    setCallDuration(0);
+
+    timerRef.current = setInterval(() => {
+      setCallDuration(d => d + 1);
+    }, 1000);
+
+    try {
+      const res = await apiRequest("POST", "/api/ai-receptionist/simulate/greeting");
+      const data = await res.json();
+
+      const greetingEntry: ConversationEntry = {
+        role: "assistant",
+        content: data.greeting,
+      };
+      setConversation([greetingEntry]);
+      speakText(data.greeting, data.voiceName);
+    } catch (err: any) {
+      toast({ title: "Failed to start call", description: err.message, variant: "destructive" });
+      endCall();
+    }
+  };
+
+  const endCall = () => {
+    setCallActive(false);
+    window.speechSynthesis?.cancel();
+    setIsSpeaking(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!message.trim() || isThinking) return;
+
+    const userMsg = message.trim();
+    setMessage("");
+
+    const updatedConversation = [...conversation, { role: "caller" as const, content: userMsg }];
+    setConversation(updatedConversation);
+    setIsThinking(true);
+
+    try {
+      const res = await apiRequest("POST", "/api/ai-receptionist/simulate", {
+        message: userMsg,
+        conversationHistory: updatedConversation.map(e => ({ role: e.role, content: e.content })),
+      });
+      const data = await res.json();
+
+      const aiEntry: ConversationEntry = {
+        role: "assistant",
+        content: data.response,
+      };
+      setConversation(prev => [...prev, aiEntry]);
+      speakText(data.response, data.voiceName);
+    } catch (err: any) {
+      toast({ title: "AI response failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsThinking(false);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
+
+  if (!callActive) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center space-y-4 py-8">
+            <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mx-auto">
+              <PhoneCall className="w-10 h-10 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold">Simulated Call</h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Start a simulated phone call to hear how your AI receptionist sounds and responds. 
+                Type messages as if you were a customer and the AI will respond out loud.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Make sure to save your settings first
+              </p>
+            </div>
+            <Button onClick={startCall} data-testid="button-start-call">
+              <PhoneCall className="w-4 h-4 mr-2" />
+              Start Simulated Call
+            </Button>
+            {conversation.length > 0 && (
+              <div className="pt-4">
+                <p className="text-xs text-muted-foreground mb-2">Previous conversation ({conversation.length} messages)</p>
+                <Button variant="outline" size="sm" onClick={() => setConversation([])} data-testid="button-clear-history">
+                  Clear History
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="flex flex-col" style={{ height: "calc(100vh - 300px)", minHeight: "400px" }}>
+      <CardHeader className="flex-none border-b pb-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+            <CardTitle className="text-base">Simulated Call In Progress</CardTitle>
+            <Badge variant="outline" data-testid="text-call-duration">{formatTime(callDuration)}</Badge>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => {
+                const newMuted = !isMuted;
+                setIsMuted(newMuted);
+                if (newMuted) {
+                  window.speechSynthesis?.cancel();
+                  setIsSpeaking(false);
+                }
+              }}
+              data-testid="button-toggle-mute"
+            >
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={endCall}
+              data-testid="button-end-call"
+            >
+              <PhoneOff className="w-4 h-4 mr-1" />
+              End Call
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex-1 overflow-y-auto py-4 space-y-3">
+        {conversation.map((entry, idx) => (
+          <div
+            key={idx}
+            className={`flex gap-2 ${entry.role === "caller" ? "justify-end" : "justify-start"}`}
+            data-testid={`message-${entry.role}-${idx}`}
+          >
+            <div className={`rounded-md px-3 py-2 max-w-[80%] space-y-1 ${
+              entry.role === "caller"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted"
+            }`}>
+              <p className={`text-xs font-medium ${entry.role === "caller" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                {entry.role === "caller" ? "You (Customer)" : "AI Receptionist"}
+              </p>
+              <p className="text-sm">{entry.content}</p>
+              {entry.role === "assistant" && !isMuted && (
+                <button
+                  className="text-xs flex items-center gap-1 mt-1 text-muted-foreground hover:text-foreground"
+                  onClick={() => speakText(entry.content, formData?.voiceName)}
+                  data-testid={`button-replay-${idx}`}
+                >
+                  <Volume2 className="w-3 h-3" />
+                  Replay
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {isThinking && (
+          <div className="flex gap-2 justify-start">
+            <div className="rounded-md px-3 py-2 bg-muted">
+              <p className="text-xs font-medium text-muted-foreground">AI Receptionist</p>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Thinking...
+              </div>
+            </div>
+          </div>
+        )}
+        {isSpeaking && (
+          <div className="flex justify-center">
+            <Badge variant="outline" className="gap-1">
+              <Volume2 className="w-3 h-3 animate-pulse" />
+              Speaking...
+            </Badge>
+          </div>
+        )}
+        <div ref={chatEndRef} />
+      </CardContent>
+
+      <div className="flex-none border-t p-3">
+        <div className="flex gap-2">
+          <Input
+            ref={inputRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Type what the customer would say..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+            disabled={isThinking}
+            autoFocus
+            data-testid="input-simulate-message"
+          />
+          <Button
+            onClick={sendMessage}
+            disabled={isThinking || !message.trim()}
+            data-testid="button-send-message"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }

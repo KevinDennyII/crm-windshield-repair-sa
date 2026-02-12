@@ -404,6 +404,49 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
       res.status(500).json({ message: error.message });
     }
   });
+
+  app.post("/api/ai-receptionist/simulate", async (req: Request, res: Response) => {
+    try {
+      const { message, conversationHistory } = req.body;
+      const settings = await getSettings();
+
+      const transcript: Array<{ role: string; content: string }> = [];
+
+      if (conversationHistory && Array.isArray(conversationHistory)) {
+        for (const entry of conversationHistory) {
+          transcript.push({ role: entry.role, content: entry.content });
+        }
+      }
+
+      if (message) {
+        transcript.push({ role: "caller", content: message });
+      }
+
+      const aiText = await generateAIResponse(transcript, settings);
+
+      res.json({
+        response: aiText,
+        voiceName: settings?.voiceName || "Polly.Joanna",
+      });
+    } catch (error: any) {
+      console.error("Simulate error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/ai-receptionist/simulate/greeting", async (_req: Request, res: Response) => {
+    try {
+      const settings = await getSettings();
+      const greeting = settings?.greeting || DEFAULT_GREETING;
+
+      res.json({
+        greeting,
+        voiceName: settings?.voiceName || "Polly.Joanna",
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
 }
 
 async function processCallEnd(callSid: string) {
