@@ -381,17 +381,34 @@ interface ConversationEntry {
   content: string;
 }
 
-const POLLY_TO_SPEECH_VOICE: Record<string, { lang: string; gender: string }> = {
-  "Polly.Joanna": { lang: "en-US", gender: "female" },
-  "Polly.Matthew": { lang: "en-US", gender: "male" },
-  "Polly.Salli": { lang: "en-US", gender: "female" },
-  "Polly.Joey": { lang: "en-US", gender: "male" },
-  "Polly.Kendra": { lang: "en-US", gender: "female" },
-  "Polly.Kimberly": { lang: "en-US", gender: "female" },
-  "Polly.Ivy": { lang: "en-US", gender: "female" },
-  "Polly.Lupe": { lang: "es-US", gender: "female" },
-  "Polly.Pedro": { lang: "es-US", gender: "male" },
+interface VoiceConfig {
+  lang: string;
+  pitch: number;
+  rate: number;
+  preferredNames: string[];
+}
+
+const POLLY_TO_SPEECH_VOICE: Record<string, VoiceConfig> = {
+  "Polly.Joanna":   { lang: "en-US", pitch: 1.0,  rate: 1.0,  preferredNames: ["Samantha", "Google US English", "Microsoft Zira", "Karen"] },
+  "Polly.Matthew":  { lang: "en-US", pitch: 0.8,  rate: 0.95, preferredNames: ["Alex", "Google UK English Male", "Microsoft David", "Daniel"] },
+  "Polly.Salli":    { lang: "en-US", pitch: 1.15, rate: 1.05, preferredNames: ["Victoria", "Google US English", "Microsoft Zira", "Samantha"] },
+  "Polly.Joey":     { lang: "en-US", pitch: 0.7,  rate: 0.9,  preferredNames: ["Fred", "Google UK English Male", "Microsoft Mark", "Alex"] },
+  "Polly.Kendra":   { lang: "en-US", pitch: 1.05, rate: 0.95, preferredNames: ["Allison", "Google US English", "Samantha", "Karen"] },
+  "Polly.Kimberly": { lang: "en-US", pitch: 1.2,  rate: 1.1,  preferredNames: ["Tessa", "Google US English", "Victoria", "Samantha"] },
+  "Polly.Ivy":      { lang: "en-US", pitch: 1.4,  rate: 1.15, preferredNames: ["Samantha", "Google US English", "Victoria", "Karen"] },
+  "Polly.Lupe":     { lang: "es",    pitch: 1.0,  rate: 1.0,  preferredNames: ["Paulina", "Google espa\u00f1ol", "Monica", "Microsoft Sabina"] },
+  "Polly.Pedro":    { lang: "es",    pitch: 0.8,  rate: 0.95, preferredNames: ["Jorge", "Google espa\u00f1ol", "Juan", "Microsoft Raul"] },
 };
+
+function findBestVoice(voices: SpeechSynthesisVoice[], config: VoiceConfig): SpeechSynthesisVoice | null {
+  for (const name of config.preferredNames) {
+    const match = voices.find(v => v.name.includes(name));
+    if (match) return match;
+  }
+  const langMatch = voices.find(v => v.lang.startsWith(config.lang));
+  if (langMatch) return langMatch;
+  return voices.find(v => v.lang.startsWith("en")) || null;
+}
 
 function SimulatedCall({ formData }: { formData: any }) {
   const { toast } = useToast();
@@ -423,23 +440,16 @@ function SimulatedCall({ formData }: { formData: any }) {
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    const voiceConfig = POLLY_TO_SPEECH_VOICE[voiceName || "Polly.Joanna"] || { lang: "en-US", gender: "female" };
-    utterance.lang = voiceConfig.lang;
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
+    const config = POLLY_TO_SPEECH_VOICE[voiceName || "Polly.Joanna"] || POLLY_TO_SPEECH_VOICE["Polly.Joanna"];
+    utterance.lang = config.lang;
+    utterance.rate = config.rate;
+    utterance.pitch = config.pitch;
 
     const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(v =>
-      v.lang.startsWith(voiceConfig.lang.split("-")[0]) &&
-      v.name.toLowerCase().includes(voiceConfig.gender === "female" ? "female" : "male")
-    ) || voices.find(v =>
-      v.lang.startsWith(voiceConfig.lang.split("-")[0])
-    ) || voices.find(v =>
-      v.lang.startsWith("en")
-    );
+    const selectedVoice = findBestVoice(voices, config);
 
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
     }
 
     utterance.onstart = () => setIsSpeaking(true);
