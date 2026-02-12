@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Bell, Phone, PhoneMissed, MessageSquare, Mail, UserPlus } from "lucide-react";
+import { Bell, Phone, PhoneMissed, MessageSquare, Mail, UserPlus, Send, PhoneCall, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface MissedCall {
   id: string;
@@ -37,6 +39,23 @@ interface NotificationData {
   recentEmails: ActivityItem[];
 }
 
+interface FollowUpNotification {
+  id: string;
+  jobId: string;
+  sequenceNumber: number;
+  taskType: string;
+  status: string;
+  scheduledAt: string;
+  smsContent: string | null;
+  emailSubject: string | null;
+  emailBody: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  customerEmail: string | null;
+  vehicleInfo: string | null;
+  jobNumber: string | null;
+}
+
 function formatTimeAgo(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -49,6 +68,184 @@ function formatTimeAgo(dateStr: string): string {
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   return `${diffDays}d ago`;
+}
+
+const SEQUENCE_LABELS: Record<number, string> = {
+  1: "Quick Quote Receipt",
+  2: "Value Proposition",
+  3: "Availability Alert",
+  4: "Transparent Pricing",
+  5: "Safety & ADAS",
+  6: "Special Offer",
+  7: "Final Call",
+};
+
+function FollowUpItem({ task }: { task: FollowUpNotification }) {
+  const [expanded, setExpanded] = useState(false);
+  const [showCallLog, setShowCallLog] = useState(false);
+  const [callResult, setCallResult] = useState("");
+  const [callNotes, setCallNotes] = useState("");
+  const { toast } = useToast();
+
+  const sendMutation = useMutation({
+    mutationFn: async (data: { sendSms?: boolean; sendEmail?: boolean }) => {
+      const res = await apiRequest("POST", `/api/follow-up-tasks/${task.id}/send`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Follow-up sent", description: `Sent to ${task.customerName}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/follow-up-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to send", variant: "destructive" });
+    },
+  });
+
+  const logCallMutation = useMutation({
+    mutationFn: async (data: { result: string; notes: string }) => {
+      const res = await apiRequest("POST", `/api/follow-up-tasks/${task.id}/log-call`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Call logged", description: `Result: ${callResult}` });
+      setShowCallLog(false);
+      setCallResult("");
+      setCallNotes("");
+      queryClient.invalidateQueries({ queryKey: ["/api/follow-up-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to log call", variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="px-3 py-2 border-b last:border-b-0" data-testid={`notification-followup-${task.id}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2 min-w-0 flex-1">
+          <Clock className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium truncate">
+              #{task.jobNumber} - {task.customerName}
+            </p>
+            <p className="text-xs text-muted-foreground">{task.customerPhone}</p>
+            <p className="text-xs text-muted-foreground">{task.vehicleInfo}</p>
+            <Badge variant="secondary" className="mt-1 text-[10px]">
+              Seq {task.sequenceNumber}: {SEQUENCE_LABELS[task.sequenceNumber] || `Step ${task.sequenceNumber}`}
+            </Badge>
+          </div>
+        </div>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-muted-foreground p-1"
+          data-testid={`button-expand-followup-${task.id}`}
+        >
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="mt-2 space-y-2 pl-6">
+          {task.smsContent && (
+            <div className="rounded-md bg-muted/50 p-2">
+              <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1 flex items-center gap-1">
+                <MessageSquare className="h-3 w-3" /> SMS Preview
+              </p>
+              <p className="text-xs leading-relaxed">{task.smsContent}</p>
+            </div>
+          )}
+          {task.emailSubject && (
+            <div className="rounded-md bg-muted/50 p-2">
+              <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1 flex items-center gap-1">
+                <Mail className="h-3 w-3" /> Email Preview
+              </p>
+              <p className="text-xs font-medium">{task.emailSubject}</p>
+              <p className="text-xs leading-relaxed mt-1 line-clamp-3">{task.emailBody}</p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={() => sendMutation.mutate({ sendSms: true, sendEmail: true })}
+              disabled={sendMutation.isPending}
+              data-testid={`button-send-followup-${task.id}`}
+            >
+              <Send className="h-3 w-3 mr-1" />
+              {sendMutation.isPending ? "Sending..." : "Send"}
+            </Button>
+            {task.smsContent && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => sendMutation.mutate({ sendSms: true, sendEmail: false })}
+                disabled={sendMutation.isPending}
+                data-testid={`button-send-sms-${task.id}`}
+              >
+                <MessageSquare className="h-3 w-3 mr-1" /> SMS Only
+              </Button>
+            )}
+            {task.emailSubject && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => sendMutation.mutate({ sendSms: false, sendEmail: true })}
+                disabled={sendMutation.isPending}
+                data-testid={`button-send-email-${task.id}`}
+              >
+                <Mail className="h-3 w-3 mr-1" /> Email Only
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowCallLog(!showCallLog)}
+              data-testid={`button-log-call-${task.id}`}
+            >
+              <PhoneCall className="h-3 w-3 mr-1" /> Log Call Result
+            </Button>
+          </div>
+
+          {showCallLog && (
+            <div className="space-y-2 border rounded-md p-2">
+              <select
+                value={callResult}
+                onChange={(e) => setCallResult(e.target.value)}
+                className="w-full text-xs border rounded px-2 py-1.5 bg-background"
+                data-testid={`select-call-result-${task.id}`}
+              >
+                <option value="">Select result...</option>
+                <option value="answered_booked">Answered - Booked</option>
+                <option value="answered_interested">Answered - Interested</option>
+                <option value="answered_not_interested">Answered - Not Interested</option>
+                <option value="voicemail">Left Voicemail</option>
+                <option value="no_answer">No Answer</option>
+                <option value="wrong_number">Wrong Number</option>
+                <option value="callback_requested">Callback Requested</option>
+              </select>
+              <input
+                type="text"
+                value={callNotes}
+                onChange={(e) => setCallNotes(e.target.value)}
+                placeholder="Notes (optional)"
+                className="w-full text-xs border rounded px-2 py-1.5 bg-background"
+                data-testid={`input-call-notes-${task.id}`}
+              />
+              <Button
+                size="sm"
+                disabled={!callResult || logCallMutation.isPending}
+                onClick={() => logCallMutation.mutate({ result: callResult, notes: callNotes })}
+                data-testid={`button-submit-call-log-${task.id}`}
+              >
+                {logCallMutation.isPending ? "Saving..." : "Save Call Result"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function NotificationBell() {
@@ -64,7 +261,13 @@ export function NotificationBell() {
     refetchInterval: 30000,
   });
 
-  const totalCount = data?.totalCount || 0;
+  const { data: followUpNotifications } = useQuery<FollowUpNotification[]>({
+    queryKey: ["/api/follow-up-notifications"],
+    refetchInterval: 30000,
+  });
+
+  const followUpCount = followUpNotifications?.length || 0;
+  const totalCount = (data?.totalCount || 0) + followUpCount;
   const unreadCount = Math.max(0, totalCount - lastSeenCount);
 
   useEffect(() => {
@@ -108,13 +311,27 @@ export function NotificationBell() {
       </Button>
 
       {isOpen && (
-        <Card className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-auto z-50 shadow-lg">
+        <Card className="absolute right-0 top-full mt-2 w-96 max-h-[80vh] overflow-auto z-50 shadow-lg">
           <div className="p-3 border-b">
             <h3 className="text-sm font-semibold" data-testid="text-notification-title">Notifications</h3>
           </div>
 
           <div className="divide-y">
-            {(!data || totalCount === 0) && (
+            {followUpNotifications && followUpNotifications.length > 0 && (
+              <div>
+                <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Follow-Up Tasks ({followUpNotifications.length})
+                  </span>
+                </div>
+                {followUpNotifications.map((task) => (
+                  <FollowUpItem key={task.id} task={task} />
+                ))}
+              </div>
+            )}
+
+            {(!data || (data.totalCount === 0 && followUpCount === 0)) && (
               <div className="p-4 text-center text-sm text-muted-foreground" data-testid="text-no-notifications">
                 No recent notifications
               </div>

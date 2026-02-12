@@ -40,6 +40,17 @@ Preferred communication style: Simple, everyday language.
   - User summary cards: total actions, jobs created, stage changes, emails/SMS sent, login count
   - Detailed activity log table with action details and timestamps
 
+### Automated Follow-Up System
+- **7-Sequence Campaign**: When a new job is created in "quote" or "new_lead" stage, 7 follow-up tasks are auto-scheduled at 0h, 2h, 4h, 6h, 8h, 10h, 12h intervals
+- **Templates**: Each sequence has SMS and Email templates personalized with customer firstName, vehicle (year/make/model), totalDue, city, and glassType
+- **Two Modes**: Per-job `followUpMode` field (toggle on job form):
+  - `auto`: Background worker auto-sends SMS/Email when tasks become due
+  - `manual`: Background worker creates notifications for CSRs to review and send from the notification bell
+- **Notification Bell**: Shows pending manual follow-up tasks with expandable message previews, Send (both), SMS-only, Email-only buttons, and Log Call Result
+- **Auto-Termination**: All pending follow-up tasks are archived when a job's stage changes to "scheduled" or "paid_completed"
+- **Background Worker**: Runs every 60 seconds (`server/follow-up-system.ts`), processes due tasks, logs all actions to `follow_up_logs` table
+- **Database Tables**: `follow_up_tasks` (scheduled tasks), `follow_up_logs` (action audit trail)
+
 ### AI Tools (`/ai-tools`)
 Comprehensive AI-powered tools accessible to Admin and CSR roles, powered by OpenAI via Replit AI Integrations (no API key required, billed to credits):
 

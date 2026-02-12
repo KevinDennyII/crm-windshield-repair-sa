@@ -468,6 +468,7 @@ const getDefaultFormData = (): InsertJob => ({
   paymentHistory: [],
   installNotes: "",
   calibrationDeclined: false,
+  followUpMode: "manual" as const,
 });
 
 export function JobDetailModal({
@@ -936,14 +937,27 @@ export function JobDetailModal({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        id="isBusiness"
-                        checked={formData.isBusiness}
-                        onCheckedChange={(checked) => handleChange("isBusiness", checked)}
-                        data-testid="switch-is-business"
-                      />
-                      <Label htmlFor="isBusiness">Business Account</Label>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          id="isBusiness"
+                          checked={formData.isBusiness}
+                          onCheckedChange={(checked) => handleChange("isBusiness", checked)}
+                          data-testid="switch-is-business"
+                        />
+                        <Label htmlFor="isBusiness">Business Account</Label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          id="followUpMode"
+                          checked={formData.followUpMode === "auto"}
+                          onCheckedChange={(checked) => handleChange("followUpMode" as any, checked ? "auto" : "manual")}
+                          data-testid="switch-follow-up-mode"
+                        />
+                        <Label htmlFor="followUpMode" className="text-sm">
+                          {formData.followUpMode === "auto" ? "Auto Follow-Up" : "Manual Follow-Up"}
+                        </Label>
+                      </div>
                     </div>
 
                     {formData.isBusiness && (

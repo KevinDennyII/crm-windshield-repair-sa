@@ -7,6 +7,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedSampleUsers } from "./db";
+import { startFollowUpWorker } from "./follow-up-system";
 
 const app = express();
 
@@ -82,6 +83,9 @@ app.use((req, res, next) => {
   } catch (error) {
     console.error("Failed to seed users:", error);
   }
+  
+  // Start background follow-up worker
+  startFollowUpWorker();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

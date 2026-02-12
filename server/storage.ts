@@ -1,4 +1,4 @@
-import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, type ActivityLog, type InsertActivityLog, type ProcessedLead, type InsertProcessedLead, type TechnicianJobData, type InsertTechnicianJobData, type TechMaterial, type InsertTechMaterial, jobs, users, customerReminders, contacts, activityLogs, processedLeads, technicianJobData, techMaterialsList } from "@shared/schema";
+import { type User, type UpsertUser, type Job, type InsertJob, type PipelineStage, type PaymentHistoryEntry, type Vehicle, type Part, type CustomerReminder, type InsertCustomerReminder, type Contact, type InsertContact, type ActivityLog, type InsertActivityLog, type ProcessedLead, type InsertProcessedLead, type TechnicianJobData, type InsertTechnicianJobData, type TechMaterial, type InsertTechMaterial, type ScheduledTask, type InsertScheduledTask, type FollowUpLog, type InsertFollowUpLog, jobs, users, customerReminders, contacts, activityLogs, processedLeads, technicianJobData, techMaterialsList, scheduledTasks, followUpLogs } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, desc, sql, max, and, gte, lte, isNotNull, ilike, or } from "drizzle-orm";
@@ -46,6 +46,18 @@ export interface IStorage {
   markLeadProcessed(emailId: string, emailSubject?: string, customerEmail?: string, customerPhone?: string): Promise<boolean>;
   isPhoneRecentlyProcessed(phone: string): Promise<boolean>;
   getAllProcessedLeadIds(): Promise<string[]>;
+  
+  // Scheduled tasks (follow-up system)
+  createScheduledTask(task: InsertScheduledTask): Promise<ScheduledTask>;
+  getScheduledTasksByJob(jobId: string): Promise<ScheduledTask[]>;
+  getDueTasks(): Promise<ScheduledTask[]>;
+  getPendingNotifications(): Promise<ScheduledTask[]>;
+  updateScheduledTaskStatus(id: string, status: string, executedAt?: Date): Promise<ScheduledTask | undefined>;
+  archiveTasksByJob(jobId: string): Promise<number>;
+  
+  // Follow-up logs
+  createFollowUpLog(log: InsertFollowUpLog): Promise<FollowUpLog>;
+  getFollowUpLogsByJob(jobId: string): Promise<FollowUpLog[]>;
 }
 
 function createDefaultPart(overrides: Partial<Part> = {}): Part {
@@ -144,6 +156,7 @@ function dbRowToJob(row: any): Job {
     receiptSentAt: row.receiptSentAt ?? undefined,
     receiptPdf: row.receiptPdf ?? undefined,
     completionPhotos: (row.completionPhotos as Record<string, string>) ?? undefined,
+    followUpMode: row.followUpMode ?? "manual",
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
   };
 }
@@ -198,6 +211,7 @@ function jobToDbRow(job: Partial<InsertJob> & { jobNumber?: string }): any {
   if (job.receiptSentAt !== undefined) row.receiptSentAt = job.receiptSentAt;
   if (job.receiptPdf !== undefined) row.receiptPdf = job.receiptPdf;
   if (job.completionPhotos !== undefined) row.completionPhotos = job.completionPhotos;
+  if ((job as any).followUpMode !== undefined) row.followUpMode = (job as any).followUpMode;
   
   return row;
 }
@@ -728,6 +742,76 @@ export class DatabaseStorage implements IStorage {
   async deleteTechMaterial(id: string): Promise<boolean> {
     const result = await db.delete(techMaterialsList).where(eq(techMaterialsList.id, id));
     return true;
+  }
+
+  // Scheduled tasks methods
+  async createScheduledTask(task: InsertScheduledTask): Promise<ScheduledTask> {
+    const [created] = await db.insert(scheduledTasks).values({
+      ...task,
+      id: randomUUID(),
+    }).returning();
+    return created;
+  }
+
+  async getScheduledTasksByJob(jobId: string): Promise<ScheduledTask[]> {
+    return db.select().from(scheduledTasks)
+      .where(eq(scheduledTasks.jobId, jobId))
+      .orderBy(scheduledTasks.sequenceNumber);
+  }
+
+  async getDueTasks(): Promise<ScheduledTask[]> {
+    const now = new Date();
+    return db.select().from(scheduledTasks)
+      .where(
+        and(
+          eq(scheduledTasks.status, "pending"),
+          lte(scheduledTasks.scheduledAt, now)
+        )
+      )
+      .orderBy(scheduledTasks.scheduledAt);
+  }
+
+  async getPendingNotifications(): Promise<ScheduledTask[]> {
+    return db.select().from(scheduledTasks)
+      .where(eq(scheduledTasks.status, "notified"))
+      .orderBy(desc(scheduledTasks.scheduledAt));
+  }
+
+  async updateScheduledTaskStatus(id: string, status: string, executedAt?: Date): Promise<ScheduledTask | undefined> {
+    const updates: any = { status };
+    if (executedAt) updates.executedAt = executedAt;
+    const [updated] = await db.update(scheduledTasks)
+      .set(updates)
+      .where(eq(scheduledTasks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async archiveTasksByJob(jobId: string): Promise<number> {
+    const result = await db.update(scheduledTasks)
+      .set({ status: "archived" })
+      .where(
+        and(
+          eq(scheduledTasks.jobId, jobId),
+          eq(scheduledTasks.status, "pending")
+        )
+      );
+    return (result as any).rowCount || 0;
+  }
+
+  // Follow-up logs methods
+  async createFollowUpLog(log: InsertFollowUpLog): Promise<FollowUpLog> {
+    const [created] = await db.insert(followUpLogs).values({
+      ...log,
+      id: randomUUID(),
+    }).returning();
+    return created;
+  }
+
+  async getFollowUpLogsByJob(jobId: string): Promise<FollowUpLog[]> {
+    return db.select().from(followUpLogs)
+      .where(eq(followUpLogs.jobId, jobId))
+      .orderBy(desc(followUpLogs.createdAt));
   }
 }
 

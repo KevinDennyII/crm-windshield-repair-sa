@@ -96,8 +96,14 @@ export const jobs = pgTable("jobs", {
   // Completion photos (optional)
   completionPhotos: jsonb("completion_photos").default({}),
   
+  // Follow-up mode: auto sends SMS/Email automatically, manual creates notifications for CSRs
+  followUpMode: varchar("follow_up_mode").default("manual"),
+  
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const followUpModes = ["auto", "manual"] as const;
+export type FollowUpMode = typeof followUpModes[number];
 
 export const pipelineStages = [
   "new_lead",
@@ -322,6 +328,9 @@ export const jobSchema = z.object({
   
   // Completion photos (optional)
   completionPhotos: z.record(z.string()).optional(),
+  
+  // Follow-up mode
+  followUpMode: z.enum(followUpModes).default("manual"),
   
   createdAt: z.string().optional(),
 });
@@ -602,3 +611,66 @@ export const insertCallForwardingSchema = createInsertSchema(callForwardingSetti
 
 export type CallForwardingSettings = typeof callForwardingSettings.$inferSelect;
 export type InsertCallForwardingSettings = z.infer<typeof insertCallForwardingSchema>;
+
+// Scheduled tasks for automated follow-up system
+export const scheduledTasks = pgTable("scheduled_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull(),
+  sequenceNumber: integer("sequence_number").notNull(),
+  taskType: varchar("task_type").notNull(),
+  followUpMode: varchar("follow_up_mode").notNull().default("manual"),
+  status: varchar("status").notNull().default("pending"),
+  scheduledAt: timestamp("scheduled_at").notNull(),
+  executedAt: timestamp("executed_at"),
+  smsContent: text("sms_content"),
+  emailSubject: varchar("email_subject"),
+  emailBody: text("email_body"),
+  customerName: varchar("customer_name"),
+  customerPhone: varchar("customer_phone"),
+  customerEmail: varchar("customer_email"),
+  vehicleInfo: varchar("vehicle_info"),
+  jobNumber: varchar("job_number"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const scheduledTaskStatuses = ["pending", "sent", "notified", "archived", "failed"] as const;
+export type ScheduledTaskStatus = typeof scheduledTaskStatuses[number];
+
+export const insertScheduledTaskSchema = createInsertSchema(scheduledTasks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ScheduledTask = typeof scheduledTasks.$inferSelect;
+export type InsertScheduledTask = z.infer<typeof insertScheduledTaskSchema>;
+
+// Follow-up activity logs
+export const followUpLogs = pgTable("follow_up_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull(),
+  jobNumber: varchar("job_number"),
+  action: varchar("action").notNull(),
+  sequenceNumber: integer("sequence_number"),
+  details: text("details"),
+  performedBy: varchar("performed_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const followUpActionTypes = [
+  "sms_sent",
+  "email_sent",
+  "call_logged",
+  "task_notified",
+  "tasks_archived",
+  "tasks_created",
+  "manual_send",
+] as const;
+export type FollowUpActionType = typeof followUpActionTypes[number];
+
+export const insertFollowUpLogSchema = createInsertSchema(followUpLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type FollowUpLog = typeof followUpLogs.$inferSelect;
+export type InsertFollowUpLog = z.infer<typeof insertFollowUpLogSchema>;

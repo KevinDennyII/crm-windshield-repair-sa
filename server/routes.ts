@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs, scheduledTasks, followUpModes } from "@shared/schema";
+import { createFollowUpTasksForJob, archiveFollowUpsForJob, startFollowUpWorker, FOLLOW_UP_SEQUENCES } from "./follow-up-system";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, generateForwardTwiml, validateTwilioSignature, transferActiveCall, generateTransferFallbackTwiml, holdCall, unholdCall, getClient } from "./twilio";
@@ -694,6 +695,15 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         );
       }
       
+      // Auto-create follow-up tasks for new jobs (only for quote/new_lead stage)
+      if (job.pipelineStage === "quote" || job.pipelineStage === "new_lead") {
+        try {
+          await createFollowUpTasksForJob(job);
+        } catch (followUpError: any) {
+          console.error("Failed to create follow-up tasks:", followUpError.message);
+        }
+      }
+      
       res.status(201).json(job);
     } catch (error) {
       res.status(500).json({ message: "Failed to create job" });
@@ -729,6 +739,16 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
+      
+      // Auto-terminate follow-ups if stage changed to scheduled or beyond
+      if (parsed.data.pipelineStage === "scheduled" || parsed.data.pipelineStage === "paid_completed") {
+        try {
+          await archiveFollowUpsForJob(job.id, job.jobNumber);
+        } catch (err: any) {
+          console.error("Failed to archive follow-up tasks:", err.message);
+        }
+      }
+      
       res.json(job);
     } catch (error) {
       res.status(500).json({ message: "Failed to update job" });
@@ -818,6 +838,16 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
           }
         } catch (calendarError: any) {
           console.error("Failed to create calendar event:", calendarError.message);
+        }
+      }
+      
+      // Auto-terminate follow-up tasks when job moves to scheduled or beyond
+      if ((parsed.data.pipelineStage === 'scheduled' || parsed.data.pipelineStage === 'paid_completed') && 
+          previousStage !== parsed.data.pipelineStage) {
+        try {
+          await archiveFollowUpsForJob(job.id, job.jobNumber);
+        } catch (archiveError: any) {
+          console.error("Failed to archive follow-up tasks:", archiveError.message);
         }
       }
       
@@ -2261,6 +2291,173 @@ Please let us know of any changes.`;
       console.error("Delete customer reminder error:", error);
       res.status(500).json({ message: error.message || "Failed to delete reminder" });
     }
+  });
+
+  // ============ FOLLOW-UP SYSTEM ROUTES ============
+
+  // Get follow-up tasks for a specific job
+  app.get("/api/jobs/:id/follow-up-tasks", isAuthenticated, async (req, res) => {
+    try {
+      const tasks = await storage.getScheduledTasksByJob(req.params.id as string);
+      res.json(tasks);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to get follow-up tasks" });
+    }
+  });
+
+  // Get follow-up logs for a specific job
+  app.get("/api/jobs/:id/follow-up-logs", isAuthenticated, async (req, res) => {
+    try {
+      const logs = await storage.getFollowUpLogsByJob(req.params.id as string);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to get follow-up logs" });
+    }
+  });
+
+  // Get all pending follow-up notifications (for the notification bell)
+  app.get("/api/follow-up-notifications", isAuthenticated, async (req, res) => {
+    try {
+      const notifications = await storage.getPendingNotifications();
+      res.json(notifications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to get follow-up notifications" });
+    }
+  });
+
+  // Manually send a follow-up (SMS/Email) from a notification
+  app.post("/api/follow-up-tasks/:id/send", isAuthenticated, async (req: any, res) => {
+    try {
+      const taskId = req.params.id;
+      const { sendSms: shouldSendSms, sendEmail: shouldSendEmail } = req.body;
+      
+      const allTasks = await db.select().from(scheduledTasks).where(eq(scheduledTasks.id, taskId));
+      const task = allTasks[0];
+      
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+
+      let smsSent = false;
+      let emailSent = false;
+
+      if (shouldSendSms !== false && task.customerPhone && task.smsContent) {
+        try {
+          if (isTwilioConfigured()) {
+            await sendSms(task.customerPhone, task.smsContent);
+            smsSent = true;
+          } else {
+            console.log(`[FollowUp] Manual SMS would send to ${task.customerPhone}`);
+            smsSent = true;
+          }
+        } catch (err: any) {
+          console.error("Follow-up SMS send error:", err.message);
+        }
+      }
+
+      if (shouldSendEmail !== false && task.customerEmail && task.emailSubject && task.emailBody) {
+        try {
+          await sendEmail(task.customerEmail, task.emailSubject, task.emailBody);
+          emailSent = true;
+        } catch (err: any) {
+          console.error("Follow-up Email send error:", err.message);
+        }
+      }
+
+      await storage.updateScheduledTaskStatus(taskId, "sent", new Date());
+      
+      const currentUser = await getCurrentUser(req);
+      const actions: string[] = [];
+      if (smsSent) actions.push("SMS");
+      if (emailSent) actions.push("Email");
+
+      await storage.createFollowUpLog({
+        jobId: task.jobId,
+        jobNumber: task.jobNumber,
+        action: "manual_send",
+        sequenceNumber: task.sequenceNumber,
+        details: `Sequence ${task.sequenceNumber}: Manually sent ${actions.join(" & ")} to ${task.customerName}`,
+        performedBy: currentUser?.username || "unknown",
+      });
+
+      res.json({ success: true, smsSent, emailSent });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to send follow-up" });
+    }
+  });
+
+  // Log a call result for a follow-up task
+  app.post("/api/follow-up-tasks/:id/log-call", isAuthenticated, async (req: any, res) => {
+    try {
+      const taskId = req.params.id;
+      const { result, notes } = req.body;
+      
+      const allTasks = await db.select().from(scheduledTasks).where(eq(scheduledTasks.id, taskId));
+      const task = allTasks[0];
+      
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+
+      await storage.updateScheduledTaskStatus(taskId, "sent", new Date());
+
+      const currentUser = await getCurrentUser(req);
+
+      await storage.createFollowUpLog({
+        jobId: task.jobId,
+        jobNumber: task.jobNumber,
+        action: "call_logged",
+        sequenceNumber: task.sequenceNumber,
+        details: `Call result: ${result}${notes ? ` - ${notes}` : ""}`,
+        performedBy: currentUser?.username || "unknown",
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to log call result" });
+    }
+  });
+
+  // Update follow-up mode for a job
+  app.patch("/api/jobs/:id/follow-up-mode", isAuthenticated, async (req, res) => {
+    try {
+      const modeSchema = z.object({
+        followUpMode: z.enum(followUpModes),
+      });
+      const parsed = modeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid follow-up mode" });
+      }
+
+      const job = await storage.updateJob(req.params.id, { followUpMode: parsed.data.followUpMode } as any);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Update all pending tasks to the new mode
+      const tasks = await storage.getScheduledTasksByJob(req.params.id);
+      for (const task of tasks) {
+        if (task.status === "pending") {
+          await db.update(scheduledTasks)
+            .set({ followUpMode: parsed.data.followUpMode })
+            .where(eq(scheduledTasks.id, task.id));
+        }
+      }
+
+      res.json(job);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to update follow-up mode" });
+    }
+  });
+
+  // Get follow-up sequence templates (for reference)
+  app.get("/api/follow-up-sequences", isAuthenticated, async (req, res) => {
+    const sequences = FOLLOW_UP_SEQUENCES.map(s => ({
+      sequenceNumber: s.sequenceNumber,
+      hoursDelay: s.hoursDelay,
+      label: s.label,
+    }));
+    res.json(sequences);
   });
 
   // ============ CUSTOMER SEARCH (Auto-Populate) ============
