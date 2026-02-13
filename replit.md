@@ -27,9 +27,13 @@ A suite of AI-powered tools, accessible to Admin and CSR roles via OpenAI (throu
 - **Sales & Marketing**: Upsell suggestions, review response generator.
 - **Quality & Training**: Customer satisfaction prediction, CSR performance coaching.
 
+### Warranty Jobs
+Jobs can be flagged as warranty work via a toggle on the new job form. When enabled, a search popup lets users find the original job and auto-fill customer, vehicle, and scheduling info. All pricing is zeroed out for warranty jobs. The `isWarranty` flag and `warrantyOriginalJobId` link the warranty to the original job. "warranty" is a valid service type for parts.
+
 ### Technician Mobile Portal
 A mobile-optimized interface for technicians to manage jobs in the field. Features include:
 - **Dashboard & Job Details**: Access to customer and vehicle information.
+- **Job Notes**: Displays install notes added by CSRs/admins so technicians can see important job context.
 - **Persistent Checklists**: Task and parts checklists whose states are saved to the database.
 - **Payment Recording**: Ability to record payments directly from the field.
 - **Job Completion**: Photo capture, signature collection.

@@ -99,6 +99,10 @@ export const jobs = pgTable("jobs", {
   // Follow-up mode: auto sends SMS/Email automatically, manual creates notifications for CSRs
   followUpMode: varchar("follow_up_mode").default("manual"),
   
+  // Warranty tracking
+  isWarranty: boolean("is_warranty").default(false),
+  warrantyOriginalJobId: varchar("warranty_original_job_id"),
+  
   completedAt: timestamp("completed_at"),
   
   createdAt: timestamp("created_at").defaultNow(),
@@ -131,7 +135,7 @@ export const leadSources = ["google_ads", "referral", "dealer", "repeat", "subco
 export type LeadSource = typeof leadSources[number];
 
 // Service type - what action is being performed
-export const serviceTypes = ["repair", "replace", "calibration"] as const;
+export const serviceTypes = ["repair", "replace", "calibration", "warranty"] as const;
 export type ServiceType = typeof serviceTypes[number];
 
 // Glass type - what part is being worked on
@@ -334,6 +338,10 @@ export const jobSchema = z.object({
   
   // Follow-up mode
   followUpMode: z.enum(followUpModes).default("manual"),
+  
+  // Warranty tracking
+  isWarranty: z.boolean().default(false),
+  warrantyOriginalJobId: z.string().optional(),
   
   createdAt: z.string().optional(),
 });

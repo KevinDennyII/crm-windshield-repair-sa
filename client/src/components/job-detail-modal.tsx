@@ -122,6 +122,7 @@ const serviceTypeLabels: Record<string, string> = {
   repair: "Repair",
   replace: "Replace",
   calibration: "Calibration",
+  warranty: "Warranty",
 };
 
 const glassTypeLabels: Record<string, string> = {
@@ -470,6 +471,8 @@ const getDefaultFormData = (): InsertJob => ({
   installNotes: "",
   calibrationDeclined: false,
   followUpMode: "manual" as const,
+  isWarranty: false,
+  warrantyOriginalJobId: undefined,
 });
 
 export function JobDetailModal({
@@ -502,6 +505,11 @@ export function JobDetailModal({
   const [showReminderPopup, setShowReminderPopup] = useState(false);
   const [showSetReminderDialog, setShowSetReminderDialog] = useState(false);
   const [reminderShownForKey, setReminderShownForKey] = useState<string>("");
+  const [showWarrantySearch, setShowWarrantySearch] = useState(false);
+  const [warrantySearchQuery, setWarrantySearchQuery] = useState("");
+  const [warrantySearchResults, setWarrantySearchResults] = useState<Job[]>([]);
+  const [warrantySearching, setWarrantySearching] = useState(false);
+  const warrantySearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
   const getCustomerKey = useCallback(() => {
@@ -544,8 +552,8 @@ export function JobDetailModal({
       const normalizedVehicles = (jobVehicles || []).map((v: Vehicle) => ({
         ...v,
         parts: v.parts.map((p: Part) => {
-          const { serviceType, glassType } = deriveServiceAndGlassType(p);
-          return { ...p, serviceType, glassType };
+          const derived = deriveServiceAndGlassType(p);
+          return { ...p, serviceType: derived.serviceType as Part["serviceType"], glassType: derived.glassType as Part["glassType"] };
         }),
       }));
       setFormData({ ...jobData, vehicles: normalizedVehicles });
@@ -574,6 +582,84 @@ export function JobDetailModal({
   const handleChange = (field: keyof InsertJob, value: string | number | boolean | undefined) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  const handleWarrantySearch = useCallback((query: string) => {
+    setWarrantySearchQuery(query);
+    if (warrantySearchTimeout.current) clearTimeout(warrantySearchTimeout.current);
+    if (!query || query.trim().length < 2) {
+      setWarrantySearchResults([]);
+      return;
+    }
+    setWarrantySearching(true);
+    warrantySearchTimeout.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/jobs/search?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setWarrantySearchResults(data);
+        }
+      } catch {
+        setWarrantySearchResults([]);
+      } finally {
+        setWarrantySearching(false);
+      }
+    }, 300);
+  }, []);
+
+  const handleSelectWarrantyJob = useCallback((originalJob: Job) => {
+    const veh = (originalJob.vehicles || []) as Vehicle[];
+    setFormData((prev) => ({
+      ...prev,
+      firstName: originalJob.firstName || "",
+      lastName: originalJob.lastName || "",
+      phone: originalJob.phone || "",
+      email: originalJob.email || "",
+      streetAddress: originalJob.streetAddress || "",
+      city: originalJob.city || "",
+      state: originalJob.state || "",
+      zipCode: originalJob.zipCode || "",
+      isBusiness: originalJob.isBusiness || false,
+      businessName: originalJob.businessName || "",
+      customerType: originalJob.customerType as any || "retail",
+      repairLocation: originalJob.repairLocation as any || "in_shop",
+      warrantyOriginalJobId: originalJob.id,
+      isWarranty: true,
+      subtotal: 0,
+      taxAmount: 0,
+      totalDue: 0,
+      deductible: 0,
+      rebate: 0,
+      amountPaid: 0,
+      balanceDue: 0,
+      installNotes: `Warranty for Job #${originalJob.jobNumber}. Original install date: ${originalJob.installDate || "N/A"}`,
+    }));
+    const warrantyVehicles = veh.map((v) => ({
+      ...v,
+      id: crypto.randomUUID(),
+      parts: v.parts.map((p) => ({
+        ...p,
+        id: crypto.randomUUID(),
+        serviceType: "warranty" as const,
+        partPrice: 0,
+        markup: 0,
+        accessoriesPrice: 0,
+        urethanePrice: 0,
+        laborPrice: 0,
+        calibrationPrice: 0,
+        mobileFee: 0,
+        materialCost: 0,
+        subcontractorCost: 0,
+        salesTaxPercent: 0,
+        partsSubtotal: 0,
+        partTotal: 0,
+      })),
+    }));
+    setVehicles(warrantyVehicles);
+    setShowWarrantySearch(false);
+    setWarrantySearchQuery("");
+    setWarrantySearchResults([]);
+    toast({ title: "Warranty Job Linked", description: `Loaded info from Job #${originalJob.jobNumber}` });
+  }, [toast]);
 
   const [customerSuggestions, setCustomerSuggestions] = useState<Contact[]>([]);
   const [activeSearchField, setActiveSearchField] = useState<string | null>(null);
@@ -840,11 +926,14 @@ export function JobDetailModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const total = calculateJobTotal(vehicles, formData.customerType);
+    const total = formData.isWarranty ? 0 : calculateJobTotal(vehicles, formData.customerType);
     const updatedFormData: InsertJob = {
       ...formData,
       vehicles,
       totalDue: total,
+      subtotal: formData.isWarranty ? 0 : formData.subtotal,
+      taxAmount: formData.isWarranty ? 0 : formData.taxAmount,
+      deductible: formData.isWarranty ? 0 : formData.deductible,
       balanceDue: Math.max(0, total - (formData.amountPaid || 0)),
     };
     onSave(updatedFormData);
@@ -959,7 +1048,42 @@ export function JobDetailModal({
                           {formData.followUpMode === "auto" ? "Auto Follow-Up" : "Manual Follow-Up"}
                         </Label>
                       </div>
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          id="isWarranty"
+                          checked={formData.isWarranty || false}
+                          onCheckedChange={(checked) => {
+                            handleChange("isWarranty", checked);
+                            if (checked && isNew) {
+                              setShowWarrantySearch(true);
+                            }
+                            if (!checked) {
+                              handleChange("warrantyOriginalJobId", undefined);
+                            }
+                          }}
+                          data-testid="switch-is-warranty"
+                        />
+                        <Label htmlFor="isWarranty" className="text-sm">
+                          Warranty
+                        </Label>
+                      </div>
                     </div>
+                    {formData.isWarranty && formData.warrantyOriginalJobId && (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          Warranty - Linked to Job
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowWarrantySearch(true)}
+                          data-testid="button-change-warranty-job"
+                        >
+                          Change
+                        </Button>
+                      </div>
+                    )}
 
                     {formData.isBusiness && (
                       <div className="grid sm:grid-cols-2 gap-4">
@@ -2927,6 +3051,58 @@ export function JobDetailModal({
         customerKey={customerKey}
         customerName={formData.isBusiness ? formData.businessName || "" : `${formData.firstName} ${formData.lastName}`}
       />
+
+      <Dialog open={showWarrantySearch} onOpenChange={setShowWarrantySearch}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Find Original Job for Warranty</DialogTitle>
+            <DialogDescription>Search by customer name, phone, job number, or vehicle</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 flex-1 overflow-hidden flex flex-col">
+            <Input
+              placeholder="Search jobs..."
+              value={warrantySearchQuery}
+              onChange={(e) => handleWarrantySearch(e.target.value)}
+              autoFocus
+              data-testid="input-warranty-search"
+            />
+            <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+              {warrantySearching && (
+                <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                  Searching...
+                </div>
+              )}
+              {!warrantySearching && warrantySearchResults.length === 0 && warrantySearchQuery.length >= 2 && (
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  No jobs found
+                </div>
+              )}
+              {warrantySearchResults.map((j) => {
+                const veh = (j.vehicles || []) as Vehicle[];
+                const vehicleStr = veh.map((v) => `${v.vehicleYear || ""} ${v.vehicleMake || ""} ${v.vehicleModel || ""}`.trim()).filter(Boolean).join(", ");
+                return (
+                  <Card
+                    key={j.id}
+                    className="cursor-pointer hover-elevate"
+                    onClick={() => handleSelectWarrantyJob(j)}
+                    data-testid={`warranty-job-result-${j.id}`}
+                  >
+                    <CardContent className="p-3 space-y-1">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="font-medium text-sm">Job #{j.jobNumber}</span>
+                        <Badge variant="outline" className="text-xs">{j.pipelineStage}</Badge>
+                      </div>
+                      <div className="text-sm">{j.firstName} {j.lastName} {j.phone ? `- ${j.phone}` : ""}</div>
+                      {vehicleStr && <div className="text-xs text-muted-foreground">{vehicleStr}</div>}
+                      {j.installDate && <div className="text-xs text-muted-foreground">Install: {j.installDate}</div>}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

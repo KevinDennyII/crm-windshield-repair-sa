@@ -655,6 +655,29 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  app.get("/api/jobs/search", async (req, res) => {
+    try {
+      const query = (req.query.q as string || "").trim().toLowerCase();
+      if (!query) {
+        return res.json([]);
+      }
+      const allJobs = await storage.getAllJobs();
+      const results = allJobs.filter((j: any) => {
+        const name = `${j.firstName || ""} ${j.lastName || ""}`.toLowerCase();
+        const phone = (j.phone || "").toLowerCase();
+        const jobNum = (j.jobNumber || "").toLowerCase();
+        const vehicles = (j.vehicles || []) as any[];
+        const vehicleMatch = vehicles.some((v: any) =>
+          `${v.vehicleYear || ""} ${v.vehicleMake || ""} ${v.vehicleModel || ""}`.toLowerCase().includes(query)
+        );
+        return name.includes(query) || phone.includes(query) || jobNum.includes(query) || vehicleMatch;
+      });
+      res.json(results.slice(0, 20));
+    } catch (error: any) {
+      res.status(500).json({ message: "Search failed", error: error?.message });
+    }
+  });
+
   // Get single job
   app.get("/api/jobs/:id", async (req, res) => {
     try {

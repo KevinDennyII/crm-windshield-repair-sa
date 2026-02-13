@@ -21,7 +21,8 @@ import {
   Mail,
   Send,
   DollarSign,
-  Plus
+  Plus,
+  FileText
 } from "lucide-react";
 import type { Job } from "@shared/schema";
 
@@ -399,6 +400,18 @@ export default function TechJobDetail() {
           </div>
         )}
         
+        {job.installNotes && (
+          <div className="px-4 py-3">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-800">Job Notes</span>
+              </div>
+              <p className="text-sm text-amber-900 whitespace-pre-wrap" data-testid="text-install-notes">{job.installNotes}</p>
+            </div>
+          </div>
+        )}
+
         <div className="px-4 py-3">
           <button
             onClick={() => setTasksExpanded(!tasksExpanded)}
