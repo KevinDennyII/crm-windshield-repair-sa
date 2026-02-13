@@ -1,10 +1,13 @@
 import type { Express, Request, Response } from "express";
 import twilio from "twilio";
 import OpenAI from "openai";
+import path from "path";
+import fs from "fs";
 import { db } from "./db";
 import { aiReceptionistSettings, aiReceptionistCalls, jobs } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { isTwilioConfigured, getTwilioPhoneNumber } from "./twilio";
+import { isElevenLabsVoice, isElevenLabsConfigured, generateElevenLabsAudio, AUDIO_DIR } from "./elevenlabs";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy-key",
@@ -18,6 +21,41 @@ function getSayAttributes(voiceName: string): { voice: string; language?: string
     return { voice: voiceName, language: lang };
   }
   return { voice: voiceName };
+}
+
+function getBaseUrl(): string {
+  if (process.env.PUBLIC_BASE_URL) {
+    return process.env.PUBLIC_BASE_URL;
+  }
+  if (process.env.REPLIT_DEPLOYMENT_URL) {
+    return process.env.REPLIT_DEPLOYMENT_URL;
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  }
+  const replSlug = process.env.REPL_SLUG;
+  const replOwner = process.env.REPL_OWNER;
+  if (replSlug && replOwner) {
+    return `https://${replSlug}.${replOwner}.repl.co`;
+  }
+  return "https://localhost:5000";
+}
+
+async function speakText(
+  target: any,
+  text: string,
+  voiceName: string
+): Promise<void> {
+  if (isElevenLabsVoice(voiceName) && isElevenLabsConfigured()) {
+    const filename = await generateElevenLabsAudio(text, voiceName);
+    if (filename) {
+      const audioUrl = `${getBaseUrl()}/api/elevenlabs-audio/${filename}`;
+      target.play(audioUrl);
+      return;
+    }
+  }
+  const sayAttrs = getSayAttributes(voiceName);
+  target.say(sayAttrs as any, text);
 }
 
 const DEFAULT_GREETING = "Hello! Thank you for calling Windshield Repair SA. How can I help you today?";
@@ -138,6 +176,19 @@ Only return the JSON object, no other text.`
 }
 
 export function registerVoiceReceptionistRoutes(app: Express): void {
+  app.get("/api/elevenlabs-audio/:filename", (req: Request, res: Response) => {
+    const filename = req.params.filename as string;
+    if (!filename || filename.includes("..") || !filename.endsWith(".mp3")) {
+      return res.status(400).send("Invalid filename");
+    }
+    const filePath = path.join(AUDIO_DIR, filename as string);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send("Audio not found");
+    }
+    res.set("Content-Type", "audio/mpeg");
+    res.sendFile(filePath);
+  });
+
   app.get("/api/ai-receptionist/settings", async (_req: Request, res: Response) => {
     try {
       const settings = await getSettings();
@@ -226,7 +277,6 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
 
       const { CallSid, From } = req.body;
       const voiceName = settings?.voiceName || "Polly.Joanna";
-      const sayAttrs = getSayAttributes(voiceName);
       const greeting = settings?.greeting || DEFAULT_GREETING;
 
       await getOrCreateCallRecord(CallSid, From);
@@ -241,9 +291,9 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
         language: "en-US",
         speechModel: "experimental_conversations",
       });
-      gather.say(sayAttrs as any, greeting);
+      await speakText(gather, greeting, voiceName);
 
-      response.say(sayAttrs as any, "I'm sorry, I didn't hear anything. Goodbye!");
+      await speakText(response, "I'm sorry, I didn't hear anything. Goodbye!", voiceName);
       response.hangup();
 
       res.send(response.toString());
@@ -262,7 +312,6 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
       const { CallSid, SpeechResult, From } = req.body;
       const settings = await getSettings();
       const voiceName = settings?.voiceName || "Polly.Joanna";
-      const sayAttrs = getSayAttributes(voiceName);
       const maxTurns = settings?.maxTurns || 10;
 
       const callRecord = await getOrCreateCallRecord(CallSid, From || "unknown");
@@ -278,7 +327,7 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
         await appendTranscript(CallSid, "assistant", farewell);
 
         const response = new twilio.twiml.VoiceResponse();
-        response.say(sayAttrs as any, farewell);
+        await speakText(response, farewell, voiceName);
         response.hangup();
 
         processCallEnd(CallSid).catch(err => console.error("Post-call processing error:", err));
@@ -298,9 +347,9 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
         language: "en-US",
         speechModel: "experimental_conversations",
       });
-      gather.say(sayAttrs as any, aiResponse);
+      await speakText(gather, aiResponse, voiceName);
 
-      response.say(sayAttrs as any, "Thank you for calling. Goodbye!");
+      await speakText(response, "Thank you for calling. Goodbye!", voiceName);
       response.hangup();
 
       res.send(response.toString());

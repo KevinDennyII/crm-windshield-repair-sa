@@ -15,7 +15,8 @@ import { Bot, Phone, Save, TestTube, Clock, User, Car, FileText, ChevronDown, Ch
 import { format } from "date-fns";
 
 const VOICE_OPTIONS = [
-  { value: "Google.en-US-Casual-K", label: "Ivanna - Young & Casual (Female, US English)", group: "Google" },
+  { value: "ElevenLabs.Ivanna", label: "Ivanna - Young, Versatile & Casual (Female)", group: "ElevenLabs" },
+  { value: "Google.en-US-Casual-K", label: "Casual Female (US English)", group: "Google" },
   { value: "Google.en-US-Studio-O", label: "Studio Female (Natural, US English)", group: "Google" },
   { value: "Google.en-US-Studio-Q", label: "Studio Male (Natural, US English)", group: "Google" },
   { value: "Google.en-US-Neural2-F", label: "Neural Female (Warm, US English)", group: "Google" },
@@ -150,7 +151,11 @@ export default function AIReceptionist() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Google (Natural)</div>
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">ElevenLabs (Premium)</div>
+                    {VOICE_OPTIONS.filter(v => v.group === "ElevenLabs").map((v) => (
+                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                    ))}
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-1">Google (Natural)</div>
                     {VOICE_OPTIONS.filter(v => v.group === "Google").map((v) => (
                       <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
                     ))}
@@ -160,7 +165,7 @@ export default function AIReceptionist() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-sm text-muted-foreground">Google voices sound more natural and conversational</p>
+                <p className="text-sm text-muted-foreground">ElevenLabs voices sound the most natural. Google and Polly are built into Twilio.</p>
               </div>
 
               <div className="space-y-2">
