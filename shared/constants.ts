@@ -28,10 +28,14 @@ export const LABOR_PRICING = {
 } as const;
 
 export const MOBILE_FEE = {
-  LOCAL_RADIUS_MILES: 15,
-  BASE_FEE: 25,
-  EXTENDED_FEE: 50,
-  EXTENDED_RADIUS_MILES: 30,
+  ZONES: [
+    { maxMilesOutside: 0, fee: 0, label: "Inside Loop 1604" },
+    { maxMilesOutside: 5, fee: 10, label: "0-5 mi outside 1604" },
+    { maxMilesOutside: 10, fee: 20, label: "5-10 mi outside 1604" },
+    { maxMilesOutside: 15, fee: 25, label: "10-15 mi outside 1604" },
+    { maxMilesOutside: 20, fee: 35, label: "15-20 mi outside 1604" },
+    { maxMilesOutside: Infinity, fee: 50, label: "20+ mi outside 1604" },
+  ],
 } as const;
 
 export const GLASS_TYPES_REQUIRING_URETHANE = [

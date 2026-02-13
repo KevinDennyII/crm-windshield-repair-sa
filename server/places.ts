@@ -26,27 +26,145 @@ interface PlaceDetailsResponse {
   distanceMiles?: number;
 }
 
-// San Antonio downtown coordinates (center of the fee zones)
 const SAN_ANTONIO_CENTER = {
   lat: 29.4241,
   lng: -98.4936
 };
 
-// Distance thresholds in miles and corresponding mobile fees
-// Based on the zone map (Loop 1604 extends ~15 miles from downtown in all directions):
-// - Inside Loop 1604 (~15 miles): $0
-// - Green zone (~20 miles): $10
-// - Blue zone (~30 miles): $20  
-// - Purple zone (~40 miles): $25
-// - Pink zone (~50 miles): $35
-// - Red zone (>50 miles): $50
-function calculateMobileFee(distanceMiles: number): number {
-  if (distanceMiles <= 15) return 0;    // Inside 1604
-  if (distanceMiles <= 20) return 10;   // Green zone
-  if (distanceMiles <= 30) return 20;   // Blue zone
-  if (distanceMiles <= 40) return 25;   // Purple zone
-  if (distanceMiles <= 50) return 35;   // Pink zone
-  return 50;                             // Red zone
+const LOOP_1604_COORDS = [
+  { lat: 29.4832502, lng: -98.7089665 },
+  { lat: 29.4458855, lng: -98.7113697 },
+  { lat: 29.4231611, lng: -98.7099965 },
+  { lat: 29.4085071, lng: -98.7093098 },
+  { lat: 29.3971413, lng: -98.7024434 },
+  { lat: 29.3818853, lng: -98.7007267 },
+  { lat: 29.3579496, lng: -98.6911137 },
+  { lat: 29.3414905, lng: -98.6918003 },
+  { lat: 29.3268248, lng: -98.6859639 },
+  { lat: 29.3103607, lng: -98.6763508 },
+  { lat: 29.2932952, lng: -98.6677678 },
+  { lat: 29.2801198, lng: -98.6667378 },
+  { lat: 29.2582569, lng: -98.6660511 },
+  { lat: 29.2507685, lng: -98.6629612 },
+  { lat: 29.2414822, lng: -98.6629612 },
+  { lat: 29.2354906, lng: -98.6609013 },
+  { lat: 29.2297982, lng: -98.6492283 },
+  { lat: 29.2262029, lng: -98.638242 },
+  { lat: 29.2265025, lng: -98.6227925 },
+  { lat: 29.230697, lng: -98.6114628 },
+  { lat: 29.2324946, lng: -98.5942967 },
+  { lat: 29.2339926, lng: -98.5651143 },
+  { lat: 29.2297982, lng: -98.5630543 },
+  { lat: 29.2235063, lng: -98.5565312 },
+  { lat: 29.2172139, lng: -98.5455449 },
+  { lat: 29.2148168, lng: -98.5276921 },
+  { lat: 29.2130188, lng: -98.5088093 },
+  { lat: 29.2142175, lng: -98.4981663 },
+  { lat: 29.2202103, lng: -98.4830601 },
+  { lat: 29.2202103, lng: -98.4696705 },
+  { lat: 29.2208096, lng: -98.4415181 },
+  { lat: 29.22051, lng: -98.4308751 },
+  { lat: 29.2172139, lng: -98.4099324 },
+  { lat: 29.2190118, lng: -98.3896763 },
+  { lat: 29.2190118, lng: -98.3598072 },
+  { lat: 29.2250044, lng: -98.3529408 },
+  { lat: 29.2339926, lng: -98.3536274 },
+  { lat: 29.2447775, lng: -98.3488209 },
+  { lat: 29.2483721, lng: -98.334058 },
+  { lat: 29.2516672, lng: -98.3282216 },
+  { lat: 29.260054, lng: -98.3213551 },
+  { lat: 29.2666432, lng: -98.3059056 },
+  { lat: 29.298984, lng: -98.2743199 },
+  { lat: 29.3031756, lng: -98.2612736 },
+  { lat: 29.3109595, lng: -98.260587 },
+  { lat: 29.3247295, lng: -98.2626469 },
+  { lat: 29.3355048, lng: -98.2537205 },
+  { lat: 29.3456804, lng: -98.2516606 },
+  { lat: 29.3636348, lng: -98.2434208 },
+  { lat: 29.3905605, lng: -98.239301 },
+  { lat: 29.4138904, lng: -98.2530339 },
+  { lat: 29.4491742, lng: -98.2853062 },
+  { lat: 29.4802615, lng: -98.2976658 },
+  { lat: 29.4874342, lng: -98.291486 },
+  { lat: 29.513132, lng: -98.2873661 },
+  { lat: 29.5364337, lng: -98.3017857 },
+  { lat: 29.5483812, lng: -98.3182652 },
+  { lat: 29.5662998, lng: -98.3313115 },
+  { lat: 29.6027246, lng: -98.3608372 },
+  { lat: 29.5997394, lng: -98.4301884 },
+  { lat: 29.6086946, lng: -98.4617741 },
+  { lat: 29.6098885, lng: -98.518079 },
+  { lat: 29.6027246, lng: -98.5331852 },
+  { lat: 29.6003364, lng: -98.5579045 },
+  { lat: 29.5895893, lng: -98.5922367 },
+  { lat: 29.5848124, lng: -98.6334355 },
+  { lat: 29.5776467, lng: -98.6430485 },
+  { lat: 29.5477839, lng: -98.6718876 },
+  { lat: 29.4832502, lng: -98.7089665 },
+];
+
+function isPointInsideLoop1604(lat: number, lng: number): boolean {
+  let inside = false;
+  const n = LOOP_1604_COORDS.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = LOOP_1604_COORDS[i].lat, yi = LOOP_1604_COORDS[i].lng;
+    const xj = LOOP_1604_COORDS[j].lat, yj = LOOP_1604_COORDS[j].lng;
+    if ((yi > lng) !== (yj > lng) && lat < (xj - xi) * (lng - yi) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function distanceToSegmentMiles(
+  pLat: number, pLng: number,
+  aLat: number, aLng: number,
+  bLat: number, bLng: number
+): number {
+  const MILES_PER_DEG_LAT = 69.0;
+  const MILES_PER_DEG_LNG = 69.0 * Math.cos((pLat * Math.PI) / 180);
+
+  const px = (pLat - aLat) * MILES_PER_DEG_LAT;
+  const py = (pLng - aLng) * MILES_PER_DEG_LNG;
+  const bx = (bLat - aLat) * MILES_PER_DEG_LAT;
+  const by = (bLng - aLng) * MILES_PER_DEG_LNG;
+
+  const dot = px * bx + py * by;
+  const lenSq = bx * bx + by * by;
+  let t = lenSq > 0 ? dot / lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+
+  const dx = px - t * bx;
+  const dy = py - t * by;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function distanceOutsideLoop1604(lat: number, lng: number): number {
+  let minDist = Infinity;
+  const n = LOOP_1604_COORDS.length;
+  for (let i = 0; i < n - 1; i++) {
+    const a = LOOP_1604_COORDS[i];
+    const b = LOOP_1604_COORDS[i + 1];
+    const d = distanceToSegmentMiles(lat, lng, a.lat, a.lng, b.lat, b.lng);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
+}
+
+function calculateMobileFee(lat: number, lng: number): { fee: number; distanceMiles: number } {
+  if (isPointInsideLoop1604(lat, lng)) {
+    const distFromCenter = calculateDistanceMiles(SAN_ANTONIO_CENTER.lat, SAN_ANTONIO_CENTER.lng, lat, lng);
+    return { fee: 0, distanceMiles: distFromCenter };
+  }
+  const distOutside = distanceOutsideLoop1604(lat, lng);
+  const distFromCenter = calculateDistanceMiles(SAN_ANTONIO_CENTER.lat, SAN_ANTONIO_CENTER.lng, lat, lng);
+  let fee: number;
+  if (distOutside <= 5) fee = 10;
+  else if (distOutside <= 10) fee = 20;
+  else if (distOutside <= 15) fee = 25;
+  else if (distOutside <= 20) fee = 35;
+  else fee = 50;
+  return { fee, distanceMiles: distFromCenter };
 }
 
 function calculateDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -148,13 +266,9 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetailsResp
   if (location?.lat !== undefined && location?.lng !== undefined) {
     lat = location.lat;
     lng = location.lng;
-    distanceMiles = calculateDistanceMiles(
-      SAN_ANTONIO_CENTER.lat,
-      SAN_ANTONIO_CENTER.lng,
-      lat as number,
-      lng as number
-    );
-    mobileFee = calculateMobileFee(distanceMiles);
+    const result = calculateMobileFee(lat as number, lng as number);
+    mobileFee = result.fee;
+    distanceMiles = result.distanceMiles;
   }
 
   return {

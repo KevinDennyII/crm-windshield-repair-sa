@@ -77,26 +77,51 @@ const LOOP_1604_COORDS = [
   { lat: 29.4832502, lng: -98.7089665 },
 ];
 
-const OUTER_ZONES = [
-  { radius: 50, fee: "$50", color: "#EF4444", label: "Red Zone (50+ mi)", fillOpacity: 0.08 },
-  { radius: 40, fee: "$35", color: "#EC4899", label: "Pink Zone (40-50 mi)", fillOpacity: 0.10 },
-  { radius: 30, fee: "$25", color: "#8B5CF6", label: "Purple Zone (30-40 mi)", fillOpacity: 0.10 },
-  { radius: 20, fee: "$20", color: "#3B82F6", label: "Blue Zone (20-30 mi)", fillOpacity: 0.10 },
-  { radius: 15, fee: "$10", color: "#F59E0B", label: "Yellow Zone (15-20 mi)", fillOpacity: 0.12 },
+function computeCentroid(coords: { lat: number; lng: number }[]) {
+  const pts = coords.slice(0, -1);
+  const sumLat = pts.reduce((s, p) => s + p.lat, 0);
+  const sumLng = pts.reduce((s, p) => s + p.lng, 0);
+  return { lat: sumLat / pts.length, lng: sumLng / pts.length };
+}
+
+function expandPolygon(coords: { lat: number; lng: number }[], miles: number) {
+  const centroid = computeCentroid(coords);
+  const MILES_PER_DEG_LAT = 69.0;
+  const MILES_PER_DEG_LNG = 69.0 * Math.cos((centroid.lat * Math.PI) / 180);
+
+  return coords.map((pt) => {
+    const dLat = pt.lat - centroid.lat;
+    const dLng = pt.lng - centroid.lng;
+    const distMiles = Math.sqrt(
+      (dLat * MILES_PER_DEG_LAT) ** 2 + (dLng * MILES_PER_DEG_LNG) ** 2
+    );
+    if (distMiles === 0) return pt;
+    const scale = (distMiles + miles) / distMiles;
+    return {
+      lat: centroid.lat + dLat * scale,
+      lng: centroid.lng + dLng * scale,
+    };
+  });
+}
+
+const BUFFER_ZONES = [
+  { miles: 30, fee: "$50", color: "#EF4444", label: "20+ mi outside 1604", fillOpacity: 0.08 },
+  { miles: 20, fee: "$35", color: "#EC4899", label: "15-20 mi outside 1604", fillOpacity: 0.10 },
+  { miles: 15, fee: "$25", color: "#8B5CF6", label: "10-15 mi outside 1604", fillOpacity: 0.10 },
+  { miles: 10, fee: "$20", color: "#3B82F6", label: "5-10 mi outside 1604", fillOpacity: 0.10 },
+  { miles: 5,  fee: "$10", color: "#F59E0B", label: "0-5 mi outside 1604", fillOpacity: 0.12 },
 ];
 
-const GREEN_ZONE = { fee: "$0", color: "#22C55E", label: "Inside 1604 (Loop)", fillOpacity: 0.12 };
+const GREEN_ZONE = { fee: "$0", color: "#22C55E", label: "Inside Loop 1604", fillOpacity: 0.12 };
 
 const ALL_ZONES_FOR_LEGEND = [
-  { fee: "$50", color: "#EF4444", label: "Red Zone (50+ mi)" },
-  { fee: "$35", color: "#EC4899", label: "Pink Zone (40-50 mi)" },
-  { fee: "$25", color: "#8B5CF6", label: "Purple Zone (30-40 mi)" },
-  { fee: "$20", color: "#3B82F6", label: "Blue Zone (20-30 mi)" },
-  { fee: "$10", color: "#F59E0B", label: "Yellow Zone (15-20 mi)" },
-  { fee: "$0",  color: "#22C55E", label: "Inside 1604 (Loop)" },
+  { fee: "$50", color: "#EF4444", label: "20+ mi outside 1604" },
+  { fee: "$35", color: "#EC4899", label: "15-20 mi outside 1604" },
+  { fee: "$25", color: "#8B5CF6", label: "10-15 mi outside 1604" },
+  { fee: "$20", color: "#3B82F6", label: "5-10 mi outside 1604" },
+  { fee: "$10", color: "#F59E0B", label: "0-5 mi outside 1604" },
+  { fee: "$0",  color: "#22C55E", label: "Inside Loop 1604" },
 ];
-
-const MILES_TO_METERS = 1609.34;
 
 export default function MobileFeeMap() {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -140,13 +165,13 @@ export default function MobileFeeMap() {
       ],
     });
 
-    for (const zone of OUTER_ZONES) {
-      new google.maps.Circle({
+    for (const zone of BUFFER_ZONES) {
+      const bufferCoords = expandPolygon(LOOP_1604_COORDS, zone.miles);
+      new google.maps.Polygon({
         map,
-        center: SA_CENTER,
-        radius: zone.radius * MILES_TO_METERS,
+        paths: bufferCoords,
         strokeColor: zone.color,
-        strokeOpacity: 0.8,
+        strokeOpacity: 0.7,
         strokeWeight: 2,
         fillColor: zone.color,
         fillOpacity: zone.fillOpacity,
