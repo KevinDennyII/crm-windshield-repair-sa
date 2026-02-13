@@ -15,15 +15,27 @@ import { Bot, Phone, Save, TestTube, Clock, User, Car, FileText, ChevronDown, Ch
 import { format } from "date-fns";
 
 const VOICE_OPTIONS = [
-  { value: "Polly.Joanna", label: "Joanna (Female, US English)" },
-  { value: "Polly.Matthew", label: "Matthew (Male, US English)" },
-  { value: "Polly.Salli", label: "Salli (Female, US English)" },
-  { value: "Polly.Joey", label: "Joey (Male, US English)" },
-  { value: "Polly.Kendra", label: "Kendra (Female, US English)" },
-  { value: "Polly.Kimberly", label: "Kimberly (Female, US English)" },
-  { value: "Polly.Ivy", label: "Ivy (Female, US English, Child)" },
-  { value: "Polly.Lupe", label: "Lupe (Female, US Spanish)" },
-  { value: "Polly.Pedro", label: "Pedro (Male, US Spanish)" },
+  { value: "Google.en-US-Casual-K", label: "Ivanna - Young & Casual (Female, US English)", group: "Google" },
+  { value: "Google.en-US-Studio-O", label: "Studio Female (Natural, US English)", group: "Google" },
+  { value: "Google.en-US-Studio-Q", label: "Studio Male (Natural, US English)", group: "Google" },
+  { value: "Google.en-US-Neural2-F", label: "Neural Female (Warm, US English)", group: "Google" },
+  { value: "Google.en-US-Neural2-D", label: "Neural Male (Warm, US English)", group: "Google" },
+  { value: "Google.en-US-Neural2-H", label: "Neural Female (Friendly, US English)", group: "Google" },
+  { value: "Google.en-US-Neural2-J", label: "Neural Male (Friendly, US English)", group: "Google" },
+  { value: "Google.es-US-Neural2-A", label: "Neural Female (US Spanish)", group: "Google" },
+  { value: "Google.es-US-Studio-B", label: "Studio Male (US Spanish)", group: "Google" },
+  { value: "Polly.Joanna-Neural", label: "Joanna Neural (Female, US English)", group: "Amazon Polly" },
+  { value: "Polly.Matthew-Neural", label: "Matthew Neural (Male, US English)", group: "Amazon Polly" },
+  { value: "Polly.Ruth-Neural", label: "Ruth Neural (Female, US English)", group: "Amazon Polly" },
+  { value: "Polly.Stephen-Neural", label: "Stephen Neural (Male, US English)", group: "Amazon Polly" },
+  { value: "Polly.Joanna", label: "Joanna (Female, US English)", group: "Amazon Polly" },
+  { value: "Polly.Matthew", label: "Matthew (Male, US English)", group: "Amazon Polly" },
+  { value: "Polly.Salli", label: "Salli (Female, US English)", group: "Amazon Polly" },
+  { value: "Polly.Joey", label: "Joey (Male, US English)", group: "Amazon Polly" },
+  { value: "Polly.Kendra", label: "Kendra (Female, US English)", group: "Amazon Polly" },
+  { value: "Polly.Kimberly", label: "Kimberly (Female, US English)", group: "Amazon Polly" },
+  { value: "Polly.Lupe", label: "Lupe (Female, US Spanish)", group: "Amazon Polly" },
+  { value: "Polly.Pedro", label: "Pedro (Male, US Spanish)", group: "Amazon Polly" },
 ];
 
 export default function AIReceptionist() {
@@ -138,11 +150,17 @@ export default function AIReceptionist() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {VOICE_OPTIONS.map((v) => (
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Google (Natural)</div>
+                    {VOICE_OPTIONS.filter(v => v.group === "Google").map((v) => (
+                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                    ))}
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-1">Amazon Polly</div>
+                    {VOICE_OPTIONS.filter(v => v.group === "Amazon Polly").map((v) => (
                       <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-sm text-muted-foreground">Google voices sound more natural and conversational</p>
               </div>
 
               <div className="space-y-2">

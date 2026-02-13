@@ -11,6 +11,15 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+function getSayAttributes(voiceName: string): { voice: string; language?: string } {
+  if (voiceName.startsWith("Google.")) {
+    const langMatch = voiceName.match(/Google\.([\w-]+)-/);
+    const lang = langMatch ? langMatch[1] : "en-US";
+    return { voice: voiceName, language: lang };
+  }
+  return { voice: voiceName };
+}
+
 const DEFAULT_GREETING = "Hello! Thank you for calling Windshield Repair SA. How can I help you today?";
 
 const DEFAULT_SYSTEM_PROMPT = `You are a friendly, professional AI receptionist for Windshield Repair SA, an auto glass repair and replacement company in San Antonio, Texas.
@@ -217,6 +226,7 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
 
       const { CallSid, From } = req.body;
       const voiceName = settings?.voiceName || "Polly.Joanna";
+      const sayAttrs = getSayAttributes(voiceName);
       const greeting = settings?.greeting || DEFAULT_GREETING;
 
       await getOrCreateCallRecord(CallSid, From);
@@ -231,9 +241,9 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
         language: "en-US",
         speechModel: "experimental_conversations",
       });
-      gather.say({ voice: voiceName as any }, greeting);
+      gather.say(sayAttrs as any, greeting);
 
-      response.say({ voice: voiceName as any }, "I'm sorry, I didn't hear anything. Goodbye!");
+      response.say(sayAttrs as any, "I'm sorry, I didn't hear anything. Goodbye!");
       response.hangup();
 
       res.send(response.toString());
@@ -252,6 +262,7 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
       const { CallSid, SpeechResult, From } = req.body;
       const settings = await getSettings();
       const voiceName = settings?.voiceName || "Polly.Joanna";
+      const sayAttrs = getSayAttributes(voiceName);
       const maxTurns = settings?.maxTurns || 10;
 
       const callRecord = await getOrCreateCallRecord(CallSid, From || "unknown");
@@ -267,7 +278,7 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
         await appendTranscript(CallSid, "assistant", farewell);
 
         const response = new twilio.twiml.VoiceResponse();
-        response.say({ voice: voiceName as any }, farewell);
+        response.say(sayAttrs as any, farewell);
         response.hangup();
 
         processCallEnd(CallSid).catch(err => console.error("Post-call processing error:", err));
@@ -287,9 +298,9 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
         language: "en-US",
         speechModel: "experimental_conversations",
       });
-      gather.say({ voice: voiceName as any }, aiResponse);
+      gather.say(sayAttrs as any, aiResponse);
 
-      response.say({ voice: voiceName as any }, "Thank you for calling. Goodbye!");
+      response.say(sayAttrs as any, "Thank you for calling. Goodbye!");
       response.hangup();
 
       res.send(response.toString());
