@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, Phone, Save, TestTube, Clock, User, Car, FileText, ChevronDown, ChevronRight, Plus, ArrowLeft, Send, PhoneIncoming, PhoneOff, PhoneCall, Mic, Volume2, VolumeX, Loader2 } from "lucide-react";
+import { Bot, Phone, Save, TestTube, Clock, User, Car, FileText, ChevronDown, ChevronRight, Plus, ArrowLeft, Send, PhoneIncoming, PhoneOff, PhoneCall, Mic, Volume2, VolumeX, Loader2, Play, Square } from "lucide-react";
+import ivannaPreview from "@assets/voice_preview_ivanna_-_young,_versatile_and_casual_1770959207776.mp3";
 import { format } from "date-fns";
 
 const VOICE_OPTIONS = [
@@ -42,6 +43,8 @@ const VOICE_OPTIONS = [
 export default function AIReceptionist() {
   const { toast } = useToast();
   const [expandedCall, setExpandedCall] = useState<string | null>(null);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const { data: settings, isLoading: settingsLoading } = useQuery<any>({
     queryKey: ["/api/ai-receptionist/settings"],
@@ -65,6 +68,22 @@ export default function AIReceptionist() {
       });
     }
   }, [settings]);
+
+  const togglePreview = useCallback(() => {
+    if (isPlayingPreview) {
+      previewAudioRef.current?.pause();
+      if (previewAudioRef.current) previewAudioRef.current.currentTime = 0;
+      setIsPlayingPreview(false);
+    } else {
+      if (!previewAudioRef.current) {
+        previewAudioRef.current = new Audio(ivannaPreview);
+        previewAudioRef.current.onended = () => setIsPlayingPreview(false);
+      }
+      previewAudioRef.current.currentTime = 0;
+      previewAudioRef.current.play();
+      setIsPlayingPreview(true);
+    }
+  }, [isPlayingPreview]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -143,29 +162,51 @@ export default function AIReceptionist() {
 
               <div className="space-y-2">
                 <Label>Voice</Label>
-                <Select
-                  value={formData.voiceName}
-                  onValueChange={(val) => setFormData({ ...formData, voiceName: val })}
-                >
-                  <SelectTrigger data-testid="select-voice">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">ElevenLabs (Premium)</div>
-                    {VOICE_OPTIONS.filter(v => v.group === "ElevenLabs").map((v) => (
-                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
-                    ))}
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-1">Google (Natural)</div>
-                    {VOICE_OPTIONS.filter(v => v.group === "Google").map((v) => (
-                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
-                    ))}
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-1">Amazon Polly</div>
-                    {VOICE_OPTIONS.filter(v => v.group === "Amazon Polly").map((v) => (
-                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground">ElevenLabs voices sound the most natural. Google and Polly are built into Twilio.</p>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={formData.voiceName}
+                    onValueChange={(val) => {
+                      if (!val.startsWith("ElevenLabs.") && isPlayingPreview) {
+                        previewAudioRef.current?.pause();
+                        if (previewAudioRef.current) previewAudioRef.current.currentTime = 0;
+                        setIsPlayingPreview(false);
+                      }
+                      setFormData({ ...formData, voiceName: val });
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-voice" className="flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">ElevenLabs (Premium)</div>
+                      {VOICE_OPTIONS.filter(v => v.group === "ElevenLabs").map((v) => (
+                        <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                      ))}
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-1">Google (Natural)</div>
+                      {VOICE_OPTIONS.filter(v => v.group === "Google").map((v) => (
+                        <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                      ))}
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-1">Amazon Polly</div>
+                      {VOICE_OPTIONS.filter(v => v.group === "Amazon Polly").map((v) => (
+                        <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.voiceName?.startsWith("ElevenLabs.") && (
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={togglePreview}
+                      data-testid="button-preview-voice"
+                    >
+                      {isPlayingPreview ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </Button>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  ElevenLabs voices sound the most natural. Google and Polly are built into Twilio.
+                  {formData.voiceName?.startsWith("ElevenLabs.") && " Click the play button to preview."}
+                </p>
               </div>
 
               <div className="space-y-2">
