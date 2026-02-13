@@ -1702,6 +1702,36 @@ Please let us know of any changes.`;
         return;
       }
 
+      // Check if AI receptionist should handle this inbound call
+      try {
+        const [aiSettings] = await db.select().from(aiReceptionistSettings).limit(1);
+        if (aiSettings && aiSettings.isEnabled) {
+          console.log("[AI Receptionist] Enabled - redirecting inbound call to AI receptionist");
+          const baseUrl = `https://${req.get('host')}`;
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Redirect method="POST">${baseUrl}/api/voice/ai-receptionist</Redirect></Response>`;
+          res.send(twiml);
+
+          try {
+            await db.insert(phoneCalls).values({
+              callSid: CallSid,
+              direction: 'inbound',
+              fromNumber: From,
+              toNumber: To,
+              status: CallStatus || 'ringing',
+              contactName: "AI Receptionist Call",
+            }).onConflictDoUpdate({
+              target: phoneCalls.callSid,
+              set: { status: CallStatus || 'ringing' }
+            });
+          } catch (logErr) {
+            console.error("Failed to log AI receptionist call:", logErr);
+          }
+          return;
+        }
+      } catch (aiErr) {
+        console.error("Failed to check AI receptionist settings:", aiErr);
+      }
+
       // Handle inbound call - send TwiML response FIRST, then log asynchronously
       let contactName = "Unknown Caller";
       try {
