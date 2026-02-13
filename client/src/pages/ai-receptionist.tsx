@@ -491,17 +491,55 @@ function SimulatedCall({ formData }: { formData: any }) {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [conversation]);
 
+  const elevenLabsAudioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       window.speechSynthesis?.cancel();
+      if (elevenLabsAudioRef.current) {
+        elevenLabsAudioRef.current.pause();
+        elevenLabsAudioRef.current = null;
+      }
     };
   }, []);
 
-  const speakText = useCallback((text: string, voiceName?: string) => {
-    if (isMuted || !window.speechSynthesis) return;
+  const speakText = useCallback(async (text: string, voiceName?: string) => {
+    if (isMuted) return;
 
-    window.speechSynthesis.cancel();
+    window.speechSynthesis?.cancel();
+    if (elevenLabsAudioRef.current) {
+      elevenLabsAudioRef.current.pause();
+      elevenLabsAudioRef.current = null;
+    }
+
+    if (voiceName?.startsWith("ElevenLabs.")) {
+      try {
+        setIsSpeaking(true);
+        const res = await fetch("/api/ai-receptionist/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voiceName }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const audio = new Audio(data.audioUrl);
+          elevenLabsAudioRef.current = audio;
+          audio.onended = () => {
+            setIsSpeaking(false);
+            inputRef.current?.focus();
+          };
+          audio.onerror = () => setIsSpeaking(false);
+          await audio.play();
+          return;
+        }
+      } catch (err) {
+        console.error("ElevenLabs TTS failed, falling back to browser speech:", err);
+      }
+      setIsSpeaking(false);
+    }
+
+    if (!window.speechSynthesis) return;
 
     const utterance = new SpeechSynthesisUtterance(text);
     const config = POLLY_TO_SPEECH_VOICE[voiceName || "Polly.Joanna"] || POLLY_TO_SPEECH_VOICE["Polly.Joanna"];
@@ -554,6 +592,10 @@ function SimulatedCall({ formData }: { formData: any }) {
   const endCall = () => {
     setCallActive(false);
     window.speechSynthesis?.cancel();
+    if (elevenLabsAudioRef.current) {
+      elevenLabsAudioRef.current.pause();
+      elevenLabsAudioRef.current = null;
+    }
     setIsSpeaking(false);
     if (timerRef.current) {
       clearInterval(timerRef.current);

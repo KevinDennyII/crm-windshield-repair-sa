@@ -465,6 +465,32 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/ai-receptionist/tts", async (req: Request, res: Response) => {
+    try {
+      const { text, voiceName } = req.body;
+      if (!text || !voiceName) {
+        return res.status(400).json({ message: "text and voiceName are required" });
+      }
+      if (text.length > 2000) {
+        return res.status(400).json({ message: "Text too long (max 2000 characters)" });
+      }
+      if (!isElevenLabsVoice(voiceName)) {
+        return res.status(400).json({ message: "Only ElevenLabs voices are supported" });
+      }
+      if (!isElevenLabsConfigured()) {
+        return res.status(400).json({ message: "ElevenLabs is not configured" });
+      }
+      const filename = await generateElevenLabsAudio(text, voiceName);
+      if (!filename) {
+        return res.status(500).json({ message: "Failed to generate audio" });
+      }
+      res.json({ audioUrl: `/api/elevenlabs-audio/${filename}` });
+    } catch (error: any) {
+      console.error("TTS error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/ai-receptionist/simulate", async (req: Request, res: Response) => {
     try {
       const { message, conversationHistory } = req.body;
