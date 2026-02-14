@@ -1702,35 +1702,8 @@ Please let us know of any changes.`;
         return;
       }
 
-      // Check if AI receptionist should handle this inbound call
-      try {
-        const [aiSettings] = await db.select().from(aiReceptionistSettings).limit(1);
-        if (aiSettings && aiSettings.isEnabled) {
-          console.log("[AI Receptionist] Enabled - redirecting inbound call to AI receptionist");
-          const baseUrl = `https://${req.get('host')}`;
-          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Redirect method="POST">${baseUrl}/api/voice/ai-receptionist</Redirect></Response>`;
-          res.send(twiml);
-
-          try {
-            await db.insert(phoneCalls).values({
-              callSid: CallSid,
-              direction: 'inbound',
-              fromNumber: From,
-              toNumber: To,
-              status: CallStatus || 'ringing',
-              contactName: "AI Receptionist Call",
-            }).onConflictDoUpdate({
-              target: phoneCalls.callSid,
-              set: { status: CallStatus || 'ringing' }
-            });
-          } catch (logErr) {
-            console.error("Failed to log AI receptionist call:", logErr);
-          }
-          return;
-        }
-      } catch (aiErr) {
-        console.error("Failed to check AI receptionist settings:", aiErr);
-      }
+      // ElevenLabs AI handles incoming calls directly via the Twilio number
+      // If a call reaches here, it means ElevenLabs didn't intercept it - route normally
 
       // Handle inbound call - send TwiML response FIRST, then log asynchronously
       let contactName = "Unknown Caller";
@@ -1874,17 +1847,7 @@ Please let us know of any changes.`;
         return;
       }
 
-      // Browser didn't answer - check AI receptionist first, then forward to backup number
-      const [aiReceptionistConfig] = await db.select().from(aiReceptionistSettings).limit(1);
-      if (aiReceptionistConfig?.isEnabled) {
-        console.log(`No answer - routing call ${CallSid} to AI Receptionist`);
-        const twilio = (await import("twilio")).default;
-        const response = new twilio.twiml.VoiceResponse();
-        const aiBaseUrl = `${req.protocol}://${req.get('host')}`;
-        response.redirect({ method: "POST" }, `${aiBaseUrl}/api/voice/ai-receptionist`);
-        res.send(response.toString());
-        return;
-      }
+      // ElevenLabs handles AI receptionist calls directly - skip to call forwarding
 
       const [fwdSettings] = await db.select().from(callForwardingSettings).limit(1);
       if (fwdSettings && fwdSettings.isEnabled && fwdSettings.forwardingNumber) {

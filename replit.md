@@ -46,8 +46,8 @@ The system automatically polls Bluehost emails for new leads, processes them, an
 ### Job Completion & Auto-Archiving
 Jobs transitioning to "paid_completed" are timestamped. A background worker automatically archives jobs older than two weeks from the "paid_completed" stage, moving them to a separate, expandable "Archived Jobs" section. Archived jobs can be restored.
 
-### AI Voice Receptionist
-Integrates Twilio and OpenAI to provide an AI-powered receptionist for unanswered incoming calls. It handles multi-turn conversations, extracts lead data from transcripts, and allows for customization of prompts, greetings, and voice. An admin settings page enables configuration and testing, and a call log records all interactions.
+### AI Voice Receptionist (ElevenLabs)
+Incoming phone calls are handled by ElevenLabs Conversational AI (agent ID: `agent_5201khahhwpefx9vjweqgpacqbrj`), which replaced the previous Twilio + OpenAI implementation. The Twilio phone number is connected directly to the ElevenLabs agent. A webhook at `/api/elevenlabs-webhook` receives conversation data, extracts lead information via GPT-4o, and automatically creates new jobs in the CRM pipeline. A floating ElevenLabs AI widget button is also embedded in the CRM (bottom-right corner) for web-based conversations. The admin settings page shows ElevenLabs connection status, call log, and a text-based simulated call test. Voice and prompt configuration is managed in the ElevenLabs dashboard.
 
 ### Data Model & Profitability Calculation
 The data model supports multi-vehicle and multi-part jobs with hierarchical structures. A detailed profitability calculation accounts for part costs, accessories, urethane, calibration, subcontractor urethane, sales tax, and processing fees, with specific rules for dealer and subcontractor jobs.

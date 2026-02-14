@@ -1,62 +1,14 @@
 import type { Express, Request, Response } from "express";
-import twilio from "twilio";
 import OpenAI from "openai";
-import path from "path";
-import fs from "fs";
 import { db } from "./db";
 import { aiReceptionistSettings, aiReceptionistCalls, jobs } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
-import { isTwilioConfigured, getTwilioPhoneNumber } from "./twilio";
-import { isElevenLabsVoice, isElevenLabsConfigured, generateElevenLabsAudio, AUDIO_DIR } from "./elevenlabs";
+import crypto from "crypto";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy-key",
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
-
-function getSayAttributes(voiceName: string): { voice: string; language?: string } {
-  if (voiceName.startsWith("Google.")) {
-    const langMatch = voiceName.match(/Google\.([\w-]+)-/);
-    const lang = langMatch ? langMatch[1] : "en-US";
-    return { voice: voiceName, language: lang };
-  }
-  return { voice: voiceName };
-}
-
-function getBaseUrl(): string {
-  if (process.env.PUBLIC_BASE_URL) {
-    return process.env.PUBLIC_BASE_URL;
-  }
-  if (process.env.REPLIT_DEPLOYMENT_URL) {
-    return process.env.REPLIT_DEPLOYMENT_URL;
-  }
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  }
-  const replSlug = process.env.REPL_SLUG;
-  const replOwner = process.env.REPL_OWNER;
-  if (replSlug && replOwner) {
-    return `https://${replSlug}.${replOwner}.repl.co`;
-  }
-  return "https://localhost:5000";
-}
-
-async function speakText(
-  target: any,
-  text: string,
-  voiceName: string
-): Promise<void> {
-  if (isElevenLabsVoice(voiceName) && isElevenLabsConfigured()) {
-    const filename = await generateElevenLabsAudio(text, voiceName);
-    if (filename) {
-      const audioUrl = `${getBaseUrl()}/api/elevenlabs-audio/${filename}`;
-      target.play(audioUrl);
-      return;
-    }
-  }
-  const sayAttrs = getSayAttributes(voiceName);
-  target.say(sayAttrs as any, text);
-}
 
 const DEFAULT_GREETING = "Hello! Thank you for calling Windshield Repair SA. How can I help you today?";
 
@@ -88,27 +40,6 @@ Phone: Available for questions`;
 async function getSettings() {
   const [settings] = await db.select().from(aiReceptionistSettings).limit(1);
   return settings;
-}
-
-async function getOrCreateCallRecord(callSid: string, callerNumber: string) {
-  const [existing] = await db.select().from(aiReceptionistCalls).where(eq(aiReceptionistCalls.callSid, callSid));
-  if (existing) return existing;
-
-  const [created] = await db.insert(aiReceptionistCalls).values({
-    callSid,
-    callerNumber,
-    transcript: [],
-    status: "in_progress",
-  }).returning();
-  return created;
-}
-
-async function appendTranscript(callSid: string, role: string, content: string) {
-  await db.execute(sql`
-    UPDATE ai_receptionist_calls 
-    SET transcript = transcript || ${JSON.stringify([{ role, content, timestamp: new Date().toISOString() }])}::jsonb
-    WHERE call_sid = ${callSid}
-  `);
 }
 
 async function generateAIResponse(transcript: Array<{ role: string; content: string }>, settings: any): Promise<string> {
@@ -175,19 +106,9 @@ Only return the JSON object, no other text.`
   }
 }
 
+const ELEVENLABS_AGENT_ID = "agent_5201khahhwpefx9vjweqgpacqbrj";
+
 export function registerVoiceReceptionistRoutes(app: Express): void {
-  app.get("/api/elevenlabs-audio/:filename", (req: Request, res: Response) => {
-    const filename = req.params.filename as string;
-    if (!filename || filename.includes("..") || !filename.endsWith(".mp3")) {
-      return res.status(400).send("Invalid filename");
-    }
-    const filePath = path.join(AUDIO_DIR, filename as string);
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).send("Audio not found");
-    }
-    res.set("Content-Type", "audio/mpeg");
-    res.sendFile(filePath);
-  });
 
   app.get("/api/ai-receptionist/settings", async (_req: Request, res: Response) => {
     try {
@@ -198,7 +119,7 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
           greeting: DEFAULT_GREETING,
           systemPrompt: DEFAULT_SYSTEM_PROMPT,
           businessContext: DEFAULT_BUSINESS_CONTEXT,
-          voiceName: "Polly.Joanna",
+          voiceName: "ElevenLabs",
           maxTurns: 10,
         });
       }
@@ -234,7 +155,7 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
         greeting: greeting || DEFAULT_GREETING,
         systemPrompt: systemPrompt || DEFAULT_SYSTEM_PROMPT,
         businessContext: businessContext || DEFAULT_BUSINESS_CONTEXT,
-        voiceName: voiceName || "Polly.Joanna",
+        voiceName: voiceName || "ElevenLabs",
         maxTurns: maxTurns || 10,
       }).returning();
       res.json(created);
@@ -259,130 +180,6 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
       res.json(call);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/voice/ai-receptionist", async (req: Request, res: Response) => {
-    res.set("Content-Type", "text/xml");
-    try {
-      const settings = await getSettings();
-      const isEnabled = settings?.isEnabled ?? false;
-
-      if (!isEnabled) {
-        const response = new twilio.twiml.VoiceResponse();
-        response.say("Our AI receptionist is currently offline. Please hold while we connect you to an agent.");
-        response.dial().client("crm_agent");
-        return res.send(response.toString());
-      }
-
-      const { CallSid, From } = req.body;
-      const voiceName = settings?.voiceName || "Polly.Joanna";
-      const greeting = settings?.greeting || DEFAULT_GREETING;
-
-      await getOrCreateCallRecord(CallSid, From);
-      await appendTranscript(CallSid, "assistant", greeting);
-
-      const response = new twilio.twiml.VoiceResponse();
-      const gather = response.gather({
-        input: ["speech"],
-        speechTimeout: "auto",
-        action: "/api/voice/ai-receptionist/respond",
-        method: "POST",
-        language: "en-US",
-        speechModel: "experimental_conversations",
-      });
-      await speakText(gather, greeting, voiceName);
-
-      await speakText(response, "I'm sorry, I didn't hear anything. Goodbye!", voiceName);
-      response.hangup();
-
-      res.send(response.toString());
-    } catch (error: any) {
-      console.error("AI Receptionist error:", error);
-      const response = new twilio.twiml.VoiceResponse();
-      response.say("We're experiencing technical difficulties. Please try again later.");
-      response.hangup();
-      res.send(response.toString());
-    }
-  });
-
-  app.post("/api/voice/ai-receptionist/respond", async (req: Request, res: Response) => {
-    res.set("Content-Type", "text/xml");
-    try {
-      const { CallSid, SpeechResult, From } = req.body;
-      const settings = await getSettings();
-      const voiceName = settings?.voiceName || "Polly.Joanna";
-      const maxTurns = settings?.maxTurns || 10;
-
-      const callRecord = await getOrCreateCallRecord(CallSid, From || "unknown");
-
-      await appendTranscript(CallSid, "caller", SpeechResult || "(silence)");
-
-      const [updatedCall] = await db.select().from(aiReceptionistCalls).where(eq(aiReceptionistCalls.callSid, CallSid));
-      const transcript = (updatedCall?.transcript as Array<{ role: string; content: string }>) || [];
-      const turnCount = transcript.filter(t => t.role === "caller").length;
-
-      if (turnCount >= maxTurns) {
-        const farewell = "Thank you so much for calling Windshield Repair SA! We have all your information and someone will be reaching out to you shortly with a quote. Have a great day!";
-        await appendTranscript(CallSid, "assistant", farewell);
-
-        const response = new twilio.twiml.VoiceResponse();
-        await speakText(response, farewell, voiceName);
-        response.hangup();
-
-        processCallEnd(CallSid).catch(err => console.error("Post-call processing error:", err));
-
-        return res.send(response.toString());
-      }
-
-      const aiResponse = await generateAIResponse(transcript, settings);
-      await appendTranscript(CallSid, "assistant", aiResponse);
-
-      const response = new twilio.twiml.VoiceResponse();
-      const gather = response.gather({
-        input: ["speech"],
-        speechTimeout: "auto",
-        action: "/api/voice/ai-receptionist/respond",
-        method: "POST",
-        language: "en-US",
-        speechModel: "experimental_conversations",
-      });
-      await speakText(gather, aiResponse, voiceName);
-
-      await speakText(response, "Thank you for calling. Goodbye!", voiceName);
-      response.hangup();
-
-      res.send(response.toString());
-    } catch (error: any) {
-      console.error("AI Receptionist respond error:", error);
-      const response = new twilio.twiml.VoiceResponse();
-      response.say("I'm having trouble processing your request. Let me connect you to someone who can help.");
-      response.dial().client("crm_agent");
-      res.send(response.toString());
-    }
-  });
-
-  app.post("/api/voice/ai-receptionist/status", async (req: Request, res: Response) => {
-    try {
-      const { CallSid, CallStatus, CallDuration } = req.body;
-      console.log("AI Receptionist call status:", { CallSid, CallStatus, CallDuration });
-
-      if (["completed", "failed", "busy", "no-answer"].includes(CallStatus)) {
-        await db.update(aiReceptionistCalls)
-          .set({
-            status: CallStatus,
-            duration: CallDuration ? parseInt(CallDuration) : undefined,
-          })
-          .where(eq(aiReceptionistCalls.callSid, CallSid));
-
-        if (CallStatus === "completed") {
-          processCallEnd(CallSid).catch(err => console.error("Post-call processing error:", err));
-        }
-      }
-      res.status(204).end();
-    } catch (error: any) {
-      console.error("AI Receptionist status error:", error);
-      res.status(204).end();
     }
   });
 
@@ -448,49 +245,6 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/ai-receptionist/test-prompt", async (req: Request, res: Response) => {
-    try {
-      const { message, systemPrompt, businessContext } = req.body;
-
-      const testSettings = {
-        systemPrompt: systemPrompt || DEFAULT_SYSTEM_PROMPT,
-        businessContext: businessContext || DEFAULT_BUSINESS_CONTEXT,
-      };
-
-      const transcript = [{ role: "caller", content: message }];
-      const response = await generateAIResponse(transcript, testSettings);
-      res.json({ response });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/ai-receptionist/tts", async (req: Request, res: Response) => {
-    try {
-      const { text, voiceName } = req.body;
-      if (!text || !voiceName) {
-        return res.status(400).json({ message: "text and voiceName are required" });
-      }
-      if (text.length > 2000) {
-        return res.status(400).json({ message: "Text too long (max 2000 characters)" });
-      }
-      if (!isElevenLabsVoice(voiceName)) {
-        return res.status(400).json({ message: "Only ElevenLabs voices are supported" });
-      }
-      if (!isElevenLabsConfigured()) {
-        return res.status(400).json({ message: "ElevenLabs is not configured" });
-      }
-      const filename = await generateElevenLabsAudio(text, voiceName);
-      if (!filename) {
-        return res.status(500).json({ message: "Failed to generate audio" });
-      }
-      res.json({ audioUrl: `/api/elevenlabs-audio/${filename}` });
-    } catch (error: any) {
-      console.error("TTS error:", error);
-      res.status(500).json({ message: error.message });
-    }
-  });
-
   app.post("/api/ai-receptionist/simulate", async (req: Request, res: Response) => {
     try {
       const { message, conversationHistory } = req.body;
@@ -512,7 +266,6 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
 
       res.json({
         response: aiText,
-        voiceName: settings?.voiceName || "Polly.Joanna",
       });
     } catch (error: any) {
       console.error("Simulate error:", error);
@@ -527,14 +280,11 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
 
       res.json({
         greeting,
-        voiceName: settings?.voiceName || "Polly.Joanna",
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
-
-  const ELEVENLABS_AGENT_ID = "agent_5201khahhwpefx9vjweqgpacqbrj";
 
   app.post("/api/elevenlabs-webhook", async (req: Request, res: Response) => {
     try {
@@ -580,13 +330,16 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
           .where(eq(aiReceptionistCalls.callSid, callId));
       }
 
+      const settings = await getSettings();
+      const autoCreateLeads = settings?.isEnabled ?? true;
+
       if (transcriptEntries.length >= 2) {
         const extracted = await extractLeadData(transcriptEntries);
         await db.update(aiReceptionistCalls)
           .set({ extractedData: extracted })
           .where(eq(aiReceptionistCalls.callSid, callId));
 
-        if (extracted.firstName || extracted.phone) {
+        if (autoCreateLeads && (extracted.firstName || extracted.phone)) {
           console.log(`[ElevenLabs Webhook] Extracted lead data from conversation ${callId}:`, extracted);
 
           const jobId = crypto.randomUUID();
@@ -651,25 +404,4 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
       res.status(500).json({ success: false, error: error.message });
     }
   });
-}
-
-async function processCallEnd(callSid: string) {
-  try {
-    const [call] = await db.select().from(aiReceptionistCalls).where(eq(aiReceptionistCalls.callSid, callSid));
-    if (!call || call.leadCreated) return;
-
-    const transcript = (call.transcript as Array<{ role: string; content: string }>) || [];
-    if (transcript.length < 2) return;
-
-    const extracted = await extractLeadData(transcript);
-    await db.update(aiReceptionistCalls)
-      .set({ extractedData: extracted })
-      .where(eq(aiReceptionistCalls.callSid, callSid));
-
-    if (extracted.firstName || extracted.phone) {
-      console.log(`[AI Receptionist] Extracted lead data from call ${callSid}:`, extracted);
-    }
-  } catch (error) {
-    console.error("Process call end error:", error);
-  }
 }

@@ -8,43 +8,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, Phone, Save, TestTube, Clock, User, Car, FileText, ChevronDown, ChevronRight, Plus, ArrowLeft, Send, PhoneIncoming, PhoneOff, PhoneCall, Mic, Volume2, VolumeX, Loader2, Play, Square } from "lucide-react";
-import ivannaPreview from "@assets/voice_preview_ivanna_-_young,_versatile_and_casual_1770959207776.mp3";
+import { Bot, Phone, Save, Clock, User, Car, FileText, ChevronDown, ChevronRight, Plus, Send, PhoneIncoming, PhoneOff, PhoneCall, Volume2, VolumeX, Loader2, ExternalLink, Zap, Shield, Webhook } from "lucide-react";
 import { format } from "date-fns";
 
-const VOICE_OPTIONS = [
-  { value: "ElevenLabs.Ivanna", label: "Ivanna - Young, Versatile & Casual (Female)", group: "ElevenLabs" },
-  { value: "Google.en-US-Casual-K", label: "Casual Female (US English)", group: "Google" },
-  { value: "Google.en-US-Studio-O", label: "Studio Female (Natural, US English)", group: "Google" },
-  { value: "Google.en-US-Studio-Q", label: "Studio Male (Natural, US English)", group: "Google" },
-  { value: "Google.en-US-Neural2-F", label: "Neural Female (Warm, US English)", group: "Google" },
-  { value: "Google.en-US-Neural2-D", label: "Neural Male (Warm, US English)", group: "Google" },
-  { value: "Google.en-US-Neural2-H", label: "Neural Female (Friendly, US English)", group: "Google" },
-  { value: "Google.en-US-Neural2-J", label: "Neural Male (Friendly, US English)", group: "Google" },
-  { value: "Google.es-US-Neural2-A", label: "Neural Female (US Spanish)", group: "Google" },
-  { value: "Google.es-US-Studio-B", label: "Studio Male (US Spanish)", group: "Google" },
-  { value: "Polly.Joanna-Neural", label: "Joanna Neural (Female, US English)", group: "Amazon Polly" },
-  { value: "Polly.Matthew-Neural", label: "Matthew Neural (Male, US English)", group: "Amazon Polly" },
-  { value: "Polly.Ruth-Neural", label: "Ruth Neural (Female, US English)", group: "Amazon Polly" },
-  { value: "Polly.Stephen-Neural", label: "Stephen Neural (Male, US English)", group: "Amazon Polly" },
-  { value: "Polly.Joanna", label: "Joanna (Female, US English)", group: "Amazon Polly" },
-  { value: "Polly.Matthew", label: "Matthew (Male, US English)", group: "Amazon Polly" },
-  { value: "Polly.Salli", label: "Salli (Female, US English)", group: "Amazon Polly" },
-  { value: "Polly.Joey", label: "Joey (Male, US English)", group: "Amazon Polly" },
-  { value: "Polly.Kendra", label: "Kendra (Female, US English)", group: "Amazon Polly" },
-  { value: "Polly.Kimberly", label: "Kimberly (Female, US English)", group: "Amazon Polly" },
-  { value: "Polly.Lupe", label: "Lupe (Female, US Spanish)", group: "Amazon Polly" },
-  { value: "Polly.Pedro", label: "Pedro (Male, US Spanish)", group: "Amazon Polly" },
-];
+const ELEVENLABS_AGENT_ID = "agent_5201khahhwpefx9vjweqgpacqbrj";
 
 export default function AIReceptionist() {
   const { toast } = useToast();
   const [expandedCall, setExpandedCall] = useState<string | null>(null);
-  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const { data: settings, isLoading: settingsLoading } = useQuery<any>({
     queryKey: ["/api/ai-receptionist/settings"],
@@ -60,30 +33,11 @@ export default function AIReceptionist() {
     if (settings && !formData) {
       setFormData({
         isEnabled: settings.isEnabled ?? false,
-        greeting: settings.greeting || "",
         systemPrompt: settings.systemPrompt || "",
         businessContext: settings.businessContext || "",
-        voiceName: settings.voiceName || "Polly.Joanna",
-        maxTurns: settings.maxTurns || 10,
       });
     }
   }, [settings]);
-
-  const togglePreview = useCallback(() => {
-    if (isPlayingPreview) {
-      previewAudioRef.current?.pause();
-      if (previewAudioRef.current) previewAudioRef.current.currentTime = 0;
-      setIsPlayingPreview(false);
-    } else {
-      if (!previewAudioRef.current) {
-        previewAudioRef.current = new Audio(ivannaPreview);
-        previewAudioRef.current.onended = () => setIsPlayingPreview(false);
-      }
-      previewAudioRef.current.currentTime = 0;
-      previewAudioRef.current.play();
-      setIsPlayingPreview(true);
-    }
-  }, [isPlayingPreview]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -127,7 +81,11 @@ export default function AIReceptionist() {
         <Bot className="w-6 h-6 text-primary" />
         <h1 className="text-2xl font-bold" data-testid="text-page-title">AI Voice Receptionist</h1>
         <Badge variant={formData.isEnabled ? "default" : "secondary"} data-testid="badge-receptionist-status">
-          {formData.isEnabled ? "Active" : "Inactive"}
+          {formData.isEnabled ? "Auto-Lead On" : "Auto-Lead Off"}
+        </Badge>
+        <Badge variant="outline" className="gap-1">
+          <Zap className="w-3 h-3" />
+          Powered by ElevenLabs
         </Badge>
       </div>
 
@@ -143,15 +101,34 @@ export default function AIReceptionist() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Phone className="w-4 h-4" />
-                General Settings
+                <Zap className="w-4 h-4" />
+                ElevenLabs AI Agent
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-md border p-4 bg-muted/30 space-y-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                  <span className="font-medium">ElevenLabs Conversational AI is handling your incoming calls</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Your Twilio phone number is connected directly to your ElevenLabs AI agent. 
+                  Incoming calls are automatically answered by the AI, and conversation data flows 
+                  back to your CRM via webhook to create leads automatically.
+                </p>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Shield className="w-3 h-3" />
+                  Agent ID: {ELEVENLABS_AGENT_ID}
+                </div>
+              </div>
+
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <Label className="text-base font-medium">Enable AI Receptionist</Label>
-                  <p className="text-sm text-muted-foreground">When enabled, unanswered calls will be handled by the AI receptionist</p>
+                  <Label className="text-base font-medium">Auto-Create Leads from Calls</Label>
+                  <p className="text-sm text-muted-foreground">
+                    When enabled, leads are automatically created from AI conversations. 
+                    To pause/resume the AI agent itself, use the ElevenLabs dashboard.
+                  </p>
                 </div>
                 <Switch
                   checked={formData.isEnabled}
@@ -160,77 +137,55 @@ export default function AIReceptionist() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>Voice</Label>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={formData.voiceName}
-                    onValueChange={(val) => {
-                      if (!val.startsWith("ElevenLabs.") && isPlayingPreview) {
-                        previewAudioRef.current?.pause();
-                        if (previewAudioRef.current) previewAudioRef.current.currentTime = 0;
-                        setIsPlayingPreview(false);
-                      }
-                      setFormData({ ...formData, voiceName: val });
-                    }}
-                  >
-                    <SelectTrigger data-testid="select-voice" className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">ElevenLabs (Premium)</div>
-                      {VOICE_OPTIONS.filter(v => v.group === "ElevenLabs").map((v) => (
-                        <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
-                      ))}
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-1">Google (Natural)</div>
-                      {VOICE_OPTIONS.filter(v => v.group === "Google").map((v) => (
-                        <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
-                      ))}
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-1">Amazon Polly</div>
-                      {VOICE_OPTIONS.filter(v => v.group === "Amazon Polly").map((v) => (
-                        <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {formData.voiceName?.startsWith("ElevenLabs.") && (
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      onClick={togglePreview}
-                      data-testid="button-preview-voice"
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Card>
+                  <CardContent className="pt-4 space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Phone className="w-4 h-4 text-muted-foreground" />
+                      Voice & Personality
+                    </div>
+                    <p className="text-xs text-muted-foreground">Configured in ElevenLabs dashboard</p>
+                    <a
+                      href="https://elevenlabs.io/app/conversational-ai"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary flex items-center gap-1 pt-1"
+                      data-testid="link-elevenlabs-voice"
                     >
-                      {isPlayingPreview ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                    </Button>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  ElevenLabs voices sound the most natural. Google and Polly are built into Twilio.
-                  {formData.voiceName?.startsWith("ElevenLabs.") && " Click the play button to preview."}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Maximum Conversation Turns</Label>
-                <Input
-                  type="number"
-                  min={3}
-                  max={20}
-                  value={formData.maxTurns}
-                  onChange={(e) => setFormData({ ...formData, maxTurns: parseInt(e.target.value) || 10 })}
-                  data-testid="input-max-turns"
-                />
-                <p className="text-sm text-muted-foreground">How many back-and-forth exchanges before the AI wraps up the call</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Greeting Message</Label>
-                <Textarea
-                  value={formData.greeting}
-                  onChange={(e) => setFormData({ ...formData, greeting: e.target.value })}
-                  rows={3}
-                  data-testid="input-greeting"
-                />
-                <p className="text-sm text-muted-foreground">The first thing the AI says when it answers a call</p>
+                      Manage Voice <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Bot className="w-4 h-4 text-muted-foreground" />
+                      Agent Prompt
+                    </div>
+                    <p className="text-xs text-muted-foreground">Configured in ElevenLabs dashboard</p>
+                    <a
+                      href="https://elevenlabs.io/app/conversational-ai"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary flex items-center gap-1 pt-1"
+                      data-testid="link-elevenlabs-prompt"
+                    >
+                      Manage Prompt <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Webhook className="w-4 h-4 text-muted-foreground" />
+                      Webhook
+                    </div>
+                    <p className="text-xs text-muted-foreground">Auto-creates leads from calls</p>
+                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1 pt-1">
+                      Connected
+                    </span>
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>
@@ -250,12 +205,28 @@ export default function AIReceptionist() {
         <TabsContent value="training" className="space-y-4 mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>AI Personality & Instructions</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="w-4 h-4" />
+                AI Training (CRM Simulation)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-md border p-3 bg-muted/30">
+                <p className="text-sm text-muted-foreground">
+                  These prompts are used for the simulated call test feature in your CRM. 
+                  Your actual ElevenLabs AI agent uses the prompt configured in the{" "}
+                  <a 
+                    href="https://elevenlabs.io/app/conversational-ai" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-primary underline"
+                  >
+                    ElevenLabs dashboard
+                  </a>.
+                </p>
+              </div>
               <div className="space-y-2">
-                <Label>System Prompt</Label>
-                <p className="text-sm text-muted-foreground">Controls the AI's personality, tone, and behavior during calls. This is where you train the AI on how to handle conversations.</p>
+                <Label>System Prompt (for simulation)</Label>
                 <Textarea
                   value={formData.systemPrompt}
                   onChange={(e) => setFormData({ ...formData, systemPrompt: e.target.value })}
@@ -269,12 +240,11 @@ export default function AIReceptionist() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Business Context</CardTitle>
+              <CardTitle>Business Context (for simulation)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Business Information</Label>
-                <p className="text-sm text-muted-foreground">Key details about your business that the AI should know: services, pricing guidelines, hours, locations, etc.</p>
                 <Textarea
                   value={formData.businessContext}
                   onChange={(e) => setFormData({ ...formData, businessContext: e.target.value })}
@@ -312,7 +282,7 @@ export default function AIReceptionist() {
               <CardContent className="pt-6 text-center text-muted-foreground">
                 <PhoneOff className="w-12 h-12 mx-auto mb-3 opacity-40" />
                 <p>No AI receptionist calls yet</p>
-                <p className="text-sm mt-1">Calls handled by the AI receptionist will appear here</p>
+                <p className="text-sm mt-1">Calls handled by ElevenLabs and widget conversations will appear here</p>
               </CardContent>
             </Card>
           ) : (
@@ -321,6 +291,7 @@ export default function AIReceptionist() {
                 const isExpanded = expandedCall === call.id;
                 const transcript = (call.transcript as any[]) || [];
                 const extracted = call.extractedData as any;
+                const isElevenLabs = call.callSid?.startsWith("elevenlabs") || call.callerNumber === "ElevenLabs Widget";
 
                 return (
                   <Card key={call.id} data-testid={`card-call-${call.id}`}>
@@ -336,6 +307,12 @@ export default function AIReceptionist() {
                           <Badge variant={call.status === "completed" ? "default" : "secondary"}>
                             {call.status}
                           </Badge>
+                          {isElevenLabs && (
+                            <Badge variant="outline" className="gap-1">
+                              <Zap className="w-3 h-3" />
+                              ElevenLabs
+                            </Badge>
+                          )}
                           {call.leadCreated && <Badge variant="outline">Lead Created</Badge>}
                           {call.duration && (
                             <span className="text-sm text-muted-foreground flex items-center gap-1">
@@ -445,35 +422,6 @@ interface ConversationEntry {
   content: string;
 }
 
-interface VoiceConfig {
-  lang: string;
-  pitch: number;
-  rate: number;
-  preferredNames: string[];
-}
-
-const POLLY_TO_SPEECH_VOICE: Record<string, VoiceConfig> = {
-  "Polly.Joanna":   { lang: "en-US", pitch: 1.0,  rate: 1.0,  preferredNames: ["Samantha", "Google US English", "Microsoft Zira", "Karen"] },
-  "Polly.Matthew":  { lang: "en-US", pitch: 0.8,  rate: 0.95, preferredNames: ["Alex", "Google UK English Male", "Microsoft David", "Daniel"] },
-  "Polly.Salli":    { lang: "en-US", pitch: 1.15, rate: 1.05, preferredNames: ["Victoria", "Google US English", "Microsoft Zira", "Samantha"] },
-  "Polly.Joey":     { lang: "en-US", pitch: 0.7,  rate: 0.9,  preferredNames: ["Fred", "Google UK English Male", "Microsoft Mark", "Alex"] },
-  "Polly.Kendra":   { lang: "en-US", pitch: 1.05, rate: 0.95, preferredNames: ["Allison", "Google US English", "Samantha", "Karen"] },
-  "Polly.Kimberly": { lang: "en-US", pitch: 1.2,  rate: 1.1,  preferredNames: ["Tessa", "Google US English", "Victoria", "Samantha"] },
-  "Polly.Ivy":      { lang: "en-US", pitch: 1.4,  rate: 1.15, preferredNames: ["Samantha", "Google US English", "Victoria", "Karen"] },
-  "Polly.Lupe":     { lang: "es",    pitch: 1.0,  rate: 1.0,  preferredNames: ["Paulina", "Google espa\u00f1ol", "Monica", "Microsoft Sabina"] },
-  "Polly.Pedro":    { lang: "es",    pitch: 0.8,  rate: 0.95, preferredNames: ["Jorge", "Google espa\u00f1ol", "Juan", "Microsoft Raul"] },
-};
-
-function findBestVoice(voices: SpeechSynthesisVoice[], config: VoiceConfig): SpeechSynthesisVoice | null {
-  for (const name of config.preferredNames) {
-    const match = voices.find(v => v.name.includes(name));
-    if (match) return match;
-  }
-  const langMatch = voices.find(v => v.lang.startsWith(config.lang));
-  if (langMatch) return langMatch;
-  return voices.find(v => v.lang.startsWith("en")) || null;
-}
-
 function SimulatedCall({ formData }: { formData: any }) {
   const { toast } = useToast();
   const [callActive, setCallActive] = useState(false);
@@ -491,68 +439,26 @@ function SimulatedCall({ formData }: { formData: any }) {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [conversation]);
 
-  const elevenLabsAudioRef = useRef<HTMLAudioElement | null>(null);
-
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       window.speechSynthesis?.cancel();
-      if (elevenLabsAudioRef.current) {
-        elevenLabsAudioRef.current.pause();
-        elevenLabsAudioRef.current = null;
-      }
     };
   }, []);
 
-  const speakText = useCallback(async (text: string, voiceName?: string) => {
-    if (isMuted) return;
+  const speakText = useCallback(async (text: string) => {
+    if (isMuted || !window.speechSynthesis) return;
 
-    window.speechSynthesis?.cancel();
-    if (elevenLabsAudioRef.current) {
-      elevenLabsAudioRef.current.pause();
-      elevenLabsAudioRef.current = null;
-    }
-
-    if (voiceName?.startsWith("ElevenLabs.")) {
-      try {
-        setIsSpeaking(true);
-        const res = await fetch("/api/ai-receptionist/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voiceName }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const audio = new Audio(data.audioUrl);
-          elevenLabsAudioRef.current = audio;
-          audio.onended = () => {
-            setIsSpeaking(false);
-            inputRef.current?.focus();
-          };
-          audio.onerror = () => setIsSpeaking(false);
-          await audio.play();
-          return;
-        }
-      } catch (err) {
-        console.error("ElevenLabs TTS failed, falling back to browser speech:", err);
-      }
-      setIsSpeaking(false);
-    }
-
-    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    const config = POLLY_TO_SPEECH_VOICE[voiceName || "Polly.Joanna"] || POLLY_TO_SPEECH_VOICE["Polly.Joanna"];
-    utterance.lang = config.lang;
-    utterance.rate = config.rate;
-    utterance.pitch = config.pitch;
+    utterance.lang = "en-US";
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
-    const selectedVoice = findBestVoice(voices, config);
-
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    }
+    const preferred = voices.find(v => v.name.includes("Samantha") || v.name.includes("Google US English"));
+    if (preferred) utterance.voice = preferred;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => {
@@ -582,7 +488,7 @@ function SimulatedCall({ formData }: { formData: any }) {
         content: data.greeting,
       };
       setConversation([greetingEntry]);
-      speakText(data.greeting, data.voiceName);
+      speakText(data.greeting);
     } catch (err: any) {
       toast({ title: "Failed to start call", description: err.message, variant: "destructive" });
       endCall();
@@ -592,10 +498,6 @@ function SimulatedCall({ formData }: { formData: any }) {
   const endCall = () => {
     setCallActive(false);
     window.speechSynthesis?.cancel();
-    if (elevenLabsAudioRef.current) {
-      elevenLabsAudioRef.current.pause();
-      elevenLabsAudioRef.current = null;
-    }
     setIsSpeaking(false);
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -625,7 +527,7 @@ function SimulatedCall({ formData }: { formData: any }) {
         content: data.response,
       };
       setConversation(prev => [...prev, aiEntry]);
-      speakText(data.response, data.voiceName);
+      speakText(data.response);
     } catch (err: any) {
       toast({ title: "AI response failed", description: err.message, variant: "destructive" });
     } finally {
@@ -648,13 +550,13 @@ function SimulatedCall({ formData }: { formData: any }) {
               <PhoneCall className="w-10 h-10 text-green-600 dark:text-green-400" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-lg font-semibold">Simulated Call</h3>
+              <h3 className="text-lg font-semibold">Simulated Call Test</h3>
               <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                Start a simulated phone call to hear how your AI receptionist sounds and responds. 
-                Type messages as if you were a customer and the AI will respond out loud.
+                Test how the AI receptionist responds using text-based simulation.
+                Type messages as a customer and the AI will respond using your training prompts.
               </p>
               <p className="text-xs text-muted-foreground">
-                Make sure to save your settings first
+                Uses CRM training prompts (not your ElevenLabs agent configuration)
               </p>
             </div>
             <Button onClick={startCall} data-testid="button-start-call">
@@ -732,7 +634,7 @@ function SimulatedCall({ formData }: { formData: any }) {
               {entry.role === "assistant" && !isMuted && (
                 <button
                   className="text-xs flex items-center gap-1 mt-1 text-muted-foreground hover:text-foreground"
-                  onClick={() => speakText(entry.content, formData?.voiceName)}
+                  onClick={() => speakText(entry.content)}
                   data-testid={`button-replay-${idx}`}
                 >
                   <Volume2 className="w-3 h-3" />
