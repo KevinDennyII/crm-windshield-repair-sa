@@ -84,17 +84,23 @@ export async function sendEmailWithAttachment(
   to: string, 
   subject: string, 
   body: string, 
-  attachment: { filename: string; base64: string; mimeType: string }
+  attachment: { filename: string; base64: string; mimeType: string },
+  cc?: string
 ): Promise<void> {
   const gmail = await getUncachableGmailClient();
   
   const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substr(2)}`;
   
-  // Create multipart MIME message with attachment
-  const messageParts = [
+  const headers = [
     `To: ${to}`,
+    ...(cc ? [`Cc: ${cc}`] : []),
     `Subject: ${subject}`,
     `MIME-Version: 1.0`,
+  ];
+
+  // Create multipart MIME message with attachment
+  const messageParts = [
+    ...headers,
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',
     `--${boundary}`,

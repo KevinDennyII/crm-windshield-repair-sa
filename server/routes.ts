@@ -1371,13 +1371,16 @@ Please let us know of any changes.`;
         </div>
       `;
 
+      const dealerName = (job.businessName || '').toLowerCase().trim();
+      const ccEmail = dealerName.includes('texas auto dealer') ? 'andrew@texautodealer.com' : undefined;
+
       await sendEmailWithAttachment(toEmail, subject, body, {
         filename,
         base64: pdfBase64,
         mimeType: 'application/pdf'
-      });
+      }, ccEmail);
 
-      res.json({ message: "Invoice sent successfully" });
+      res.json({ message: "Invoice sent successfully", cc: ccEmail || null });
     } catch (error: any) {
       console.error("Failed to send invoice:", error);
       res.status(500).json({ message: error.message || "Failed to send invoice" });
