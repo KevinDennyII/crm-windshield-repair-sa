@@ -49,6 +49,8 @@ Jobs transitioning to "paid_completed" are timestamped. A background worker auto
 ### AI Voice Receptionist (ElevenLabs)
 Incoming phone calls are handled by ElevenLabs Conversational AI (agent ID: `agent_5201khahhwpefx9vjweqgpacqbrj`), which replaced the previous Twilio + OpenAI implementation. The Twilio phone number is connected directly to the ElevenLabs agent. A webhook at `/api/elevenlabs-webhook` receives conversation data, extracts lead information via GPT-4o, and automatically creates new jobs in the CRM pipeline. The admin settings page shows ElevenLabs connection status, call log, and a text-based simulated call test. Voice and prompt configuration is managed in the ElevenLabs dashboard.
 
+The AI Receptionist toggle controls call routing: when enabled, the `/api/voice/incoming` handler returns TwiML that connects the call via WebSocket (`/media-stream`) to the ElevenLabs agent. When disabled, calls ring through normally using standard call forwarding. The WebSocket bridge (`setupElevenLabsWebSocket` in `voice-receptionist.ts`) pipes Twilio media streams bidirectionally to the ElevenLabs Conversational AI WebSocket API.
+
 ### Data Model & Profitability Calculation
 The data model supports multi-vehicle and multi-part jobs with hierarchical structures. A detailed profitability calculation accounts for part costs, accessories, urethane, calibration, subcontractor urethane, sales tax, and processing fees, with specific rules for dealer and subcontractor jobs.
 

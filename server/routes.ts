@@ -18,6 +18,7 @@ import { eq, desc, and, gte } from "drizzle-orm";
 import { COMPANY_LOGO_BASE64 } from "./logo";
 import { processNewLeads, startLeadPolling, stopLeadPolling } from "./lead-processor";
 import { registerAIRoutes } from "./ai-routes";
+import { isAIReceptionistEnabled } from "./voice-receptionist";
 import bcrypt from "bcrypt";
 
 // Helper to get current user from session or OIDC
@@ -1702,10 +1703,40 @@ Please let us know of any changes.`;
         return;
       }
 
-      // ElevenLabs AI handles incoming calls directly via the Twilio number
-      // If a call reaches here, it means ElevenLabs didn't intercept it - route normally
+      const aiEnabled = await isAIReceptionistEnabled();
+      if (aiEnabled) {
+        console.log("[AI Receptionist] Routing incoming call to ElevenLabs AI agent");
+        const wsUrl = `wss://${req.get('host')}/media-stream`;
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="${wsUrl}"><Parameter name="caller" value="${From || ''}" /></Stream></Connect></Response>`;
+        res.send(twiml);
 
-      // Handle inbound call - send TwiML response FIRST, then log asynchronously
+        try {
+          let contactName = "Unknown Caller";
+          const formattedFrom = From?.replace(/\D/g, "");
+          if (formattedFrom) {
+            const allJobs = await storage.getAllJobs();
+            const matchingJob = allJobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedFrom);
+            if (matchingJob) contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
+          }
+          await db.insert(phoneCalls).values({
+            callSid: CallSid,
+            direction: 'inbound',
+            fromNumber: From,
+            toNumber: To,
+            status: CallStatus || 'ringing',
+            contactName,
+          }).onConflictDoUpdate({
+            target: phoneCalls.callSid,
+            set: { status: CallStatus || 'ringing' }
+          });
+        } catch (logErr) {
+          console.error("Failed to log AI-routed call:", logErr);
+        }
+        return;
+      }
+
+      // AI Receptionist is OFF - handle inbound call normally
+      // Send TwiML response FIRST, then log asynchronously
       let contactName = "Unknown Caller";
       try {
         const formattedFrom = From?.replace(/\D/g, "");

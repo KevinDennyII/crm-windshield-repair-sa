@@ -1,5 +1,7 @@
 import type { Express, Request, Response } from "express";
+import type { Server } from "http";
 import OpenAI from "openai";
+import { WebSocketServer, WebSocket } from "ws";
 import { db } from "./db";
 import { aiReceptionistSettings, aiReceptionistCalls, jobs } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
@@ -107,6 +109,126 @@ Only return the JSON object, no other text.`
 }
 
 const ELEVENLABS_AGENT_ID = "agent_5201khahhwpefx9vjweqgpacqbrj";
+
+export async function isAIReceptionistEnabled(): Promise<boolean> {
+  const settings = await getSettings();
+  return settings?.isEnabled ?? false;
+}
+
+export function setupElevenLabsWebSocket(httpServer: Server): void {
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpServer.on("upgrade", (request, socket, head) => {
+    const pathname = new URL(request.url || "", `http://${request.headers.host}`).pathname;
+    if (pathname === "/media-stream") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    }
+  });
+
+  wss.on("connection", (twilioWs) => {
+    console.log("[ElevenLabs Bridge] Twilio media stream connected");
+
+    let streamSid: string | null = null;
+    let callSid: string | null = null;
+    let elevenLabsWs: WebSocket | null = null;
+
+    const connectToElevenLabs = () => {
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`;
+
+      elevenLabsWs = new WebSocket(wsUrl, {
+        headers: apiKey ? { "xi-api-key": apiKey } : undefined,
+      });
+
+      elevenLabsWs.on("open", () => {
+        console.log("[ElevenLabs Bridge] Connected to ElevenLabs agent");
+        elevenLabsWs!.send(JSON.stringify({
+          type: "conversation_initiation_client_data",
+          conversation_config_override: {
+            agent: {
+              prompt: {
+                prompt: "You are speaking with a caller on the phone. Be conversational and brief.",
+              },
+            },
+          },
+        }));
+      });
+
+      elevenLabsWs.on("message", (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+
+          if (msg.type === "audio" && msg.audio?.chunk) {
+            if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
+              twilioWs.send(JSON.stringify({
+                event: "media",
+                streamSid,
+                media: { payload: msg.audio.chunk },
+              }));
+            }
+          }
+        } catch (err) {
+          console.error("[ElevenLabs Bridge] Error parsing ElevenLabs message:", err);
+        }
+      });
+
+      elevenLabsWs.on("close", () => {
+        console.log("[ElevenLabs Bridge] ElevenLabs connection closed");
+      });
+
+      elevenLabsWs.on("error", (err) => {
+        console.error("[ElevenLabs Bridge] ElevenLabs WebSocket error:", err);
+      });
+    };
+
+    twilioWs.on("message", (message) => {
+      try {
+        const msg = JSON.parse(message.toString());
+
+        switch (msg.event) {
+          case "start":
+            streamSid = msg.start.streamSid;
+            callSid = msg.start.callSid;
+            console.log(`[ElevenLabs Bridge] Stream started - SID: ${streamSid}, Call: ${callSid}`);
+            connectToElevenLabs();
+            break;
+
+          case "media":
+            if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+              elevenLabsWs.send(JSON.stringify({
+                user_audio_chunk: msg.media.payload,
+              }));
+            }
+            break;
+
+          case "stop":
+            console.log("[ElevenLabs Bridge] Stream stopped");
+            if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+              elevenLabsWs.close();
+            }
+            break;
+        }
+      } catch (err) {
+        console.error("[ElevenLabs Bridge] Error handling Twilio message:", err);
+      }
+    });
+
+    twilioWs.on("close", () => {
+      console.log("[ElevenLabs Bridge] Twilio connection closed");
+      if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+        elevenLabsWs.close();
+      }
+    });
+
+    twilioWs.on("error", (err) => {
+      console.error("[ElevenLabs Bridge] Twilio WebSocket error:", err);
+    });
+  });
+
+  console.log("[ElevenLabs Bridge] WebSocket server ready on /media-stream");
+}
 
 export function registerVoiceReceptionistRoutes(app: Express): void {
 

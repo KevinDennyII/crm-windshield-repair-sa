@@ -81,7 +81,7 @@ export default function AIReceptionist() {
         <Bot className="w-6 h-6 text-primary" />
         <h1 className="text-2xl font-bold" data-testid="text-page-title">AI Voice Receptionist</h1>
         <Badge variant={formData.isEnabled ? "default" : "secondary"} data-testid="badge-receptionist-status">
-          {formData.isEnabled ? "Auto-Lead On" : "Auto-Lead Off"}
+          {formData.isEnabled ? "Active" : "Inactive"}
         </Badge>
         <Badge variant="outline" className="gap-1">
           <Zap className="w-3 h-3" />
@@ -108,13 +108,17 @@ export default function AIReceptionist() {
             <CardContent className="space-y-4">
               <div className="rounded-md border p-4 bg-muted/30 space-y-3">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-                  <span className="font-medium">ElevenLabs Conversational AI is handling your incoming calls</span>
+                  <div className={`w-3 h-3 rounded-full ${formData.isEnabled ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground'}`} />
+                  <span className="font-medium">
+                    {formData.isEnabled 
+                      ? "ElevenLabs AI is answering your incoming calls" 
+                      : "AI Receptionist is turned off — calls ring through normally"}
+                  </span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Your Twilio phone number is connected directly to your ElevenLabs AI agent. 
-                  Incoming calls are automatically answered by the AI, and conversation data flows 
-                  back to your CRM via webhook to create leads automatically.
+                  {formData.isEnabled
+                    ? "Incoming calls are routed to your ElevenLabs AI agent. Conversation data flows back to your CRM via webhook to create leads automatically."
+                    : "Toggle the switch below to have incoming calls answered by the ElevenLabs AI agent."}
                 </p>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Shield className="w-3 h-3" />
@@ -124,10 +128,10 @@ export default function AIReceptionist() {
 
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <Label className="text-base font-medium">Auto-Create Leads from Calls</Label>
+                  <Label className="text-base font-medium">Enable AI Receptionist</Label>
                   <p className="text-sm text-muted-foreground">
-                    When enabled, leads are automatically created from AI conversations. 
-                    To pause/resume the AI agent itself, use the ElevenLabs dashboard.
+                    When enabled, incoming calls are answered by the ElevenLabs AI agent and leads are created automatically. 
+                    When disabled, calls ring through normally.
                   </p>
                 </div>
                 <Switch
