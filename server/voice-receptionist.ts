@@ -533,6 +533,124 @@ export function registerVoiceReceptionistRoutes(app: Express): void {
       res.status(500).json({ message: error.message });
     }
   });
+
+  const ELEVENLABS_AGENT_ID = "agent_5201khahhwpefx9vjweqgpacqbrj";
+
+  app.post("/api/elevenlabs-webhook", async (req: Request, res: Response) => {
+    try {
+      console.log("[ElevenLabs Webhook] Received data:", JSON.stringify(req.body).slice(0, 500));
+
+      const { conversation_id, transcript, metadata, agent_id } = req.body;
+
+      if (agent_id && agent_id !== ELEVENLABS_AGENT_ID) {
+        console.warn(`[ElevenLabs Webhook] Rejected unknown agent_id: ${agent_id}`);
+        return res.status(403).json({ success: false, error: "Unknown agent" });
+      }
+
+      const transcriptEntries: Array<{ role: string; content: string }> = [];
+      if (Array.isArray(transcript)) {
+        for (const entry of transcript) {
+          transcriptEntries.push({
+            role: entry.role === "agent" ? "assistant" : "caller",
+            content: entry.message || entry.text || entry.content || "",
+          });
+        }
+      }
+
+      const callId = conversation_id || `elevenlabs-${Date.now()}`;
+
+      const [existingCall] = await db.select().from(aiReceptionistCalls)
+        .where(eq(aiReceptionistCalls.callSid, callId));
+
+      if (existingCall && existingCall.leadCreated) {
+        console.log(`[ElevenLabs Webhook] Duplicate webhook for ${callId}, lead already created - skipping`);
+        return res.json({ success: true, conversationId: callId, duplicate: true });
+      }
+
+      if (!existingCall) {
+        await db.insert(aiReceptionistCalls).values({
+          callSid: callId,
+          callerNumber: metadata?.caller_number || metadata?.phone || "ElevenLabs Widget",
+          transcript: transcriptEntries,
+          status: "completed",
+        });
+      } else {
+        await db.update(aiReceptionistCalls)
+          .set({ transcript: transcriptEntries, status: "completed" })
+          .where(eq(aiReceptionistCalls.callSid, callId));
+      }
+
+      if (transcriptEntries.length >= 2) {
+        const extracted = await extractLeadData(transcriptEntries);
+        await db.update(aiReceptionistCalls)
+          .set({ extractedData: extracted })
+          .where(eq(aiReceptionistCalls.callSid, callId));
+
+        if (extracted.firstName || extracted.phone) {
+          console.log(`[ElevenLabs Webhook] Extracted lead data from conversation ${callId}:`, extracted);
+
+          const jobId = crypto.randomUUID();
+          const maxResult = await db.select({ maxNum: sql<string>`MAX(job_number)` }).from(jobs);
+          const maxNum = maxResult[0]?.maxNum;
+          const nextNum = maxNum ? parseInt(maxNum, 10) + 1 : 1;
+          const jobNumber = String(nextNum).padStart(6, '0');
+
+          const newJob: any = {
+            id: jobId,
+            jobNumber,
+            firstName: extracted.firstName || "Unknown",
+            lastName: extracted.lastName || "Caller",
+            phone: extracted.phone || "",
+            email: extracted.email || "",
+            customerType: "retail",
+            isBusiness: false,
+            pipelineStage: "new_lead",
+            repairLocation: "mobile",
+            vehicles: extracted.vehicleYear ? [{
+              id: crypto.randomUUID(),
+              year: extracted.vehicleYear || "",
+              make: extracted.vehicleMake || "",
+              model: extracted.vehicleModel || "",
+              parts: extracted.glassType ? [{
+                id: crypto.randomUUID(),
+                glassType: extracted.glassType,
+                serviceType: extracted.serviceType || "replace",
+                quantity: 1,
+                partNumber: "",
+                retailPrice: 0,
+                cost: 0,
+                laborCost: 0,
+              }] : [],
+            }] : [],
+            installNotes: `[ElevenLabs AI Lead] ${extracted.notes || ""}`.trim(),
+            subtotal: 0,
+            taxAmount: 0,
+            totalDue: 0,
+            deductible: 0,
+            rebate: 0,
+            amountPaid: 0,
+            balanceDue: 0,
+            paymentStatus: "pending",
+            paymentMethod: [],
+            paymentHistory: [],
+            followUpMode: "auto",
+          };
+
+          await db.insert(jobs).values(newJob);
+          await db.update(aiReceptionistCalls)
+            .set({ leadCreated: true, jobId: jobId })
+            .where(eq(aiReceptionistCalls.callSid, callId));
+
+          console.log(`[ElevenLabs Webhook] Created new lead job ${jobNumber} from ElevenLabs conversation`);
+        }
+      }
+
+      res.json({ success: true, conversationId: callId });
+    } catch (error: any) {
+      console.error("[ElevenLabs Webhook] Error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 }
 
 async function processCallEnd(callSid: string) {
