@@ -240,6 +240,12 @@ export default function TechDashboard() {
         return aIsComplete ? 1 : -1;
       }
 
+      if (aIsComplete) {
+        const compA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const compB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        if (compA !== compB) return compB - compA;
+      }
+
       const dateA = parseLocalDate(a.installDate);
       const dateB = parseLocalDate(b.installDate);
       const dateATime = dateA ? dateA.getTime() : 0;

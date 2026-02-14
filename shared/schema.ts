@@ -343,6 +343,7 @@ export const jobSchema = z.object({
   isWarranty: z.boolean().default(false),
   warrantyOriginalJobId: z.string().optional(),
   
+  completedAt: z.string().optional(),
   createdAt: z.string().optional(),
 });
 
