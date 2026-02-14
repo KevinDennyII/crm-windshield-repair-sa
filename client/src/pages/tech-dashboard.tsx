@@ -234,18 +234,26 @@ export default function TechDashboard() {
 
   const sortJobsByRoute = (jobsToSort: Job[]): Job[] => {
     return [...jobsToSort].sort((a, b) => {
-      // Put scheduled (non-completed) jobs at the top, completed jobs at the bottom
       const aIsComplete = a.pipelineStage === "paid_completed";
       const bIsComplete = b.pipelineStage === "paid_completed";
       if (aIsComplete !== bIsComplete) {
-        return aIsComplete ? 1 : -1; // Completed jobs go to bottom
+        return aIsComplete ? 1 : -1;
       }
-      
-      // Within each group, sort by time frame then install time
+
+      const dateA = parseLocalDate(a.installDate);
+      const dateB = parseLocalDate(b.installDate);
+      const dateATime = dateA ? dateA.getTime() : 0;
+      const dateBTime = dateB ? dateB.getTime() : 0;
+      if (dateATime !== dateBTime) {
+        return aIsComplete
+          ? dateBTime - dateATime
+          : dateATime - dateBTime;
+      }
+
       const timeA = TIME_FRAME_ORDER[a.timeFrame || "custom"] || 99;
       const timeB = TIME_FRAME_ORDER[b.timeFrame || "custom"] || 99;
       if (timeA !== timeB) return timeA - timeB;
-      
+
       const installTimeA = a.installTime || "23:59";
       const installTimeB = b.installTime || "23:59";
       return installTimeA.localeCompare(installTimeB);
