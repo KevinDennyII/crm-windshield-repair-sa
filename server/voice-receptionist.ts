@@ -257,16 +257,29 @@ export function setupElevenLabsWebSocket(httpServer: Server): void {
           console.log(`[ElevenLabs Bridge] Running GPT-4o extraction on ${transcriptEntries.length} transcript entries`);
           try {
             const extracted = await extractLeadData(transcriptEntries);
-            const summary = transcriptEntries
-              .filter(t => t.role === "caller")
-              .map(t => t.content)
-              .join(" ")
-              .slice(0, 200);
+
+            let summary: string | null = null;
+            try {
+              const conversationText = transcriptEntries.map(t => `${t.role === "caller" ? "Customer" : "AI Receptionist"}: ${t.content}`).join("\n");
+              const summaryResp = await openai.chat.completions.create({
+                model: "gpt-4o",
+                messages: [
+                  { role: "system", content: "Summarize this phone call for an auto glass business in 2-3 sentences. Include the caller's name, what they need, and vehicle info if mentioned. Be concise." },
+                  { role: "user", content: conversationText },
+                ],
+                max_completion_tokens: 150,
+              });
+              summary = summaryResp.choices[0]?.message?.content || null;
+            } catch (sumErr) {
+              console.error("[ElevenLabs Bridge] Summary generation failed:", sumErr);
+              summary = transcriptEntries.filter(t => t.role === "caller").map(t => t.content).join(" ").slice(0, 200);
+            }
 
             await db.update(aiReceptionistCalls)
               .set({
                 extractedData: extracted,
-                transcriptSummary: summary || null,
+                transcriptSummary: summary,
+                callType: "ai",
               })
               .where(eq(aiReceptionistCalls.callSid, callRecordId));
 

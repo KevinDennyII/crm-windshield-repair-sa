@@ -69,6 +69,7 @@ export interface CallForwardingConfig {
 
 export function generateIncomingCallTwiml(contactName: string, forwarding?: CallForwardingConfig, baseUrl?: string): string {
   const response = new twilio.twiml.VoiceResponse();
+  const recordingCallbackUrl = baseUrl ? `${baseUrl}/api/voice/recording-callback` : "/api/voice/recording-callback";
   
   if (forwarding?.isEnabled && forwarding.forwardingNumber) {
     let formattedFwdNumber = forwarding.forwardingNumber.replace(/\D/g, "");
@@ -84,6 +85,10 @@ export function generateIncomingCallTwiml(contactName: string, forwarding?: Call
       timeout: Math.max(forwarding.timeoutSeconds || 20, 20),
       action: actionUrl,
       method: "POST",
+      record: "record-from-answer-dual" as any,
+      recordingStatusCallback: recordingCallbackUrl,
+      recordingStatusCallbackMethod: "POST",
+      recordingStatusCallbackEvent: "completed" as any,
     });
     
     const clientEl = dial.client({});
@@ -98,6 +103,10 @@ export function generateIncomingCallTwiml(contactName: string, forwarding?: Call
       timeout: 25,
       action: actionUrl,
       method: "POST",
+      record: "record-from-answer-dual" as any,
+      recordingStatusCallback: recordingCallbackUrl,
+      recordingStatusCallbackMethod: "POST",
+      recordingStatusCallbackEvent: "completed" as any,
     });
     
     const clientEl = dial.client({});

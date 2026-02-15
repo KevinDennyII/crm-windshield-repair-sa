@@ -735,6 +735,8 @@ export const aiReceptionistCalls = pgTable("ai_receptionist_calls", {
   elevenlabsConversationId: varchar("elevenlabs_conversation_id").unique(),
   callerNumber: varchar("caller_number").notNull(),
   calledNumber: varchar("called_number"),
+  forwardedTo: varchar("forwarded_to"),
+  callType: varchar("call_type").default("ai"),
   transcript: jsonb("transcript").default([]),
   transcriptSummary: text("transcript_summary"),
   extractedData: jsonb("extracted_data"),
@@ -743,6 +745,8 @@ export const aiReceptionistCalls = pgTable("ai_receptionist_calls", {
   status: varchar("status").default("in_progress"),
   duration: integer("duration"),
   callSource: varchar("call_source").default("twilio"),
+  recordingUrl: varchar("recording_url"),
+  recordingSid: varchar("recording_sid"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

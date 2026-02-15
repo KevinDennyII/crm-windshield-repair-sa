@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs, scheduledTasks, followUpModes, aiReceptionistSettings, manualFollowUpLogs } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs, scheduledTasks, followUpModes, aiReceptionistSettings, manualFollowUpLogs, aiReceptionistCalls } from "@shared/schema";
 import { createFollowUpTasksForJob, archiveFollowUpsForJob, startFollowUpWorker, FOLLOW_UP_SEQUENCES } from "./follow-up-system";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
@@ -14,7 +14,7 @@ import { isPlacesConfigured, getAutocomplete, getPlaceDetails } from "./places";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { db } from "./db";
 import { users } from "@shared/schema";
-import { eq, desc, and, gte } from "drizzle-orm";
+import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { COMPANY_LOGO_BASE64 } from "./logo";
 import { processNewLeads, startLeadPolling, stopLeadPolling } from "./lead-processor";
 import { registerAIRoutes } from "./ai-routes";
@@ -1748,6 +1748,19 @@ Please let us know of any changes.`;
         } catch (logErr) {
           console.error("[Voice] Failed to log AI-routed call:", logErr);
         }
+
+        try {
+          await db.insert(aiReceptionistCalls).values({
+            callSid: CallSid,
+            callerNumber: From || "Unknown",
+            calledNumber: To || "",
+            callType: "ai",
+            status: "in_progress",
+            transcript: [],
+          }).onConflictDoNothing();
+        } catch (aiLogErr) {
+          console.error("[Voice] Failed to pre-create AI call record:", aiLogErr);
+        }
         return;
       }
 
@@ -1756,6 +1769,7 @@ Please let us know of any changes.`;
 
       // Get call forwarding settings
       let forwarding: CallForwardingConfig | undefined;
+      let forwardedToNumber: string | null = null;
       try {
         const [fwdSettings] = await db.select().from(callForwardingSettings).limit(1);
         if (fwdSettings && fwdSettings.isEnabled) {
@@ -1765,6 +1779,7 @@ Please let us know of any changes.`;
             timeoutSeconds: fwdSettings.timeoutSeconds,
             whisperMessage: fwdSettings.whisperMessage || "Incoming call from Windshield Repair SA",
           };
+          forwardedToNumber = fwdSettings.forwardingNumber;
         }
       } catch (fwdErr) {
         console.error("[Voice] Failed to get call forwarding settings:", fwdErr);
@@ -1789,6 +1804,21 @@ Please let us know of any changes.`;
         });
       } catch (logErr) {
         console.error("[Voice] Failed to log incoming call:", logErr);
+      }
+
+      try {
+        await db.insert(aiReceptionistCalls).values({
+          callSid: CallSid,
+          callerNumber: From || "Unknown",
+          calledNumber: To || "",
+          forwardedTo: forwardedToNumber || "browser",
+          callType: "forwarded",
+          status: "in_progress",
+          transcript: [],
+        }).onConflictDoNothing();
+        console.log(`[Voice] Created forwarded call record for ${CallSid}`);
+      } catch (fwdLogErr) {
+        console.error("[Voice] Failed to create forwarded call record:", fwdLogErr);
       }
     } catch (error: any) {
       console.error("[Voice] Incoming call webhook error:", error);
@@ -1961,6 +1991,255 @@ Please let us know of any changes.`;
     } catch (error: any) {
       console.error("Whisper endpoint error:", error);
       res.send(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
+    }
+  });
+
+  app.post("/api/voice/recording-callback", async (req, res) => {
+    try {
+      const { RecordingSid, RecordingUrl, CallSid, RecordingDuration, RecordingStatus } = req.body;
+      console.log(`[Recording Callback] CallSid: ${CallSid}, RecordingSid: ${RecordingSid}, Duration: ${RecordingDuration}s, Status: ${RecordingStatus}`);
+
+      if (RecordingStatus !== "completed") {
+        return res.json({ success: true, message: "Recording not completed yet" });
+      }
+
+      if (!RecordingUrl) {
+        console.error("[Recording Callback] Missing RecordingUrl");
+        return res.json({ success: true, message: "No recording URL provided" });
+      }
+
+      const recordingUrlWithFormat = `${RecordingUrl}.mp3`;
+      const duration = parseInt(RecordingDuration || "0", 10);
+
+      const [existing] = await db.select().from(aiReceptionistCalls)
+        .where(eq(aiReceptionistCalls.callSid, CallSid));
+
+      if (existing) {
+        await db.update(aiReceptionistCalls)
+          .set({
+            recordingUrl: recordingUrlWithFormat,
+            recordingSid: RecordingSid,
+            duration,
+            status: "completed",
+          })
+          .where(eq(aiReceptionistCalls.callSid, CallSid));
+      } else {
+        await db.insert(aiReceptionistCalls).values({
+          callSid: CallSid,
+          callerNumber: "Unknown",
+          callType: "forwarded",
+          recordingUrl: recordingUrlWithFormat,
+          recordingSid: RecordingSid,
+          duration,
+          status: "completed",
+          transcript: [],
+        });
+      }
+
+      if (duration >= 5) {
+        (async () => {
+          try {
+            console.log(`[Recording Callback] Transcribing recording for call ${CallSid}...`);
+            const accountSid = process.env.TWILIO_ACCOUNT_SID;
+            const authToken = process.env.TWILIO_AUTH_TOKEN;
+            
+            if (!accountSid || !authToken) {
+              console.error("[Recording Callback] Missing Twilio credentials for transcription");
+              return;
+            }
+
+            const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+            const openaiBaseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+            if (!openaiKey) {
+              console.error("[Recording Callback] Missing OpenAI API key for transcription");
+              return;
+            }
+
+            const OpenAI = (await import("openai")).default;
+            const openaiClient = new OpenAI({ apiKey: openaiKey, baseURL: openaiBaseUrl });
+
+            let audioBuffer: Buffer | null = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                const audioResponse = await fetch(recordingUrlWithFormat, {
+                  headers: {
+                    "Authorization": "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+                  },
+                  redirect: "follow",
+                });
+                if (audioResponse.ok) {
+                  audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+                  break;
+                }
+                console.warn(`[Recording Callback] Download attempt ${attempt + 1} failed: ${audioResponse.status}`);
+              } catch (dlErr) {
+                console.warn(`[Recording Callback] Download attempt ${attempt + 1} error:`, dlErr);
+              }
+              if (attempt < 2) await new Promise(r => setTimeout(r, 5000 * (attempt + 1)));
+            }
+
+            if (!audioBuffer || audioBuffer.length === 0) {
+              console.error("[Recording Callback] Could not download recording after 3 attempts");
+              return;
+            }
+
+            const { Readable } = await import("stream");
+            const audioStream = Readable.from(audioBuffer);
+            (audioStream as any).name = "recording.mp3";
+
+            const { toFile } = await import("openai/uploads");
+            const audioFile = await toFile(audioStream, "recording.mp3", { type: "audio/mpeg" });
+
+            const whisperResponse = await openaiClient.audio.transcriptions.create({
+              file: audioFile,
+              model: "whisper-1",
+              response_format: "verbose_json",
+            });
+
+            const fullText = (whisperResponse as any).text || "";
+            console.log(`[Recording Callback] Transcription complete for ${CallSid}: ${fullText.slice(0, 100)}...`);
+
+            const transcriptEntries = [{ role: "caller", content: fullText }];
+
+            const summaryResponse = await openaiClient.chat.completions.create({
+              model: "gpt-4o",
+              messages: [
+                {
+                  role: "system",
+                  content: `You are analyzing a phone call recording transcript for an auto glass business (Windshield Repair SA in San Antonio, TX). 
+This is a recording of both sides of a forwarded call. Generate:
+1. A brief summary (2-3 sentences) of what the call was about.
+2. Extract any customer information available.
+
+Return a JSON object:
+{
+  "summary": "Brief summary of the call",
+  "firstName": string or null,
+  "lastName": string or null,
+  "phone": string or null,
+  "email": string or null,
+  "vehicleYear": string or null,
+  "vehicleMake": string or null,
+  "vehicleModel": string or null,
+  "glassType": string or null,
+  "serviceType": string or null,
+  "notes": string or null,
+  "isInsurance": boolean,
+  "urgency": "normal" | "urgent" | "emergency",
+  "address": string or null
+}
+Only return the JSON object, no other text.`
+                },
+                { role: "user", content: fullText }
+              ],
+              response_format: { type: "json_object" },
+              max_completion_tokens: 500,
+            });
+
+            const extracted = JSON.parse(summaryResponse.choices[0]?.message?.content || "{}");
+            const summary = extracted.summary || fullText.slice(0, 200);
+
+            await db.update(aiReceptionistCalls)
+              .set({
+                transcript: transcriptEntries,
+                transcriptSummary: summary,
+                extractedData: extracted,
+              })
+              .where(eq(aiReceptionistCalls.callSid, CallSid));
+
+            console.log(`[Recording Callback] Saved transcript and extraction for call ${CallSid}`);
+
+            const callerRecord = await db.select().from(aiReceptionistCalls)
+              .where(eq(aiReceptionistCalls.callSid, CallSid));
+            const callRecord = callerRecord[0];
+
+            if (callRecord && !callRecord.leadCreated && (extracted.firstName || extracted.phone || callRecord.callerNumber !== "Unknown")) {
+              const cleanedNumber = (extracted.phone || callRecord.callerNumber || "").replace(/\D/g, "");
+              let existingJobId: string | null = null;
+              if (cleanedNumber && cleanedNumber.length >= 10) {
+                const allJobs = await db.select().from(jobs);
+                const match = allJobs.find((j: any) => {
+                  const jobPhone = (j.phone || "").replace(/\D/g, "");
+                  return jobPhone && (jobPhone === cleanedNumber || jobPhone.endsWith(cleanedNumber.slice(-10)) || cleanedNumber.endsWith(jobPhone.slice(-10)));
+                });
+                if (match) existingJobId = match.id;
+              }
+
+              if (existingJobId) {
+                await db.update(aiReceptionistCalls)
+                  .set({ jobId: existingJobId })
+                  .where(eq(aiReceptionistCalls.callSid, CallSid));
+                console.log(`[Recording Callback] Matched existing customer, job: ${existingJobId}`);
+              } else if (extracted.firstName || extracted.phone) {
+                const crypto = await import("crypto");
+                const maxResult = await db.select({ maxNum: sql<string>`MAX(job_number)` }).from(jobs);
+                const maxNum = maxResult[0]?.maxNum;
+                const nextNum = maxNum ? parseInt(maxNum, 10) + 1 : 1;
+                const jobNumber = String(nextNum).padStart(6, "0");
+                const jobId = crypto.randomUUID();
+
+                const newJob: any = {
+                  id: jobId,
+                  jobNumber,
+                  firstName: extracted.firstName || "Unknown",
+                  lastName: extracted.lastName || "Caller",
+                  phone: extracted.phone || callRecord.callerNumber,
+                  email: extracted.email || "",
+                  customerType: extracted.isInsurance ? "insurance" : "retail",
+                  isBusiness: false,
+                  pipelineStage: "new_lead",
+                  leadSource: "phone_call",
+                  repairLocation: "mobile",
+                  address: extracted.address || "",
+                  vehicles: (extracted.vehicleYear || extracted.vehicleMake) ? [{
+                    id: crypto.randomUUID(),
+                    year: extracted.vehicleYear || "",
+                    make: extracted.vehicleMake || "",
+                    model: extracted.vehicleModel || "",
+                    parts: extracted.glassType ? [{
+                      id: crypto.randomUUID(),
+                      glassType: extracted.glassType,
+                      serviceType: extracted.serviceType || "replace",
+                      quantity: 1,
+                      partNumber: "",
+                      retailPrice: 0,
+                      cost: 0,
+                      laborCost: 0,
+                    }] : [],
+                  }] : [],
+                  installNotes: `[Forwarded Call Lead] ${extracted.notes || ""}`.trim(),
+                  subtotal: 0,
+                  taxAmount: 0,
+                  totalDue: 0,
+                  deductible: 0,
+                  rebate: 0,
+                  amountPaid: 0,
+                  balanceDue: 0,
+                  paymentStatus: "pending",
+                  paymentMethod: [],
+                  paymentHistory: [],
+                  followUpMode: "auto",
+                };
+
+                await db.insert(jobs).values(newJob);
+                await db.update(aiReceptionistCalls)
+                  .set({ leadCreated: true, jobId: jobId })
+                  .where(eq(aiReceptionistCalls.callSid, CallSid));
+                console.log(`[Recording Callback] Created job #${jobNumber} from forwarded call`);
+              }
+            }
+          } catch (transcribeErr) {
+            console.error("[Recording Callback] Transcription/extraction failed:", transcribeErr);
+          }
+        })();
+      } else {
+        console.log(`[Recording Callback] Call too short (${duration}s) - skipping transcription`);
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Recording Callback] Error:", error);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 

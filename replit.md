@@ -47,9 +47,20 @@ The system automatically polls Bluehost emails for new leads, processes them, an
 Jobs transitioning to "paid_completed" are timestamped. A background worker automatically archives jobs older than two weeks from the "paid_completed" stage, moving them to a separate, expandable "Archived Jobs" section. Archived jobs can be restored.
 
 ### AI Voice Receptionist (ElevenLabs)
-Incoming phone calls are handled by ElevenLabs Conversational AI (agent ID: `agent_5201khahhwpefx9vjweqgpacqbrj`), which replaced the previous Twilio + OpenAI implementation. The Twilio phone number is connected directly to the ElevenLabs agent. A webhook at `/api/elevenlabs-webhook` receives conversation data, extracts lead information via GPT-4o, and automatically creates new jobs in the CRM pipeline. The admin settings page shows ElevenLabs connection status, call log, and a text-based simulated call test. Voice and prompt configuration is managed in the ElevenLabs dashboard.
+Incoming phone calls are handled by ElevenLabs Conversational AI (agent ID: `agent_5201khahhwpefx9vjweqgpacqbrj`), which replaced the previous Twilio + OpenAI implementation. The Twilio phone number is connected directly to the ElevenLabs agent. A webhook at `/api/elevenlabs-webhook` receives conversation data, extracts lead information via GPT-4o, and automatically creates new jobs in the CRM pipeline. Voice and prompt configuration is managed in the ElevenLabs dashboard.
 
-The AI Receptionist toggle controls call routing: when enabled, the `/api/voice/incoming` handler returns TwiML that connects the call via WebSocket (`/media-stream`) to the ElevenLabs agent. When disabled, calls ring through normally using standard call forwarding. The WebSocket bridge (`setupElevenLabsWebSocket` in `voice-receptionist.ts`) pipes Twilio media streams bidirectionally to the ElevenLabs Conversational AI WebSocket API.
+The AI Receptionist toggle controls call routing: when enabled, the `/api/voice/incoming` handler returns TwiML that connects the call via WebSocket (`/media-stream`) to the ElevenLabs agent. When disabled, calls are forwarded to the configured number and automatically recorded by Twilio. The WebSocket bridge (`setupElevenLabsWebSocket` in `voice-receptionist.ts`) pipes Twilio media streams bidirectionally to the ElevenLabs Conversational AI WebSocket API.
+
+### Universal Call Recording & Transcription
+All incoming calls on Twilio numbers (210-866-8144, 210-940-8021) are tracked in the `ai_receptionist_calls` table with two call types:
+- **AI calls** (`callType: "ai"`): Transcripts captured in real-time via the WebSocket bridge, then summarized and extracted by GPT-4o.
+- **Forwarded calls** (`callType: "forwarded"`): Twilio records both sides of the call. When the recording completes, `/api/voice/recording-callback` downloads the audio, transcribes it with OpenAI Whisper, generates a GPT-4o summary, extracts client data, and optionally creates a lead.
+
+The AI Receptionist page (`/ai-receptionist`) provides a unified call log with expandable detail cards featuring 4 tabs:
+- **Overview**: Call summary, status, duration, call type, audio player (for recorded calls), and lead creation actions.
+- **Transcription**: Chat-style transcript view.
+- **Client Data**: AI-extracted customer info (name, phone, vehicle, service, address, insurance, urgency).
+- **Phone Call**: Technical details (caller/called numbers, forwarded-to number, Call SID, ElevenLabs conversation ID, Recording SID).
 
 ### Data Model & Profitability Calculation
 The data model supports multi-vehicle and multi-part jobs with hierarchical structures. A detailed profitability calculation accounts for part costs, accessories, urethane, calibration, subcontractor urethane, sales tax, and processing fees, with specific rules for dealer and subcontractor jobs.
