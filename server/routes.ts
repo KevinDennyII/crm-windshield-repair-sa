@@ -1659,6 +1659,14 @@ Please let us know of any changes.`;
     try {
       console.log("[Voice Webhook] Incoming call received:", JSON.stringify(req.body));
 
+      const twilioSignature = req.headers['x-twilio-signature'] as string;
+      if (twilioSignature) {
+        const validationUrl = `${getBaseUrl(req)}${req.originalUrl}`;
+        if (!validateTwilioSignature(validationUrl, req.body, twilioSignature)) {
+          console.warn("[Voice] Invalid Twilio signature. URL used:", validationUrl);
+        }
+      }
+
       const { CallSid, From, To, CallStatus } = req.body;
       
       const isOutboundFromBrowser = From && From.startsWith("client:");
@@ -1719,8 +1727,8 @@ Please let us know of any changes.`;
         console.log("[AI Receptionist] Routing incoming call to ElevenLabs AI agent");
         const wsUrl = `wss://${req.get('host')}/media-stream`;
         const baseUrl = getBaseUrl(req);
-        const statusUrl = `${baseUrl}/api/voice/status-callback`;
-        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="${wsUrl}" statusCallback="${statusUrl}"><Parameter name="caller" value="${From || ''}" /></Stream></Connect></Response>`;
+        const dialActionUrl = `${baseUrl}/api/voice/dial-action`;
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="${wsUrl}"><Parameter name="caller" value="${From || ''}" /></Stream></Connect><Redirect method="POST">${dialActionUrl}</Redirect></Response>`;
         console.log("[AI Receptionist] TwiML:", twiml);
         res.send(twiml);
 
@@ -1793,6 +1801,13 @@ Please let us know of any changes.`;
   // Call status callback - Twilio calls this when call status changes
   app.post("/api/voice/status-callback", async (req, res) => {
     try {
+      const twilioSignature = req.headers['x-twilio-signature'] as string;
+      if (twilioSignature) {
+        const validationUrl = `${getBaseUrl(req)}${req.originalUrl}`;
+        if (!validateTwilioSignature(validationUrl, req.body, twilioSignature)) {
+          console.warn("[Voice] Invalid Twilio signature on status callback. URL:", validationUrl);
+        }
+      }
 
       const { CallSid, CallStatus, CallDuration, From, Direction } = req.body;
       console.log("Call status callback:", { CallSid, CallStatus, CallDuration, From, Direction });
