@@ -778,7 +778,12 @@ export class DatabaseStorage implements IStorage {
 
   async getPendingNotifications(): Promise<ScheduledTask[]> {
     return db.select().from(scheduledTasks)
-      .where(eq(scheduledTasks.status, "notified"))
+      .where(
+        or(
+          eq(scheduledTasks.status, "notified"),
+          eq(scheduledTasks.status, "sent")
+        )
+      )
       .orderBy(desc(scheduledTasks.scheduledAt));
   }
 

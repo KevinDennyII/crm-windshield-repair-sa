@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Bell, Phone, PhoneMissed, MessageSquare, Mail, UserPlus, Send, PhoneCall, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { Bell, Phone, PhoneMissed, MessageSquare, Mail, UserPlus, Send, PhoneCall, Clock, ChevronDown, ChevronUp, CheckCircle2, ExternalLink } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -80,12 +81,28 @@ const SEQUENCE_LABELS: Record<number, string> = {
   7: "Final Call",
 };
 
-function FollowUpItem({ task }: { task: FollowUpNotification }) {
+function FollowUpItem({ task, onOpenJob }: { task: FollowUpNotification; onOpenJob: (jobId: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [showCallLog, setShowCallLog] = useState(false);
   const [callResult, setCallResult] = useState("");
   const [callNotes, setCallNotes] = useState("");
   const { toast } = useToast();
+  const isSent = task.status === "sent";
+
+  const completeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/follow-up-tasks/${task.id}/complete`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Task completed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/follow-up-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to complete task", variant: "destructive" });
+    },
+  });
 
   const sendMutation = useMutation({
     mutationFn: async (data: { sendSms?: boolean; sendEmail?: boolean }) => {
@@ -121,19 +138,31 @@ function FollowUpItem({ task }: { task: FollowUpNotification }) {
   });
 
   return (
-    <div className="px-3 py-2 border-b last:border-b-0" data-testid={`notification-followup-${task.id}`}>
+    <div className={`px-3 py-2 border-b last:border-b-0 ${isSent ? "bg-muted/30" : ""}`} data-testid={`notification-followup-${task.id}`}>
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2 min-w-0 flex-1">
-          <Clock className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div
+          className="flex items-start gap-2 min-w-0 flex-1 cursor-pointer"
+          onClick={() => onOpenJob(task.jobId)}
+          data-testid={`link-open-job-${task.id}`}
+        >
+          <Clock className={`h-4 w-4 flex-shrink-0 mt-0.5 ${isSent ? "text-green-500" : "text-amber-500"}`} />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium truncate">
+            <p className="text-sm font-medium truncate flex items-center gap-1">
               #{task.jobNumber} - {task.customerName}
+              <ExternalLink className="h-3 w-3 text-muted-foreground" />
             </p>
             <p className="text-xs text-muted-foreground">{task.customerPhone}</p>
             <p className="text-xs text-muted-foreground">{task.vehicleInfo}</p>
-            <Badge variant="secondary" className="mt-1 text-[10px]">
-              Seq {task.sequenceNumber}: {SEQUENCE_LABELS[task.sequenceNumber] || `Step ${task.sequenceNumber}`}
-            </Badge>
+            <div className="flex items-center gap-1 mt-1 flex-wrap">
+              <Badge variant="secondary" className="text-[10px]">
+                Seq {task.sequenceNumber}: {SEQUENCE_LABELS[task.sequenceNumber] || `Step ${task.sequenceNumber}`}
+              </Badge>
+              {isSent && (
+                <Badge variant="outline" className="text-[10px] text-green-600 border-green-300">
+                  Sent
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
         <button
@@ -242,6 +271,20 @@ function FollowUpItem({ task }: { task: FollowUpNotification }) {
               </Button>
             </div>
           )}
+
+          <div className="pt-2 border-t">
+            <Button
+              size="sm"
+              variant={isSent ? "default" : "outline"}
+              onClick={() => completeMutation.mutate()}
+              disabled={completeMutation.isPending}
+              className="w-full"
+              data-testid={`button-complete-task-${task.id}`}
+            >
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              {completeMutation.isPending ? "Completing..." : "Mark Complete"}
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -249,12 +292,18 @@ function FollowUpItem({ task }: { task: FollowUpNotification }) {
 }
 
 export function NotificationBell() {
+  const [, navigate] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [lastSeenCount, setLastSeenCount] = useState(() => {
     const stored = localStorage.getItem("notification_last_seen_count");
     return stored ? parseInt(stored, 10) : 0;
   });
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleOpenJob = (jobId: string) => {
+    setIsOpen(false);
+    navigate(`/?openJob=${jobId}`);
+  };
 
   const { data } = useQuery<NotificationData>({
     queryKey: ["/api/notifications"],
@@ -326,7 +375,7 @@ export function NotificationBell() {
                   </span>
                 </div>
                 {followUpNotifications.map((task) => (
-                  <FollowUpItem key={task.id} task={task} />
+                  <FollowUpItem key={task.id} task={task} onOpenJob={handleOpenJob} />
                 ))}
               </div>
             )}
@@ -377,13 +426,19 @@ export function NotificationBell() {
                   </span>
                 </div>
                 {data.newLeads.map((lead) => (
-                  <div key={lead.id} className="px-3 py-2 hover-elevate" data-testid={`notification-new-lead-${lead.id}`}>
+                  <div
+                    key={lead.id}
+                    className="px-3 py-2 hover-elevate cursor-pointer"
+                    onClick={() => handleOpenJob(lead.id)}
+                    data-testid={`notification-new-lead-${lead.id}`}
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <UserPlus className="h-4 w-4 text-blue-500 flex-shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
+                          <p className="text-sm font-medium truncate flex items-center gap-1">
                             #{lead.jobNumber} - {lead.firstName} {lead.lastName}
+                            <ExternalLink className="h-3 w-3 text-muted-foreground" />
                           </p>
                           <p className="text-xs text-muted-foreground">{lead.phone}</p>
                         </div>

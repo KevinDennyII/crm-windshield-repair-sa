@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation, useSearch } from "wouter";
 import { KanbanBoard } from "@/components/kanban-board";
 import { JobDetailModal } from "@/components/job-detail-modal";
 import { RepeatCustomerReminderDialog } from "@/components/repeat-customer-reminder-dialog";
@@ -16,10 +17,13 @@ import { Archive, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
 
 export default function Opportunities() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const searchString = useSearch();
   const { setSelectedEntity, clearSelectedEntity } = useAIContext();
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNewJob, setIsNewJob] = useState(false);
+  const [openJobHandled, setOpenJobHandled] = useState<string | null>(null);
   
   const [pendingMoveJob, setPendingMoveJob] = useState<{ job: Job; newStage: PipelineStage } | null>(null);
   const [showRepeatReminder, setShowRepeatReminder] = useState(false);
@@ -53,6 +57,21 @@ export default function Opportunities() {
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const openJobId = params.get("openJob");
+    if (openJobId && jobs.length > 0 && openJobHandled !== openJobId) {
+      const job = jobs.find((j) => j.id === openJobId);
+      if (job) {
+        setSelectedJob(job);
+        setIsNewJob(false);
+        setIsModalOpen(true);
+        setOpenJobHandled(openJobId);
+        navigate("/", { replace: true });
+      }
+    }
+  }, [searchString, jobs, openJobHandled, navigate]);
 
   const createJobMutation = useMutation({
     mutationFn: async (job: InsertJob) => {

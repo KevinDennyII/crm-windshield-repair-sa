@@ -2539,6 +2539,16 @@ Please let us know of any changes.`;
     }
   });
 
+  app.post("/api/follow-up-tasks/:id/complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const taskId = req.params.id as string;
+      await storage.updateScheduledTaskStatus(taskId, "completed", new Date());
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to complete task" });
+    }
+  });
+
   // Update follow-up mode for a job
   app.patch("/api/jobs/:id/follow-up-mode", isAuthenticated, async (req, res) => {
     try {
