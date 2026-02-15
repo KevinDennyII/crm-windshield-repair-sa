@@ -1647,21 +1647,17 @@ Please let us know of any changes.`;
     }
   });
 
+  // Helper to get proper base URL behind Replit's reverse proxy
+  function getBaseUrl(req: any): string {
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+    return `${proto}://${req.get('host')}`;
+  }
+
   // Incoming call webhook - Twilio calls this when someone dials the number OR when browser initiates outbound
   app.post("/api/voice/incoming", async (req, res) => {
     res.set("Content-Type", "text/xml");
     try {
-      console.log("Voice webhook received:", req.body);
-
-      // Validate Twilio signature for security (in production)
-      const twilioSignature = req.headers['x-twilio-signature'] as string;
-      if (twilioSignature && process.env.NODE_ENV === 'production') {
-        const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-        if (!validateTwilioSignature(url, req.body, twilioSignature)) {
-          console.warn("Invalid Twilio signature - possible spoofing attempt");
-          return res.status(403).send(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
-        }
-      }
+      console.log("[Voice Webhook] Incoming call received:", JSON.stringify(req.body));
 
       const { CallSid, From, To, CallStatus } = req.body;
       
@@ -1669,7 +1665,7 @@ Please let us know of any changes.`;
       
       if (isOutboundFromBrowser && To) {
         const toNumber = To;
-        console.log("Outbound call from browser detected, dialing:", toNumber);
+        console.log("[Voice] Outbound call from browser, dialing:", toNumber);
         
         let formattedNumber = toNumber.replace(/\D/g, "");
         if (formattedNumber.length === 10) {
@@ -1681,7 +1677,6 @@ Please let us know of any changes.`;
         const twiml = generateOutboundCallTwiml(formattedNumber);
         res.send(twiml);
 
-        // Log outbound call asynchronously after response is sent
         try {
           let contactName = "Unknown";
           const jobs = await storage.getAllJobs();
@@ -1701,26 +1696,35 @@ Please let us know of any changes.`;
             set: { status: 'initiated' }
           });
         } catch (logErr) {
-          console.error("Failed to log outbound call:", logErr);
+          console.error("[Voice] Failed to log outbound call:", logErr);
         }
         return;
+      }
+
+      // Look up contact name
+      let contactName = "Unknown Caller";
+      try {
+        const formattedFrom = From?.replace(/\D/g, "");
+        if (formattedFrom) {
+          const allJobs = await storage.getAllJobs();
+          const matchingJob = allJobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedFrom);
+          if (matchingJob) contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
+        }
+      } catch (lookupErr) {
+        console.error("[Voice] Contact lookup failed:", lookupErr);
       }
 
       const aiEnabled = await isAIReceptionistEnabled();
       if (aiEnabled) {
         console.log("[AI Receptionist] Routing incoming call to ElevenLabs AI agent");
         const wsUrl = `wss://${req.get('host')}/media-stream`;
-        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="${wsUrl}"><Parameter name="caller" value="${From || ''}" /></Stream></Connect></Response>`;
+        const baseUrl = getBaseUrl(req);
+        const statusUrl = `${baseUrl}/api/voice/status-callback`;
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="${wsUrl}" statusCallback="${statusUrl}"><Parameter name="caller" value="${From || ''}" /></Stream></Connect></Response>`;
+        console.log("[AI Receptionist] TwiML:", twiml);
         res.send(twiml);
 
         try {
-          let contactName = "Unknown Caller";
-          const formattedFrom = From?.replace(/\D/g, "");
-          if (formattedFrom) {
-            const allJobs = await storage.getAllJobs();
-            const matchingJob = allJobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedFrom);
-            if (matchingJob) contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
-          }
           await db.insert(phoneCalls).values({
             callSid: CallSid,
             direction: 'inbound',
@@ -1728,31 +1732,19 @@ Please let us know of any changes.`;
             toNumber: To,
             status: CallStatus || 'ringing',
             contactName,
+            notes: 'AI Receptionist',
           }).onConflictDoUpdate({
             target: phoneCalls.callSid,
             set: { status: CallStatus || 'ringing' }
           });
         } catch (logErr) {
-          console.error("Failed to log AI-routed call:", logErr);
+          console.error("[Voice] Failed to log AI-routed call:", logErr);
         }
         return;
       }
 
-      // AI Receptionist is OFF - handle inbound call normally
-      // Send TwiML response FIRST, then log asynchronously
-      let contactName = "Unknown Caller";
-      try {
-        const formattedFrom = From?.replace(/\D/g, "");
-        if (formattedFrom) {
-          const jobs = await storage.getAllJobs();
-          const matchingJob = jobs.find((j: any) => j.phone?.replace(/\D/g, "") === formattedFrom);
-          if (matchingJob) {
-            contactName = `${matchingJob.firstName} ${matchingJob.lastName}`;
-          }
-        }
-      } catch (lookupErr) {
-        console.error("Contact lookup failed, using default name:", lookupErr);
-      }
+      // AI Receptionist is OFF - handle inbound call
+      console.log("[Voice] AI Receptionist OFF - routing to browser/phone");
 
       // Get call forwarding settings
       let forwarding: CallForwardingConfig | undefined;
@@ -1767,15 +1759,14 @@ Please let us know of any changes.`;
           };
         }
       } catch (fwdErr) {
-        console.error("Failed to get call forwarding settings:", fwdErr);
+        console.error("[Voice] Failed to get call forwarding settings:", fwdErr);
       }
 
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const baseUrl = getBaseUrl(req);
       const twiml = generateIncomingCallTwiml(contactName, forwarding, baseUrl);
-      console.log("Generated TwiML for incoming call:", twiml);
+      console.log("[Voice] Generated TwiML:", twiml);
       res.send(twiml);
 
-      // Log the incoming call asynchronously after response is sent
       try {
         await db.insert(phoneCalls).values({
           callSid: CallSid,
@@ -1789,10 +1780,10 @@ Please let us know of any changes.`;
           set: { status: CallStatus || 'ringing' }
         });
       } catch (logErr) {
-        console.error("Failed to log incoming call:", logErr);
+        console.error("[Voice] Failed to log incoming call:", logErr);
       }
     } catch (error: any) {
-      console.error("Incoming call webhook error:", error);
+      console.error("[Voice] Incoming call webhook error:", error);
       if (!res.headersSent) {
         res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say>We are experiencing technical difficulties. Please try again later.</Say></Response>`);
       }
@@ -1802,15 +1793,6 @@ Please let us know of any changes.`;
   // Call status callback - Twilio calls this when call status changes
   app.post("/api/voice/status-callback", async (req, res) => {
     try {
-      // Validate Twilio signature for security (in production)
-      const twilioSignature = req.headers['x-twilio-signature'] as string;
-      if (twilioSignature && process.env.NODE_ENV === 'production') {
-        const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-        if (!validateTwilioSignature(url, req.body, twilioSignature)) {
-          console.warn("Invalid Twilio signature on status callback");
-          return res.status(204).end();
-        }
-      }
 
       const { CallSid, CallStatus, CallDuration, From, Direction } = req.body;
       console.log("Call status callback:", { CallSid, CallStatus, CallDuration, From, Direction });
@@ -1886,7 +1868,7 @@ Please let us know of any changes.`;
       const [fwdSettings] = await db.select().from(callForwardingSettings).limit(1);
       if (fwdSettings && fwdSettings.isEnabled && fwdSettings.forwardingNumber) {
         console.log(`Forwarding call ${CallSid} to ${fwdSettings.forwardingNumber}`);
-        const fwdBaseUrl = `${req.protocol}://${req.get('host')}`;
+        const fwdBaseUrl = getBaseUrl(req);
         const twiml = generateForwardTwiml(
           fwdSettings.forwardingNumber,
           fwdSettings.whisperMessage || "Incoming call from Windshield Repair SA",

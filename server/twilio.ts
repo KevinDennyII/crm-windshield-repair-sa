@@ -71,10 +71,17 @@ export function generateIncomingCallTwiml(contactName: string, forwarding?: Call
   const response = new twilio.twiml.VoiceResponse();
   
   if (forwarding?.isEnabled && forwarding.forwardingNumber) {
+    let formattedFwdNumber = forwarding.forwardingNumber.replace(/\D/g, "");
+    if (formattedFwdNumber.length === 10) {
+      formattedFwdNumber = "+1" + formattedFwdNumber;
+    } else if (!formattedFwdNumber.startsWith("+")) {
+      formattedFwdNumber = "+" + formattedFwdNumber;
+    }
+
     const actionUrl = baseUrl ? `${baseUrl}/api/voice/dial-action` : "/api/voice/dial-action";
     const dial = response.dial({
       callerId: twilioPhoneNumber || undefined,
-      timeout: forwarding.timeoutSeconds || 5,
+      timeout: Math.max(forwarding.timeoutSeconds || 20, 20),
       action: actionUrl,
       method: "POST",
     });
@@ -82,9 +89,15 @@ export function generateIncomingCallTwiml(contactName: string, forwarding?: Call
     const clientEl = dial.client({});
     clientEl.identity(SHARED_AGENT_IDENTITY);
     clientEl.parameter({ name: "contactName", value: contactName });
+
+    dial.number(formattedFwdNumber);
   } else {
+    const actionUrl = baseUrl ? `${baseUrl}/api/voice/dial-action` : "/api/voice/dial-action";
     const dial = response.dial({
       callerId: twilioPhoneNumber || undefined,
+      timeout: 25,
+      action: actionUrl,
+      method: "POST",
     });
     
     const clientEl = dial.client({});
