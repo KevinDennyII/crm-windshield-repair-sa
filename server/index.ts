@@ -9,6 +9,7 @@ import { createServer } from "http";
 import { seedSampleUsers } from "./db";
 import { startFollowUpWorker } from "./follow-up-system";
 import { registerVoiceReceptionistRoutes, setupElevenLabsWebSocket } from "./voice-receptionist";
+import { startElevenLabsPoller } from "./elevenlabs-poller";
 import { storage } from "./storage";
 
 const app = express();
@@ -91,6 +92,9 @@ app.use((req, res, next) => {
   
   // Start background follow-up worker
   startFollowUpWorker();
+  
+  // Start ElevenLabs conversation poller
+  startElevenLabsPoller();
   
   // Auto-archive completed jobs older than 2 weeks (check every hour)
   const runAutoArchive = async () => {

@@ -1115,20 +1115,70 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                     />
                   </div>
                   <div>
-                    <Label htmlFor="forwarding-number" className="text-xs text-muted-foreground">Forward to Number</Label>
-                    <Input
-                      id="forwarding-number"
-                      placeholder="(210) 890-0210"
-                      value={fwdNumber}
-                      onChange={(e) => setFwdNumber(e.target.value)}
-                      onBlur={() => {
-                        const val = fwdNumber.replace(/\D/g, "");
-                        if (val !== forwardingSettings?.forwardingNumber) {
-                          forwardingMutation.mutate({ forwardingNumber: val });
-                        }
-                      }}
-                      data-testid="input-forwarding-number"
-                    />
+                    <Label className="text-xs text-muted-foreground mb-2 block">Forward To</Label>
+                    <div className="space-y-2">
+                      <div
+                        className={`flex items-center justify-between rounded-md border p-2.5 cursor-pointer hover-elevate ${forwardingSettings?.forwardingNumber === "2108900210" ? "border-primary bg-primary/5" : ""}`}
+                        onClick={() => {
+                          if (forwardingSettings?.forwardingNumber !== "2108900210") {
+                            forwardingMutation.mutate({ forwardingNumber: "2108900210" });
+                          }
+                        }}
+                        data-testid="button-fwd-main"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">Main Line (TextNow)</p>
+                            <p className="text-xs text-muted-foreground">(210) 890-0210</p>
+                          </div>
+                        </div>
+                        {forwardingSettings?.forwardingNumber === "2108900210" && (
+                          <Badge variant="default" className="text-xs">Active</Badge>
+                        )}
+                      </div>
+                      <div
+                        className={`flex items-center justify-between rounded-md border p-2.5 cursor-pointer hover-elevate ${forwardingSettings?.forwardingNumber === "2108668144" ? "border-primary bg-primary/5" : ""}`}
+                        onClick={() => {
+                          if (forwardingSettings?.forwardingNumber !== "2108668144") {
+                            forwardingMutation.mutate({ forwardingNumber: "2108668144" });
+                          }
+                        }}
+                        data-testid="button-fwd-ai"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">AI Receptionist</p>
+                            <p className="text-xs text-muted-foreground">(210) 866-8144</p>
+                          </div>
+                        </div>
+                        {forwardingSettings?.forwardingNumber === "2108668144" && (
+                          <Badge variant="default" className="text-xs">Active</Badge>
+                        )}
+                      </div>
+                      <div className={`rounded-md border p-2.5 ${forwardingSettings?.forwardingNumber && forwardingSettings.forwardingNumber !== "2108900210" && forwardingSettings.forwardingNumber !== "2108668144" ? "border-primary bg-primary/5" : ""}`}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                          <p className="text-sm font-medium">Custom Number</p>
+                          {forwardingSettings?.forwardingNumber && forwardingSettings.forwardingNumber !== "2108900210" && forwardingSettings.forwardingNumber !== "2108668144" && (
+                            <Badge variant="default" className="text-xs">Active</Badge>
+                          )}
+                        </div>
+                        <Input
+                          placeholder="Enter phone number"
+                          value={fwdNumber}
+                          onChange={(e) => setFwdNumber(e.target.value)}
+                          onBlur={() => {
+                            const val = fwdNumber.replace(/\D/g, "");
+                            if (val && val !== "2108900210" && val !== "2108668144" && val !== forwardingSettings?.forwardingNumber) {
+                              forwardingMutation.mutate({ forwardingNumber: val });
+                            }
+                          }}
+                          data-testid="input-forwarding-number"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <Label htmlFor="forwarding-timeout" className="text-xs text-muted-foreground">Ring Browser For (seconds)</Label>
@@ -1163,7 +1213,7 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                       data-testid="input-forwarding-whisper"
                     />
                   </div>
-                  {forwardingSettings?.isEnabled && (
+                  {forwardingSettings?.isEnabled && forwardingSettings?.forwardingNumber && (
                     <p className="text-xs text-muted-foreground">
                       Calls will ring in browser for {forwardingSettings.timeoutSeconds}s, then forward to {formatPhoneNumber(forwardingSettings.forwardingNumber)}.
                     </p>

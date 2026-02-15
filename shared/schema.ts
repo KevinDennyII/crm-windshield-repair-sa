@@ -732,13 +732,17 @@ export type InsertAiReceptionistSettings = z.infer<typeof insertAiReceptionistSe
 export const aiReceptionistCalls = pgTable("ai_receptionist_calls", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   callSid: varchar("call_sid").unique(),
+  elevenlabsConversationId: varchar("elevenlabs_conversation_id").unique(),
   callerNumber: varchar("caller_number").notNull(),
+  calledNumber: varchar("called_number"),
   transcript: jsonb("transcript").default([]),
+  transcriptSummary: text("transcript_summary"),
   extractedData: jsonb("extracted_data"),
   leadCreated: boolean("lead_created").default(false),
   jobId: varchar("job_id"),
   status: varchar("status").default("in_progress"),
   duration: integer("duration"),
+  callSource: varchar("call_source").default("twilio"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
