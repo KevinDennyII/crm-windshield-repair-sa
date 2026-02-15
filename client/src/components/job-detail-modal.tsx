@@ -519,6 +519,9 @@ export function JobDetailModal({
     methodEmail: false,
     notes: "",
     nextFollowUpDate: "",
+    nextFollowUpHour: "9",
+    nextFollowUpMinute: "00",
+    nextFollowUpAmPm: "AM" as "AM" | "PM",
     createTask: false,
   });
   const [submittingFollowUp, setSubmittingFollowUp] = useState(false);
@@ -596,12 +599,24 @@ export function JobDetailModal({
 
     setSubmittingFollowUp(true);
     try {
+      let combinedDateTime: string | null = null;
+      if (followUpForm.nextFollowUpDate) {
+        let hour24 = parseInt(followUpForm.nextFollowUpHour);
+        if (followUpForm.nextFollowUpAmPm === "PM" && hour24 !== 12) hour24 += 12;
+        if (followUpForm.nextFollowUpAmPm === "AM" && hour24 === 12) hour24 = 0;
+        combinedDateTime = `${followUpForm.nextFollowUpDate}T${String(hour24).padStart(2, "0")}:${followUpForm.nextFollowUpMinute}:00`;
+      }
+
       const res = await fetch(`/api/jobs/${job.id}/manual-follow-ups`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...followUpForm,
-          nextFollowUpDate: followUpForm.nextFollowUpDate || null,
+          methodCall: followUpForm.methodCall,
+          methodText: followUpForm.methodText,
+          methodEmail: followUpForm.methodEmail,
+          notes: followUpForm.notes,
+          createTask: followUpForm.createTask,
+          nextFollowUpDate: combinedDateTime,
         }),
       });
       if (!res.ok) {
@@ -609,7 +624,7 @@ export function JobDetailModal({
         throw new Error(err.message || "Failed to log follow-up");
       }
       toast({ title: `Follow-up #${nextNumber} logged` });
-      setFollowUpForm({ methodCall: false, methodText: false, methodEmail: false, notes: "", nextFollowUpDate: "", createTask: false });
+      setFollowUpForm({ methodCall: false, methodText: false, methodEmail: false, notes: "", nextFollowUpDate: "", nextFollowUpHour: "9", nextFollowUpMinute: "00", nextFollowUpAmPm: "AM", createTask: false });
       refetchFollowUps();
       if (isSeventhAttempt) {
         toast({ title: "Job moved to Lost", description: "7 follow-up attempts reached without booking. Job has been moved to Lost Opportunity.", variant: "destructive" });
@@ -1736,7 +1751,7 @@ export function JobDetailModal({
                                 {log.nextFollowUpDate && (
                                   <p className="text-xs text-muted-foreground flex items-center gap-1">
                                     <CalendarDays className="h-3 w-3" />
-                                    Next: {new Date(log.nextFollowUpDate).toLocaleDateString()}
+                                    Next: {new Date(log.nextFollowUpDate).toLocaleDateString()} at {new Date(log.nextFollowUpDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}
                                   </p>
                                 )}
                               </div>
@@ -1804,16 +1819,60 @@ export function JobDetailModal({
                           {followUpLogs.length + 1 < 7 && (
                             <div className="grid gap-2">
                               <Label htmlFor="nextFollowUpDate" className="flex items-center gap-1">
-                                Next Follow-Up Date <span className="text-destructive">*</span>
+                                Next Follow-Up Date & Time <span className="text-destructive">*</span>
                               </Label>
-                              <Input
-                                id="nextFollowUpDate"
-                                type="date"
-                                value={followUpForm.nextFollowUpDate}
-                                onChange={(e) => setFollowUpForm(f => ({ ...f, nextFollowUpDate: e.target.value }))}
-                                min={new Date().toISOString().split("T")[0]}
-                                data-testid="input-next-follow-up-date"
-                              />
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Input
+                                  id="nextFollowUpDate"
+                                  type="date"
+                                  value={followUpForm.nextFollowUpDate}
+                                  onChange={(e) => setFollowUpForm(f => ({ ...f, nextFollowUpDate: e.target.value }))}
+                                  min={new Date().toISOString().split("T")[0]}
+                                  className="flex-1 min-w-[140px]"
+                                  data-testid="input-next-follow-up-date"
+                                />
+                                <div className="flex items-center gap-1">
+                                  <Select
+                                    value={followUpForm.nextFollowUpHour}
+                                    onValueChange={(v) => setFollowUpForm(f => ({ ...f, nextFollowUpHour: v }))}
+                                  >
+                                    <SelectTrigger className="w-[70px]" data-testid="select-follow-up-hour">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                                        <SelectItem key={h} value={String(h)}>{String(h)}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <span className="text-muted-foreground font-bold">:</span>
+                                  <Select
+                                    value={followUpForm.nextFollowUpMinute}
+                                    onValueChange={(v) => setFollowUpForm(f => ({ ...f, nextFollowUpMinute: v }))}
+                                  >
+                                    <SelectTrigger className="w-[70px]" data-testid="select-follow-up-minute">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {["00", "15", "30", "45"].map((m) => (
+                                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Select
+                                    value={followUpForm.nextFollowUpAmPm}
+                                    onValueChange={(v) => setFollowUpForm(f => ({ ...f, nextFollowUpAmPm: v as "AM" | "PM" }))}
+                                  >
+                                    <SelectTrigger className="w-[70px]" data-testid="select-follow-up-ampm">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="AM">AM</SelectItem>
+                                      <SelectItem value="PM">PM</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
                             </div>
                           )}
 
