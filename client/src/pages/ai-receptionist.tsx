@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Bot, Phone, Save, Clock, User, Car, FileText, ChevronDown, ChevronRight,
+  Bot, Phone, Clock, User, Car, FileText, ChevronDown, ChevronRight,
   Plus, PhoneIncoming, PhoneOff, Zap, ExternalLink, MapPin,
-  RefreshCw, PhoneCall, MessageSquare, ArrowRight
+  RefreshCw, PhoneCall, MessageSquare, ArrowRight, Copy, Info
 } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
@@ -169,6 +169,39 @@ export default function AIReceptionist() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-start gap-3">
+            <Info className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">How calls are tracked</p>
+              <p className="text-xs text-muted-foreground">
+                When AI Receptionist is enabled, incoming calls to (210) 866-8144 are routed through Twilio to the ElevenLabs AI agent. 
+                The conversation transcript and caller info are automatically captured and saved here. 
+                If enough info is extracted, a new lead is created in the pipeline.
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <p className="text-xs text-muted-foreground">Backup webhook URL:</p>
+                <code className="text-xs bg-muted px-2 py-0.5 rounded" data-testid="text-webhook-url">
+                  {window.location.origin}/api/elevenlabs-webhook
+                </code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/api/elevenlabs-webhook`);
+                    toast({ title: "Webhook URL copied" });
+                  }}
+                  data-testid="button-copy-webhook"
+                >
+                  <Copy className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">

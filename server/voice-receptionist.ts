@@ -132,7 +132,11 @@ export function setupElevenLabsWebSocket(httpServer: Server): void {
 
     let streamSid: string | null = null;
     let callSid: string | null = null;
+    let callerNumber: string = "Unknown";
     let elevenLabsWs: WebSocket | null = null;
+    let conversationId: string | null = null;
+    const callStartTime = Date.now();
+    const transcriptEntries: Array<{ role: string; content: string }> = [];
 
     const connectToElevenLabs = () => {
       const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -160,14 +164,43 @@ export function setupElevenLabsWebSocket(httpServer: Server): void {
         try {
           const msg = JSON.parse(data.toString());
 
-          if (msg.type === "audio" && msg.audio?.chunk) {
-            if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
-              twilioWs.send(JSON.stringify({
-                event: "media",
-                streamSid,
-                media: { payload: msg.audio.chunk },
-              }));
-            }
+          switch (msg.type) {
+            case "conversation_initiation_metadata":
+              conversationId = msg.conversation_id;
+              console.log(`[ElevenLabs Bridge] Conversation ID: ${conversationId}`);
+              break;
+
+            case "audio":
+              if (msg.audio?.chunk && streamSid && twilioWs.readyState === WebSocket.OPEN) {
+                twilioWs.send(JSON.stringify({
+                  event: "media",
+                  streamSid,
+                  media: { payload: msg.audio.chunk },
+                }));
+              }
+              break;
+
+            case "user_transcript":
+              if (msg.user_transcription_event?.user_transcript) {
+                transcriptEntries.push({
+                  role: "caller",
+                  content: msg.user_transcription_event.user_transcript,
+                });
+              } else if (msg.text) {
+                transcriptEntries.push({ role: "caller", content: msg.text });
+              }
+              break;
+
+            case "agent_response":
+              if (msg.agent_response_event?.agent_response) {
+                transcriptEntries.push({
+                  role: "assistant",
+                  content: msg.agent_response_event.agent_response,
+                });
+              } else if (msg.text) {
+                transcriptEntries.push({ role: "assistant", content: msg.text });
+              }
+              break;
           }
         } catch (err) {
           console.error("[ElevenLabs Bridge] Error parsing ElevenLabs message:", err);
@@ -176,12 +209,160 @@ export function setupElevenLabsWebSocket(httpServer: Server): void {
 
       elevenLabsWs.on("close", () => {
         console.log("[ElevenLabs Bridge] ElevenLabs connection closed");
+        saveCallRecord();
       });
 
       elevenLabsWs.on("error", (err) => {
         console.error("[ElevenLabs Bridge] ElevenLabs WebSocket error:", err);
       });
     };
+
+    let callRecordSaved = false;
+
+    async function saveCallRecord() {
+      if (callRecordSaved) return;
+      callRecordSaved = true;
+
+      const duration = Math.round((Date.now() - callStartTime) / 1000);
+      const callRecordId = callSid || `call-${Date.now()}`;
+
+      console.log(`[ElevenLabs Bridge] Saving call record: ${callRecordId}, caller: ${callerNumber}, duration: ${duration}s, transcript entries: ${transcriptEntries.length}, conversationId: ${conversationId}`);
+
+      try {
+        const [existing] = await db.select().from(aiReceptionistCalls)
+          .where(eq(aiReceptionistCalls.callSid, callRecordId));
+
+        if (existing) {
+          await db.update(aiReceptionistCalls)
+            .set({
+              transcript: transcriptEntries.length > 0 ? transcriptEntries : existing.transcript,
+              duration,
+              status: "completed",
+              callerNumber: callerNumber !== "Unknown" ? callerNumber : existing.callerNumber,
+              elevenlabsConversationId: conversationId,
+            })
+            .where(eq(aiReceptionistCalls.callSid, callRecordId));
+        } else {
+          await db.insert(aiReceptionistCalls).values({
+            callSid: callRecordId,
+            callerNumber,
+            transcript: transcriptEntries,
+            duration,
+            status: "completed",
+            elevenlabsConversationId: conversationId,
+          });
+        }
+
+        if (transcriptEntries.length >= 2) {
+          console.log(`[ElevenLabs Bridge] Running GPT-4o extraction on ${transcriptEntries.length} transcript entries`);
+          try {
+            const extracted = await extractLeadData(transcriptEntries);
+            const summary = transcriptEntries
+              .filter(t => t.role === "caller")
+              .map(t => t.content)
+              .join(" ")
+              .slice(0, 200);
+
+            await db.update(aiReceptionistCalls)
+              .set({
+                extractedData: extracted,
+                transcriptSummary: summary || null,
+              })
+              .where(eq(aiReceptionistCalls.callSid, callRecordId));
+
+            const cleanedNumber = (extracted.phone || callerNumber || "").replace(/\D/g, "");
+
+            let existingJobId: string | null = null;
+            if (cleanedNumber && cleanedNumber.length >= 10) {
+              const allJobs = await db.select().from(jobs);
+              const match = allJobs.find((j: any) => {
+                const jobPhone = (j.phone || "").replace(/\D/g, "");
+                return jobPhone && (jobPhone === cleanedNumber || jobPhone.endsWith(cleanedNumber.slice(-10)) || cleanedNumber.endsWith(jobPhone.slice(-10)));
+              });
+              if (match) existingJobId = match.id;
+            }
+
+            const [currentRecord] = await db.select().from(aiReceptionistCalls)
+              .where(eq(aiReceptionistCalls.callSid, callRecordId));
+            if (currentRecord?.leadCreated) {
+              console.log(`[ElevenLabs Bridge] Lead already created for ${callRecordId} - skipping`);
+              return;
+            }
+
+            if (existingJobId) {
+              console.log(`[ElevenLabs Bridge] Matched existing customer, job: ${existingJobId}`);
+              await db.update(aiReceptionistCalls)
+                .set({ jobId: existingJobId })
+                .where(eq(aiReceptionistCalls.callSid, callRecordId));
+            } else if (extracted.firstName || extracted.phone) {
+              console.log(`[ElevenLabs Bridge] Creating new lead: ${extracted.firstName} ${extracted.lastName || ""}`);
+
+              const maxResult = await db.select({ maxNum: sql<string>`MAX(job_number)` }).from(jobs);
+              const maxNum = maxResult[0]?.maxNum;
+              const nextNum = maxNum ? parseInt(maxNum, 10) + 1 : 1;
+              const jobNumber = String(nextNum).padStart(6, "0");
+              const jobId = crypto.randomUUID();
+
+              const newJob: any = {
+                id: jobId,
+                jobNumber,
+                firstName: extracted.firstName || "Unknown",
+                lastName: extracted.lastName || "Caller",
+                phone: extracted.phone || callerNumber,
+                email: extracted.email || "",
+                customerType: extracted.isInsurance ? "insurance" : "retail",
+                isBusiness: false,
+                pipelineStage: "new_lead",
+                leadSource: "phone_call",
+                repairLocation: "mobile",
+                address: extracted.address || "",
+                vehicles: (extracted.vehicleYear || extracted.vehicleMake) ? [{
+                  id: crypto.randomUUID(),
+                  year: extracted.vehicleYear || "",
+                  make: extracted.vehicleMake || "",
+                  model: extracted.vehicleModel || "",
+                  parts: extracted.glassType ? [{
+                    id: crypto.randomUUID(),
+                    glassType: extracted.glassType,
+                    serviceType: extracted.serviceType || "replace",
+                    quantity: 1,
+                    partNumber: "",
+                    retailPrice: 0,
+                    cost: 0,
+                    laborCost: 0,
+                  }] : [],
+                }] : [],
+                installNotes: `[AI Receptionist Lead] ${extracted.notes || ""}`.trim(),
+                subtotal: 0,
+                taxAmount: 0,
+                totalDue: 0,
+                deductible: 0,
+                rebate: 0,
+                amountPaid: 0,
+                balanceDue: 0,
+                paymentStatus: "pending",
+                paymentMethod: [],
+                paymentHistory: [],
+                followUpMode: "auto",
+              };
+
+              await db.insert(jobs).values(newJob);
+              await db.update(aiReceptionistCalls)
+                .set({ leadCreated: true, jobId: jobId })
+                .where(eq(aiReceptionistCalls.callSid, callRecordId));
+
+              console.log(`[ElevenLabs Bridge] Created job #${jobNumber} from AI call`);
+            }
+          } catch (extractErr) {
+            console.error("[ElevenLabs Bridge] GPT-4o extraction failed:", extractErr);
+          }
+        } else {
+          console.log(`[ElevenLabs Bridge] Too few transcript entries (${transcriptEntries.length}) - skipping extraction`);
+        }
+      } catch (err) {
+        console.error("[ElevenLabs Bridge] Failed to save call record:", err);
+      }
+    }
 
     twilioWs.on("message", (message) => {
       try {
@@ -191,7 +372,10 @@ export function setupElevenLabsWebSocket(httpServer: Server): void {
           case "start":
             streamSid = msg.start.streamSid;
             callSid = msg.start.callSid;
-            console.log(`[ElevenLabs Bridge] Stream started - SID: ${streamSid}, Call: ${callSid}`);
+            if (msg.start.customParameters?.caller) {
+              callerNumber = msg.start.customParameters.caller;
+            }
+            console.log(`[ElevenLabs Bridge] Stream started - SID: ${streamSid}, Call: ${callSid}, Caller: ${callerNumber}`);
             connectToElevenLabs();
             break;
 
@@ -219,6 +403,8 @@ export function setupElevenLabsWebSocket(httpServer: Server): void {
       console.log("[ElevenLabs Bridge] Twilio connection closed");
       if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
         elevenLabsWs.close();
+      } else {
+        saveCallRecord();
       }
     });
 
