@@ -114,6 +114,7 @@ export type FollowUpMode = typeof followUpModes[number];
 export const pipelineStages = [
   "new_lead",
   "quote",
+  "warm_lead",
   "scheduled",
   "paid_completed",
   "lost_opportunity",
@@ -686,6 +687,29 @@ export const insertFollowUpLogSchema = createInsertSchema(followUpLogs).omit({
 
 export type FollowUpLog = typeof followUpLogs.$inferSelect;
 export type InsertFollowUpLog = z.infer<typeof insertFollowUpLogSchema>;
+
+export const manualFollowUpLogs = pgTable("manual_follow_up_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull(),
+  followUpNumber: integer("follow_up_number").notNull(),
+  datePerformed: timestamp("date_performed").defaultNow(),
+  methodCall: boolean("method_call").default(false),
+  methodText: boolean("method_text").default(false),
+  methodEmail: boolean("method_email").default(false),
+  notes: text("notes"),
+  nextFollowUpDate: timestamp("next_follow_up_date"),
+  createTask: boolean("create_task").default(false),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertManualFollowUpLogSchema = createInsertSchema(manualFollowUpLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ManualFollowUpLog = typeof manualFollowUpLogs.$inferSelect;
+export type InsertManualFollowUpLog = z.infer<typeof insertManualFollowUpLogSchema>;
 
 export const aiReceptionistSettings = pgTable("ai_receptionist_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -88,6 +88,8 @@ import {
   Copy,
   ExternalLink,
   RefreshCcw,
+  CalendarDays,
+  ClipboardList,
 } from "lucide-react";
 import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
@@ -112,6 +114,7 @@ interface JobDetailModalProps {
 const stageLabels: Record<string, string> = {
   new_lead: "New Lead",
   quote: "Quote",
+  warm_lead: "Warm Lead",
   scheduled: "Scheduled",
   paid_completed: "Paid/Completed",
   lost_opportunity: "Lost Opportunity",
@@ -510,6 +513,15 @@ export function JobDetailModal({
   const [warrantySearchResults, setWarrantySearchResults] = useState<Job[]>([]);
   const [warrantySearching, setWarrantySearching] = useState(false);
   const warrantySearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [followUpForm, setFollowUpForm] = useState({
+    methodCall: false,
+    methodText: false,
+    methodEmail: false,
+    notes: "",
+    nextFollowUpDate: "",
+    createTask: false,
+  });
+  const [submittingFollowUp, setSubmittingFollowUp] = useState(false);
   const { toast } = useToast();
 
   const getCustomerKey = useCallback(() => {
@@ -542,6 +554,72 @@ export function JobDetailModal({
       setReminderShownForKey(customerKey);
     }
   }, [customerReminder, customerKey, reminderShownForKey]);
+
+  type FollowUpLog = {
+    id: number;
+    jobId: string;
+    followUpNumber: number;
+    datePerformed: string;
+    methodCall: boolean;
+    methodText: boolean;
+    methodEmail: boolean;
+    notes: string | null;
+    nextFollowUpDate: string | null;
+    createTask: boolean;
+    createdBy: string;
+  }
+
+  const { data: followUpLogs = [], refetch: refetchFollowUps } = useQuery<FollowUpLog[]>({
+    queryKey: ["/api/jobs", job?.id, "manual-follow-ups"],
+    queryFn: async () => {
+      if (!job?.id) return [];
+      const res = await fetch(`/api/jobs/${job.id}/manual-follow-ups`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!job?.id && !isNew,
+  });
+
+  const handleSubmitFollowUp = async () => {
+    if (!job?.id) return;
+    const nextNumber = followUpLogs.length + 1;
+    const isSeventhAttempt = nextNumber >= 7;
+
+    if (!followUpForm.methodCall && !followUpForm.methodText && !followUpForm.methodEmail) {
+      toast({ title: "Select at least one contact method", variant: "destructive" });
+      return;
+    }
+    if (!isSeventhAttempt && !followUpForm.nextFollowUpDate) {
+      toast({ title: "Next follow-up date is required", description: "You must set a next follow-up date until the 7th attempt.", variant: "destructive" });
+      return;
+    }
+
+    setSubmittingFollowUp(true);
+    try {
+      const res = await fetch(`/api/jobs/${job.id}/manual-follow-ups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...followUpForm,
+          nextFollowUpDate: followUpForm.nextFollowUpDate || null,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to log follow-up");
+      }
+      toast({ title: `Follow-up #${nextNumber} logged` });
+      setFollowUpForm({ methodCall: false, methodText: false, methodEmail: false, notes: "", nextFollowUpDate: "", createTask: false });
+      refetchFollowUps();
+      if (isSeventhAttempt) {
+        toast({ title: "Job moved to Lost", description: "7 follow-up attempts reached without booking. Job has been moved to Lost Opportunity.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSubmittingFollowUp(false);
+    }
+  };
 
   const jobTotal = calculateJobTotal(vehicles, formData.customerType);
 
@@ -1622,6 +1700,168 @@ export function JobDetailModal({
 
                   </CardContent>
                 </Card>
+
+                {!isNew && job && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <ClipboardList className="h-4 w-4" />
+                        Follow-Up History
+                        <Badge variant="secondary" className="ml-auto">
+                          {followUpLogs.length}/7
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {followUpLogs.length > 0 && (
+                        <div className="space-y-2">
+                          {followUpLogs.map((log) => (
+                            <div key={log.id} className="flex items-start gap-3 p-3 rounded-md border" data-testid={`follow-up-log-${log.followUpNumber}`}>
+                              <div className="flex items-center justify-center h-7 w-7 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">
+                                {log.followUpNumber}
+                              </div>
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm text-muted-foreground">
+                                    {new Date(log.datePerformed).toLocaleDateString()}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">by {log.createdBy}</span>
+                                  <div className="flex gap-1 ml-auto flex-wrap">
+                                    {log.methodCall && <Badge variant="outline"><Phone className="h-3 w-3 mr-1" />Call</Badge>}
+                                    {log.methodText && <Badge variant="outline"><MessageSquare className="h-3 w-3 mr-1" />Text</Badge>}
+                                    {log.methodEmail && <Badge variant="outline"><Mail className="h-3 w-3 mr-1" />Email</Badge>}
+                                  </div>
+                                </div>
+                                {log.notes && <p className="text-sm">{log.notes}</p>}
+                                {log.nextFollowUpDate && (
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <CalendarDays className="h-3 w-3" />
+                                    Next: {new Date(log.nextFollowUpDate).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {followUpLogs.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">No follow-up attempts logged yet</p>
+                      )}
+
+                      {followUpLogs.length < 7 && (
+                        <div className="border rounded-md p-4 space-y-3" data-testid="follow-up-form">
+                          <h4 className="text-sm font-medium">Log Follow-Up #{followUpLogs.length + 1}</h4>
+
+                          <div className="flex items-center gap-4 flex-wrap">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={followUpForm.methodCall}
+                                onChange={(e) => setFollowUpForm(f => ({ ...f, methodCall: e.target.checked }))}
+                                className="rounded"
+                                data-testid="checkbox-method-call"
+                              />
+                              <Phone className="h-4 w-4" />
+                              <span className="text-sm">Call</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={followUpForm.methodText}
+                                onChange={(e) => setFollowUpForm(f => ({ ...f, methodText: e.target.checked }))}
+                                className="rounded"
+                                data-testid="checkbox-method-text"
+                              />
+                              <MessageSquare className="h-4 w-4" />
+                              <span className="text-sm">Text</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={followUpForm.methodEmail}
+                                onChange={(e) => setFollowUpForm(f => ({ ...f, methodEmail: e.target.checked }))}
+                                className="rounded"
+                                data-testid="checkbox-method-email"
+                              />
+                              <Mail className="h-4 w-4" />
+                              <span className="text-sm">Email</span>
+                            </label>
+                          </div>
+
+                          <div className="grid gap-2">
+                            <Label htmlFor="followUpNotes">Notes</Label>
+                            <Textarea
+                              id="followUpNotes"
+                              value={followUpForm.notes}
+                              onChange={(e) => setFollowUpForm(f => ({ ...f, notes: e.target.value }))}
+                              placeholder="What happened during this follow-up?"
+                              rows={2}
+                              data-testid="textarea-follow-up-notes"
+                            />
+                          </div>
+
+                          {followUpLogs.length + 1 < 7 && (
+                            <div className="grid gap-2">
+                              <Label htmlFor="nextFollowUpDate" className="flex items-center gap-1">
+                                Next Follow-Up Date <span className="text-destructive">*</span>
+                              </Label>
+                              <Input
+                                id="nextFollowUpDate"
+                                type="date"
+                                value={followUpForm.nextFollowUpDate}
+                                onChange={(e) => setFollowUpForm(f => ({ ...f, nextFollowUpDate: e.target.value }))}
+                                min={new Date().toISOString().split("T")[0]}
+                                data-testid="input-next-follow-up-date"
+                              />
+                            </div>
+                          )}
+
+                          {followUpLogs.length + 1 >= 7 && (
+                            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                              <p className="text-sm text-destructive font-medium">
+                                This is attempt #7. If the customer hasn't booked, this job will automatically move to Lost Opportunity.
+                              </p>
+                            </div>
+                          )}
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={followUpForm.createTask}
+                              onChange={(e) => setFollowUpForm(f => ({ ...f, createTask: e.target.checked }))}
+                              className="rounded"
+                              data-testid="checkbox-create-task"
+                            />
+                            <span className="text-sm">Create task reminder</span>
+                          </label>
+
+                          <Button
+                            type="button"
+                            onClick={handleSubmitFollowUp}
+                            disabled={submittingFollowUp}
+                            data-testid="button-log-follow-up"
+                          >
+                            {submittingFollowUp ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Logging...
+                              </>
+                            ) : (
+                              `Log Follow-Up #${followUpLogs.length + 1}`
+                            )}
+                          </Button>
+                        </div>
+                      )}
+
+                      {followUpLogs.length >= 7 && (
+                        <div className="p-3 bg-muted rounded-md text-center">
+                          <p className="text-sm text-muted-foreground">All 7 follow-up attempts completed</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
               {/* Vehicles & Parts Tab */}

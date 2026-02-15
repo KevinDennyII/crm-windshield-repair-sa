@@ -57,7 +57,9 @@ import { type Job, type InsertJob, type PaymentHistoryEntry } from "@shared/sche
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658", "#ff7c7c"];
 
 const stageLabels: Record<string, string> = {
+  new_lead: "New Lead",
   quote: "Quote",
+  warm_lead: "Warm Lead",
   scheduled: "Scheduled",
   paid_completed: "Paid/Completed",
   lost_opportunity: "Lost",

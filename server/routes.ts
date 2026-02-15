@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs, scheduledTasks, followUpModes, aiReceptionistSettings } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs, scheduledTasks, followUpModes, aiReceptionistSettings, manualFollowUpLogs } from "@shared/schema";
 import { createFollowUpTasksForJob, archiveFollowUpsForJob, startFollowUpWorker, FOLLOW_UP_SEQUENCES } from "./follow-up-system";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
@@ -3131,6 +3131,90 @@ Please let us know of any changes.`;
     } catch (error: any) {
       console.error("Error recording tech payment:", error);
       res.status(500).json({ message: error.message || "Failed to record payment" });
+    }
+  });
+
+  app.get("/api/jobs/:jobId/manual-follow-ups", async (req, res) => {
+    try {
+      const jobId = req.params.jobId as string;
+      const logs = await db.select().from(manualFollowUpLogs)
+        .where(eq(manualFollowUpLogs.jobId, jobId))
+        .orderBy(manualFollowUpLogs.followUpNumber);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/jobs/:jobId/manual-follow-ups", isAuthenticated, async (req, res) => {
+    try {
+      const jobId = req.params.jobId as string;
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+
+      const existingLogs = await db.select().from(manualFollowUpLogs)
+        .where(eq(manualFollowUpLogs.jobId, jobId))
+        .orderBy(manualFollowUpLogs.followUpNumber);
+
+      const nextNumber = existingLogs.length + 1;
+      const isSeventhAttempt = nextNumber >= 7;
+
+      const schema = z.object({
+        methodCall: z.boolean().default(false),
+        methodText: z.boolean().default(false),
+        methodEmail: z.boolean().default(false),
+        notes: z.string().optional(),
+        nextFollowUpDate: z.string().nullable().optional(),
+        createTask: z.boolean().default(false),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+
+      const data = parsed.data;
+
+      if (!isSeventhAttempt && !data.nextFollowUpDate) {
+        return res.status(400).json({ message: "Next follow-up date is required until the 7th attempt" });
+      }
+
+      const currentUser = await getCurrentUser(req);
+
+      const [newLog] = await db.insert(manualFollowUpLogs).values({
+        jobId,
+        followUpNumber: nextNumber,
+        datePerformed: new Date(),
+        methodCall: data.methodCall,
+        methodText: data.methodText,
+        methodEmail: data.methodEmail,
+        notes: data.notes || null,
+        nextFollowUpDate: data.nextFollowUpDate ? new Date(data.nextFollowUpDate) : null,
+        createTask: data.createTask,
+        createdBy: currentUser?.username || "system",
+      }).returning();
+
+      if (isSeventhAttempt && job.pipelineStage !== "scheduled" && job.pipelineStage !== "paid_completed") {
+        await storage.updateJobStage(jobId, "lost_opportunity");
+
+        if (currentUser) {
+          await logActivity(
+            currentUser.id,
+            currentUser.username,
+            currentUser.role,
+            "stage_changed",
+            "jobs",
+            jobId,
+            job.jobNumber,
+            { fromStage: job.pipelineStage, toStage: "lost_opportunity", reason: "7 follow-up attempts reached without booking" }
+          );
+        }
+      }
+
+      res.status(201).json(newLog);
+    } catch (error: any) {
+      console.error("Error creating manual follow-up:", error);
+      res.status(500).json({ message: error.message });
     }
   });
 }

@@ -38,6 +38,13 @@ const stageConfig: Record<
     bgColor: "bg-amber-50 dark:bg-amber-950/30",
     tabColor: "bg-amber-500",
   },
+  warm_lead: {
+    label: "Warm Lead",
+    shortLabel: "Warm",
+    color: "text-orange-600 dark:text-orange-400",
+    bgColor: "bg-orange-50 dark:bg-orange-950/30",
+    tabColor: "bg-orange-500",
+  },
   scheduled: {
     label: "Scheduled",
     shortLabel: "Sched",

@@ -14,7 +14,9 @@ import { DollarSign, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
 import { type Job } from "@shared/schema";
 
 const stageLabels: Record<string, string> = {
+  new_lead: "New Lead",
   quote: "Quote",
+  warm_lead: "Warm Lead",
   scheduled: "Scheduled",
   paid_completed: "Paid/Completed",
   lost_opportunity: "Lost Opportunity",
