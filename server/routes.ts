@@ -5,6 +5,7 @@ import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerRe
 import { createFollowUpTasksForJob, archiveFollowUpsForJob, startFollowUpWorker, FOLLOW_UP_SEQUENCES } from "./follow-up-system";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
+import { sendTestSummaryNow } from "./notification-email-worker";
 import { sendSms, getSmsConversations, getMessagesWithNumber, isTwilioConfigured, getTwilioPhoneNumber, isVoiceConfigured, generateVoiceToken, generateIncomingCallTwiml, generateOutboundCallTwiml, generateForwardTwiml, validateTwilioSignature, transferActiveCall, generateTransferFallbackTwiml, holdCall, unholdCall, getClient } from "./twilio";
 import type { CallForwardingConfig } from "./twilio";
 import { isBluehostConfigured, getBluehostEmail, getBluehostEmails, sendBluehostEmail, replyToBluehostEmail } from "./bluehost";
@@ -2709,6 +2710,18 @@ Only return the JSON object, no other text.`
       res.json(logs);
     } catch (error: any) {
       res.status(500).json({ message: error.message || "Failed to get follow-up logs" });
+    }
+  });
+
+  app.post("/api/send-test-notification", isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user?.role !== "admin") {
+        return res.status(403).json({ message: "Admin only" });
+      }
+      await sendTestSummaryNow();
+      res.json({ message: "Test notification email sent successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to send test email" });
     }
   });
 

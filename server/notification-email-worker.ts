@@ -344,6 +344,37 @@ async function sendNewSummary(): Promise<void> {
   }
 }
 
+export async function sendTestSummaryNow(): Promise<void> {
+  console.log("[NotificationEmail] Sending test summary (bypassing business hours check)...");
+  try {
+    const data = await collectNotifications();
+    const gmail = await getUncachableGmailClient();
+    const html = buildEmailHtml(data, false);
+    const emailLines = [
+      `To: ${NOTIFICATION_EMAIL}`,
+      `Subject: [TEST] AutoGlass Pro CRM Activity Summary`,
+      "Content-Type: text/html; charset=utf-8",
+      "",
+      html,
+    ];
+    const raw = Buffer.from(emailLines.join("\r\n"))
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+
+    const response = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw },
+    });
+
+    console.log(`[NotificationEmail] Test summary sent successfully. Thread: ${response.data.threadId}`);
+  } catch (err: any) {
+    console.error("[NotificationEmail] Error sending test summary:", err.message);
+    throw err;
+  }
+}
+
 export function startNotificationEmailWorker() {
   console.log("[NotificationEmail] Worker started - summaries every 20min, follow-ups every 5min (8 AM - 8 PM CT)");
 
