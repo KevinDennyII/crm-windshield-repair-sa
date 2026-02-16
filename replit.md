@@ -62,6 +62,14 @@ The AI Receptionist page (`/ai-receptionist`) provides a unified call log with e
 - **Client Data**: AI-extracted customer info (name, phone, vehicle, service, address, insurance, urgency).
 - **Phone Call**: Technical details (caller/called numbers, forwarded-to number, Call SID, ElevenLabs conversation ID, Recording SID).
 
+### Notification Email Worker
+A background worker (`server/notification-email-worker.ts`) sends email summaries of CRM activity to `wrsanotifications@gmail.com` via the Gmail API:
+- **Every 20 minutes** (8 AM - 8 PM CT only): Sends a summary of missed calls, new leads, pending follow-ups, sent SMS, and sent emails.
+- **Every 5 minutes after**: Sends follow-up reminders in the same email thread until the recipient replies.
+- **Reply detection**: Checks the Gmail thread for non-SENT messages (i.e., replies from the recipient). Once detected, follow-ups stop until the next 20-minute cycle.
+- **Business hours**: All emails are restricted to 8 AM - 8 PM Central Time. Outside this window, no emails are sent and follow-up timers are paused.
+- Uses `Intl.DateTimeFormat` for timezone-safe hour detection. Uses `sendReply` helper from `gmail.ts` for threaded follow-ups.
+
 ### Data Model & Profitability Calculation
 The data model supports multi-vehicle and multi-part jobs with hierarchical structures. A detailed profitability calculation accounts for part costs, accessories, urethane, calibration, subcontractor urethane, sales tax, and processing fees, with specific rules for dealer and subcontractor jobs.
 

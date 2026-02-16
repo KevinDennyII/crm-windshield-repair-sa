@@ -12,6 +12,7 @@ import { registerVoiceReceptionistRoutes, setupElevenLabsWebSocket } from "./voi
 // ElevenLabs poller disabled - using WebSocket bridge capture instead
 // import { startElevenLabsPoller } from "./elevenlabs-poller";
 import { storage } from "./storage";
+import { startNotificationEmailWorker } from "./notification-email-worker";
 
 const app = express();
 
@@ -93,6 +94,9 @@ app.use((req, res, next) => {
   
   // Start background follow-up worker
   startFollowUpWorker();
+  
+  // Start notification email worker (sends summaries every 20min, 8AM-8PM CT)
+  startNotificationEmailWorker();
   
   // ElevenLabs poller disabled - calls are captured via WebSocket bridge instead
   
