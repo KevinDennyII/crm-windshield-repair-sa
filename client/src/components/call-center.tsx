@@ -71,6 +71,11 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
   const hasInitiatedDialRef = useRef<string | null>(null);
   const isOnHoldRef = useRef(false);
   const pendingResumeRef = useRef(false);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const isReconnectingRef = useRef(false);
+  const scheduleReconnectRef = useRef<() => void>(() => {});
+  const MAX_RECONNECT_ATTEMPTS = 100;
 
   const { data: voiceStatus } = useQuery<{
     configured: boolean;
@@ -125,6 +130,159 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
     },
   });
 
+  const fetchToken = useCallback(async () => {
+    const res = await apiRequest("POST", "/api/voice/token");
+    return res.json();
+  }, []);
+
+  const resetCallState = useCallback(() => {
+    setCallStatus("ready");
+    setActiveCall(null);
+    setIncomingCall(null);
+    setIsOnHold(false);
+    isOnHoldRef.current = false;
+    setHoldCallSid(null);
+    setPendingResume(false);
+    pendingResumeRef.current = false;
+    queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
+  }, []);
+
+  const handleIncomingCall = useCallback((call: any) => {
+    const contactName = call.customParameters?.get("contactName") || "Unknown Caller";
+
+    if (isOnHoldRef.current && pendingResumeRef.current) {
+      console.log("Auto-accepting call resumed from hold");
+      setActiveCall(call);
+      call.accept();
+      setCallStatus("in-call");
+      setIsOnHold(false);
+      isOnHoldRef.current = false;
+      setHoldCallSid(null);
+      setPendingResume(false);
+      pendingResumeRef.current = false;
+
+      call.on("disconnect", () => {
+        if (isOnHoldRef.current) { setActiveCall(null); return; }
+        resetCallState();
+      });
+
+      call.on("cancel", () => {
+        resetCallState();
+      });
+
+      return;
+    }
+
+    setIncomingCall({
+      callSid: call.parameters.CallSid,
+      from: call.parameters.From,
+      contactName: contactName,
+    });
+    setActiveCall(call);
+    setCallStatus("ringing");
+
+    call.on("accept", () => {
+      if (isOnHoldRef.current) {
+        setIsOnHold(false);
+        isOnHoldRef.current = false;
+        setHoldCallSid(null);
+        setPendingResume(false);
+        pendingResumeRef.current = false;
+      }
+      setCallStatus("in-call");
+      setIncomingCall(null);
+    });
+
+    call.on("disconnect", () => {
+      if (isOnHoldRef.current) { setActiveCall(null); return; }
+      resetCallState();
+    });
+
+    call.on("cancel", () => {
+      resetCallState();
+    });
+  }, [resetCallState]);
+
+  const setupDeviceListeners = useCallback((dev: any) => {
+    dev.on("registered", () => {
+      console.log("Twilio Device registered");
+      setCallStatus("ready");
+      setIsConnecting(false);
+      reconnectAttemptsRef.current = 0;
+      isReconnectingRef.current = false;
+    });
+
+    dev.on("error", (error: any) => {
+      console.error("Twilio Device error:", error);
+      setCallStatus("error");
+      scheduleReconnectRef.current();
+    });
+
+    dev.on("unregistered", () => {
+      console.log("Twilio Device unregistered - will auto-reconnect");
+      setCallStatus("error");
+      scheduleReconnectRef.current();
+    });
+
+    dev.on("tokenWillExpire", async () => {
+      console.log("Twilio token expiring - refreshing...");
+      try {
+        const { token: newToken } = await fetchToken();
+        dev.updateToken(newToken);
+        console.log("Twilio token refreshed successfully");
+      } catch (err) {
+        console.error("Failed to refresh Twilio token:", err);
+        scheduleReconnectRef.current();
+      }
+    });
+
+    dev.on("incoming", (call: any) => {
+      handleIncomingCall(call);
+    });
+  }, [fetchToken, handleIncomingCall]);
+
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectTimerRef.current || isReconnectingRef.current) return;
+    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      console.log("Twilio auto-reconnect: max attempts reached, stopping.");
+      return;
+    }
+
+    const delay = Math.min(5000 * Math.pow(1.5, reconnectAttemptsRef.current), 60000);
+    reconnectAttemptsRef.current += 1;
+    console.log(`Twilio auto-reconnect: attempt ${reconnectAttemptsRef.current} in ${Math.round(delay / 1000)}s`);
+
+    reconnectTimerRef.current = setTimeout(async () => {
+      reconnectTimerRef.current = null;
+      isReconnectingRef.current = true;
+      try {
+        if (deviceRef.current) {
+          try { deviceRef.current.destroy(); } catch {}
+          deviceRef.current = null;
+          setDevice(null);
+        }
+
+        const { token } = await fetchToken();
+        const newDevice = new Device(token, { edge: "ashburn", logLevel: 1 });
+
+        setupDeviceListeners(newDevice);
+
+        await newDevice.register();
+        deviceRef.current = newDevice;
+        setDevice(newDevice);
+      } catch (err) {
+        console.error("Twilio reconnect failed:", err);
+        isReconnectingRef.current = false;
+        setCallStatus("error");
+        scheduleReconnectRef.current();
+      }
+    }, delay);
+  }, [fetchToken, setupDeviceListeners]);
+
+  useEffect(() => {
+    scheduleReconnectRef.current = scheduleReconnect;
+  }, [scheduleReconnect]);
+
   const initializeDevice = useCallback(async () => {
     if (!voiceStatus?.configured) {
       return;
@@ -132,130 +290,14 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
 
     try {
       setIsConnecting(true);
-      const { token, identity } = await tokenMutation.mutateAsync();
+      const { token } = await fetchToken();
 
       const newDevice = new Device(token, {
         edge: "ashburn",
         logLevel: 1,
       });
 
-      newDevice.on("registered", () => {
-        console.log("Twilio Device registered");
-        setCallStatus("ready");
-        setIsConnecting(false);
-      });
-
-      newDevice.on("error", (error: any) => {
-        console.error("Twilio Device error:", error);
-        toast({
-          title: "Call Error",
-          description: error.message || "An error occurred with the phone system",
-          variant: "destructive",
-        });
-        setCallStatus("error");
-      });
-
-      newDevice.on("incoming", (call: any) => {
-        console.log("Incoming call:", call);
-        console.log("Call parameters:", call.parameters);
-        console.log("Custom parameters:", call.customParameters);
-        
-        const contactName = call.customParameters?.get("contactName") || "Unknown Caller";
-
-        if (isOnHoldRef.current && pendingResumeRef.current) {
-          console.log("Auto-accepting call resumed from hold");
-          setActiveCall(call);
-          call.accept();
-          setCallStatus("in-call");
-          setIsOnHold(false);
-          isOnHoldRef.current = false;
-          setHoldCallSid(null);
-          setPendingResume(false);
-          pendingResumeRef.current = false;
-
-          call.on("disconnect", () => {
-            if (isOnHoldRef.current) {
-              setActiveCall(null);
-              return;
-            }
-            setCallStatus("ready");
-            setActiveCall(null);
-            setIncomingCall(null);
-            setIsOnHold(false);
-            isOnHoldRef.current = false;
-            setHoldCallSid(null);
-          setPendingResume(false);
-          pendingResumeRef.current = false;
-            queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
-          });
-
-          call.on("cancel", () => {
-            setCallStatus("ready");
-            setActiveCall(null);
-            setIncomingCall(null);
-            setIsOnHold(false);
-            isOnHoldRef.current = false;
-            setHoldCallSid(null);
-          setPendingResume(false);
-          pendingResumeRef.current = false;
-            queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
-          });
-
-          return;
-        }
-        
-        setIncomingCall({
-          callSid: call.parameters.CallSid,
-          from: call.parameters.From,
-          contactName: contactName,
-        });
-        setActiveCall(call);
-        setCallStatus("ringing");
-
-        call.on("accept", () => {
-          if (isOnHoldRef.current) {
-            setIsOnHold(false);
-            isOnHoldRef.current = false;
-            setHoldCallSid(null);
-          setPendingResume(false);
-          pendingResumeRef.current = false;
-          }
-          setCallStatus("in-call");
-          setIncomingCall(null);
-        });
-
-        call.on("disconnect", () => {
-          if (isOnHoldRef.current) {
-            setActiveCall(null);
-            return;
-          }
-          setCallStatus("ready");
-          setActiveCall(null);
-          setIncomingCall(null);
-          setIsOnHold(false);
-          isOnHoldRef.current = false;
-          setHoldCallSid(null);
-          setPendingResume(false);
-          pendingResumeRef.current = false;
-          queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
-        });
-
-        call.on("cancel", () => {
-          setCallStatus("ready");
-          setActiveCall(null);
-          setIncomingCall(null);
-          setIsOnHold(false);
-          isOnHoldRef.current = false;
-          setHoldCallSid(null);
-          setPendingResume(false);
-          pendingResumeRef.current = false;
-          toast({
-            title: "Missed Call",
-            description: `Call from ${call.parameters.From} was missed`,
-          });
-          queryClient.invalidateQueries({ queryKey: ["/api/voice/calls"] });
-        });
-      });
+      setupDeviceListeners(newDevice);
 
       await newDevice.register();
       deviceRef.current = newDevice;
@@ -269,7 +311,7 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
       });
       setIsConnecting(false);
     }
-  }, [voiceStatus?.configured, toast]);
+  }, [voiceStatus?.configured, toast, fetchToken, setupDeviceListeners]);
 
   const answerCall = useCallback(() => {
     if (activeCall) {
@@ -539,6 +581,10 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
 
   useEffect(() => {
     return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (deviceRef.current) {
         deviceRef.current.destroy();
       }
@@ -663,7 +709,7 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
                 {callStatus === "calling" && "Dialing..."}
                 {callStatus === "in-call" && !isOnHold && "On Call"}
                 {callStatus === "in-call" && isOnHold && "On Hold"}
-                {callStatus === "error" && "Error"}
+                {callStatus === "error" && "Reconnecting..."}
               </Badge>
               {voiceStatus.phoneNumber && (
                 <span className="text-xs text-muted-foreground">

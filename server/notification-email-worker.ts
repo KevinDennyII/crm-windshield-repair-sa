@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { jobs, phoneCalls, activityLogs, scheduledTasks } from "@shared/schema";
 import { eq, desc, gte, and } from "drizzle-orm";
-import { getUncachableGmailClient, sendReply } from "./gmail";
+import { getUncachableGmailClient, sendReply, invalidateGmailTokenCache } from "./gmail";
 
 const NOTIFICATION_EMAIL = "wrsanotifications@gmail.com";
 const SUMMARY_INTERVAL_MS = 20 * 60 * 1000;
@@ -15,6 +15,8 @@ let lastSummarySentAt: Date | null = null;
 let awaitingReply = false;
 let followUpTimer: ReturnType<typeof setInterval> | null = null;
 let lastNotificationSnapshot: string = "";
+let consecutiveAuthFailures = 0;
+const MAX_AUTH_FAILURES = 3;
 
 function getCTHour(): number {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -214,6 +216,7 @@ async function checkForReply(): Promise<boolean> {
       metadataHeaders: ["From"],
     });
 
+    consecutiveAuthFailures = 0;
     const messages = thread.data.messages || [];
     if (messages.length <= 1) return false;
 
@@ -226,6 +229,15 @@ async function checkForReply(): Promise<boolean> {
     }
   } catch (err: any) {
     console.error("[NotificationEmail] Error checking reply:", err.message);
+    if (err.message?.includes("access token") || err.message?.includes("401") || err.message?.includes("not connected")) {
+      invalidateGmailTokenCache();
+      consecutiveAuthFailures++;
+      if (consecutiveAuthFailures >= MAX_AUTH_FAILURES) {
+        console.error("[NotificationEmail] Too many auth failures, pausing follow-ups until next summary cycle.");
+        clearFollowUpTimer();
+        awaitingReply = false;
+      }
+    }
   }
   return false;
 }
@@ -269,9 +281,19 @@ async function sendFollowUpReminder(): Promise<void> {
       "Re: AutoGlass Pro CRM Activity Summary",
       html
     );
+    consecutiveAuthFailures = 0;
     console.log("[NotificationEmail] Follow-up reminder sent.");
   } catch (err: any) {
     console.error("[NotificationEmail] Error sending follow-up:", err.message);
+    if (err.message?.includes("access token") || err.message?.includes("401") || err.message?.includes("not connected")) {
+      invalidateGmailTokenCache();
+      consecutiveAuthFailures++;
+      if (consecutiveAuthFailures >= MAX_AUTH_FAILURES) {
+        console.error("[NotificationEmail] Too many auth failures, pausing follow-ups until next summary cycle.");
+        clearFollowUpTimer();
+        awaitingReply = false;
+      }
+    }
   }
 }
 
@@ -333,6 +355,7 @@ async function sendNewSummary(): Promise<void> {
     lastSummarySentAt = new Date();
     lastNotificationSnapshot = snapshot;
     awaitingReply = true;
+    consecutiveAuthFailures = 0;
 
     console.log(
       `[NotificationEmail] Summary sent (${data.totalCount} items). Thread: ${lastSummaryThreadId}`
@@ -341,6 +364,9 @@ async function sendNewSummary(): Promise<void> {
     startFollowUpCycle();
   } catch (err: any) {
     console.error("[NotificationEmail] Error sending summary:", err.message);
+    if (err.message?.includes("access token") || err.message?.includes("401") || err.message?.includes("not connected")) {
+      invalidateGmailTokenCache();
+    }
   }
 }
 

@@ -2,13 +2,25 @@
 import { google } from 'googleapis';
 
 let connectionSettings: any;
+let tokenFetchedAt: number = 0;
+const TOKEN_CACHE_TTL_MS = 45 * 60 * 1000;
 
 async function getAccessToken() {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
+  const now = Date.now();
+  const expiresAt = connectionSettings?.settings?.expires_at
+    ? new Date(connectionSettings.settings.expires_at).getTime()
+    : 0;
+  const cacheValid = connectionSettings
+    && expiresAt > now + 60000
+    && (now - tokenFetchedAt) < TOKEN_CACHE_TTL_MS;
+
+  if (cacheValid) {
     return connectionSettings.settings.access_token;
   }
+
+  connectionSettings = null;
   
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY 
     ? 'repl ' + process.env.REPL_IDENTITY 
     : process.env.WEB_REPL_RENEWAL 
@@ -19,7 +31,7 @@ async function getAccessToken() {
     throw new Error('X_REPLIT_TOKEN not found for repl/depl');
   }
 
-  connectionSettings = await fetch(
+  const response = await fetch(
     'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-mail',
     {
       headers: {
@@ -27,14 +39,28 @@ async function getAccessToken() {
         'X_REPLIT_TOKEN': xReplitToken
       }
     }
-  ).then(res => res.json()).then(data => data.items?.[0]);
+  );
 
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+  if (!response.ok) {
+    throw new Error(`Gmail connector API returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  connectionSettings = data.items?.[0];
+  tokenFetchedAt = now;
+
+  const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
 
   if (!connectionSettings || !accessToken) {
+    connectionSettings = null;
     throw new Error('Gmail not connected');
   }
   return accessToken;
+}
+
+export function invalidateGmailTokenCache() {
+  connectionSettings = null;
+  tokenFetchedAt = 0;
 }
 
 // WARNING: Never cache this client.
