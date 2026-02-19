@@ -756,3 +756,22 @@ export const insertAiReceptionistCallSchema = createInsertSchema(aiReceptionistC
 });
 export type AiReceptionistCall = typeof aiReceptionistCalls.$inferSelect;
 export type InsertAiReceptionistCall = z.infer<typeof insertAiReceptionistCallSchema>;
+
+export const partsPriceHistory = pgTable("parts_price_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nagsPartNumber: varchar("nags_part_number").notNull(),
+  partDescription: text("part_description"),
+  vehicleInfo: varchar("vehicle_info"),
+  supplier: varchar("supplier").notNull(),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  notes: text("notes"),
+  jobId: varchar("job_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPartsPriceHistorySchema = createInsertSchema(partsPriceHistory).omit({
+  id: true,
+  createdAt: true,
+});
+export type PartsPriceHistory = typeof partsPriceHistory.$inferSelect;
+export type InsertPartsPriceHistory = z.infer<typeof insertPartsPriceHistorySchema>;

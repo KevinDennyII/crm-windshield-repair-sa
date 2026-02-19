@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs, scheduledTasks, followUpModes, aiReceptionistSettings, manualFollowUpLogs, aiReceptionistCalls } from "@shared/schema";
+import { insertJobSchema, pipelineStages, paymentHistorySchema, insertCustomerReminderSchema, insertContactSchema, insertActivityLogSchema, userRoles, phoneCalls, pickupChecklist, techSuppliesChecklist, callForwardingSettings, activityLogs, jobs, scheduledTasks, followUpModes, aiReceptionistSettings, manualFollowUpLogs, aiReceptionistCalls, partsPriceHistory, insertPartsPriceHistorySchema } from "@shared/schema";
 import { createFollowUpTasksForJob, archiveFollowUpsForJob, startFollowUpWorker, FOLLOW_UP_SEQUENCES } from "./follow-up-system";
 import { z } from "zod";
 import { sendEmail, sendEmailWithAttachment, sendReply, getInboxThreads } from "./gmail";
@@ -2603,6 +2603,65 @@ Only return the JSON object, no other text.`
     } catch (error: any) {
       console.error("VIN decode error:", error);
       res.status(500).json({ message: error.message || "Failed to decode VIN" });
+    }
+  });
+
+  // Parts Price History endpoints
+  app.get("/api/parts-prices/:nagsPartNumber", async (req, res) => {
+    try {
+      const { nagsPartNumber } = req.params;
+      const prices = await db
+        .select()
+        .from(partsPriceHistory)
+        .where(eq(partsPriceHistory.nagsPartNumber, nagsPartNumber.toUpperCase()))
+        .orderBy(desc(partsPriceHistory.createdAt));
+      res.json(prices);
+    } catch (error: any) {
+      console.error("Parts price fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch parts prices" });
+    }
+  });
+
+  app.post("/api/parts-prices", async (req, res) => {
+    try {
+      const validated = insertPartsPriceHistorySchema.parse({
+        ...req.body,
+        nagsPartNumber: req.body.nagsPartNumber?.toUpperCase(),
+      });
+      const [inserted] = await db.insert(partsPriceHistory).values(validated).returning();
+      res.json(inserted);
+    } catch (error: any) {
+      console.error("Parts price save error:", error);
+      res.status(500).json({ message: error.message || "Failed to save parts price" });
+    }
+  });
+
+  app.get("/api/parts-prices/latest/:nagsPartNumber", async (req, res) => {
+    try {
+      const { nagsPartNumber } = req.params;
+      const suppliers = ["mygrant", "pgw", "igc", "pilkington"];
+      const latestPrices: Record<string, any> = {};
+      
+      for (const supplier of suppliers) {
+        const [latest] = await db
+          .select()
+          .from(partsPriceHistory)
+          .where(
+            and(
+              eq(partsPriceHistory.nagsPartNumber, nagsPartNumber.toUpperCase()),
+              eq(partsPriceHistory.supplier, supplier)
+            )
+          )
+          .orderBy(desc(partsPriceHistory.createdAt))
+          .limit(1);
+        if (latest) {
+          latestPrices[supplier] = latest;
+        }
+      }
+      res.json(latestPrices);
+    } catch (error: any) {
+      console.error("Latest parts price fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch latest parts prices" });
     }
   });
 

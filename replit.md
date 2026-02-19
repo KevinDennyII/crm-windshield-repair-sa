@@ -27,6 +27,14 @@ A suite of AI-powered tools, accessible to Admin and CSR roles via OpenAI (throu
 - **Sales & Marketing**: Upsell suggestions, review response generator.
 - **Quality & Training**: Customer satisfaction prediction, CSR performance coaching.
 
+### VIN Decoder & Parts Price Comparison
+The VIN Decoder uses the NHTSA API (`server/vin-decoder.ts`) to decode 17-character VINs into Year/Make/Model/Body Style. The VIN input is prominently displayed at the top of each vehicle card with a labeled "Decode VIN" button. The Parts Price Comparison tool (`client/src/components/parts-price-comparison.tsx`) appears under each part that has a NAGS Glass Part Number. It provides:
+- **Quick-launch buttons** for supplier websites (Mygrant, PGW, IGC, Pilkington)
+- **Side-by-side price entry** fields for each supplier with dollar formatting
+- **Price history tracking** stored in `parts_price_history` table, showing last known prices and full history
+- **"Use this price"** button to auto-fill the part's cost and distributor from saved prices
+- Distributor select options: Mygrant, PGW, IGC, Pilkington
+
 ### Warranty Jobs
 Jobs can be flagged as warranty work via a toggle on the new job form. When enabled, a search popup lets users find the original job and auto-fill customer, vehicle, and scheduling info. All pricing is zeroed out for warranty jobs. The `isWarranty` flag and `warrantyOriginalJobId` link the warranty to the original job. "warranty" is a valid service type for parts.
 

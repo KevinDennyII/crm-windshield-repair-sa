@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { triggerOutboundCall } from "@/App";
 import { useQuery } from "@tanstack/react-query";
 import { type Contact } from "@shared/schema";
+import { PartsPriceComparison } from "@/components/parts-price-comparison";
 import {
   Dialog,
   DialogContent,
@@ -1987,57 +1988,67 @@ export function JobDetailModal({
 
                           <CollapsibleContent>
                             <CardContent className="space-y-6">
+                              {/* VIN Decoder Section */}
+                              <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <Search className="h-4 w-4 text-muted-foreground" />
+                                  <Label className="text-sm font-medium">VIN Decoder</Label>
+                                  {vehicle.vin && vehicle.vin.length === 17 && (
+                                    <Badge variant="secondary">{vehicle.vin.length}/17</Badge>
+                                  )}
+                                  {vehicle.vin && vehicle.vin.length > 0 && vehicle.vin.length !== 17 && (
+                                    <Badge variant="outline" className="text-muted-foreground">{vehicle.vin.length}/17</Badge>
+                                  )}
+                                </div>
+                                <div className="flex gap-2">
+                                  <Input
+                                    value={vehicle.vin}
+                                    onChange={(e) =>
+                                      handleVehicleChange(
+                                        vehicle.id,
+                                        "vin",
+                                        e.target.value.toUpperCase()
+                                      )
+                                    }
+                                    placeholder="Enter 17-character VIN to auto-fill vehicle info"
+                                    className="flex-1 font-mono tracking-wider"
+                                    maxLength={17}
+                                    data-testid={`input-vehicle-vin-${vehicle.id}`}
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="default"
+                                    onClick={() => handleDecodeVin(vehicle.id, vehicle.vin || "")}
+                                    disabled={decodingVin === vehicle.id || !vehicle.vin || vehicle.vin.length !== 17}
+                                    data-testid={`button-decode-vin-${vehicle.id}`}
+                                  >
+                                    {decodingVin === vehicle.id ? (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                      <Search className="h-4 w-4 mr-2" />
+                                    )}
+                                    Decode VIN
+                                  </Button>
+                                </div>
+                              </div>
+
                               {/* Vehicle Details */}
                               <div className="space-y-4">
-                                <div className="grid sm:grid-cols-2 gap-4">
-                                  <div className="grid gap-2">
-                                    <Label>VIN</Label>
-                                    <div className="flex gap-2">
-                                      <Input
-                                        value={vehicle.vin}
-                                        onChange={(e) =>
-                                          handleVehicleChange(
-                                            vehicle.id,
-                                            "vin",
-                                            e.target.value.toUpperCase()
-                                          )
-                                        }
-                                        placeholder="1HGCV1F34NA012345"
-                                        className="flex-1"
-                                        data-testid={`input-vehicle-vin-${vehicle.id}`}
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        title="Decode VIN"
-                                        onClick={() => handleDecodeVin(vehicle.id, vehicle.vin || "")}
-                                        disabled={decodingVin === vehicle.id || !vehicle.vin || vehicle.vin.length !== 17}
-                                        data-testid={`button-decode-vin-${vehicle.id}`}
-                                      >
-                                        {decodingVin === vehicle.id ? (
-                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                          <Search className="h-4 w-4" />
-                                        )}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label>License Plate</Label>
-                                    <Input
-                                      value={vehicle.licensePlate}
-                                      onChange={(e) =>
-                                        handleVehicleChange(
-                                          vehicle.id,
-                                          "licensePlate",
-                                          e.target.value.toUpperCase()
-                                        )
-                                      }
-                                      placeholder="ABC1234"
-                                      data-testid={`input-vehicle-plate-${vehicle.id}`}
-                                    />
-                                  </div>
+                                <div className="grid gap-2">
+                                  <Label>License Plate</Label>
+                                  <Input
+                                    value={vehicle.licensePlate}
+                                    onChange={(e) =>
+                                      handleVehicleChange(
+                                        vehicle.id,
+                                        "licensePlate",
+                                        e.target.value.toUpperCase()
+                                      )
+                                    }
+                                    placeholder="ABC1234"
+                                    className="max-w-xs"
+                                    data-testid={`input-vehicle-plate-${vehicle.id}`}
+                                  />
                                 </div>
 
                                 <div className="grid sm:grid-cols-3 gap-4">
@@ -2410,6 +2421,8 @@ export function JobDetailModal({
                                                   <SelectContent>
                                                     <SelectItem value="Mygrant">Mygrant</SelectItem>
                                                     <SelectItem value="PGW">PGW</SelectItem>
+                                                    <SelectItem value="IGC">IGC</SelectItem>
+                                                    <SelectItem value="Pilkington">Pilkington</SelectItem>
                                                   </SelectContent>
                                                 </Select>
                                               </div>
@@ -2432,6 +2445,20 @@ export function JobDetailModal({
                                                 data-testid={`input-part-accessories-${part.id}`}
                                               />
                                             </div>
+
+                                            {part.glassPartNumber && (
+                                              <PartsPriceComparison
+                                                nagsPartNumber={part.glassPartNumber}
+                                                partDescription={`${glassTypeLabels[part.glassType as keyof typeof glassTypeLabels] || part.glassType} - ${part.serviceType}`}
+                                                vehicleInfo={`${vehicle.vehicleYear} ${vehicle.vehicleMake} ${vehicle.vehicleModel}`}
+                                                jobId={undefined}
+                                                onSelectPrice={(supplier, price) => {
+                                                  const distributorMap: Record<string, string> = { mygrant: "Mygrant", pgw: "PGW", igc: "IGC", pilkington: "Pilkington" };
+                                                  handlePartChange(vehicle.id, part.id, "partPrice", price);
+                                                  handlePartChange(vehicle.id, part.id, "distributor", distributorMap[supplier] || supplier);
+                                                }}
+                                              />
+                                            )}
 
                                             <div className="grid sm:grid-cols-4 gap-4">
                                               <div className="flex items-center gap-2">
