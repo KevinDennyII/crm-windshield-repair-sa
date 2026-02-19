@@ -188,14 +188,6 @@ export function PartsPriceComparison({
     return allPrices.reduce((min, p) => (p.price < min.price ? p : min));
   }, [prices, latestPrices]);
 
-  if (!nagsPartNumber) {
-    return (
-      <div className="text-sm text-muted-foreground italic p-2" data-testid="text-no-part-number">
-        Enter a NAGS part number to compare prices
-      </div>
-    );
-  }
-
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger asChild>

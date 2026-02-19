@@ -2446,19 +2446,17 @@ export function JobDetailModal({
                                               />
                                             </div>
 
-                                            {part.glassPartNumber && (
-                                              <PartsPriceComparison
-                                                nagsPartNumber={part.glassPartNumber}
-                                                partDescription={`${glassTypeLabels[part.glassType as keyof typeof glassTypeLabels] || part.glassType} - ${part.serviceType}`}
-                                                vehicleInfo={`${vehicle.vehicleYear} ${vehicle.vehicleMake} ${vehicle.vehicleModel}`}
-                                                jobId={undefined}
-                                                onSelectPrice={(supplier, price) => {
-                                                  const distributorMap: Record<string, string> = { mygrant: "Mygrant", pgw: "PGW", igc: "IGC", pilkington: "Pilkington" };
-                                                  handlePartChange(vehicle.id, part.id, "partPrice", price);
-                                                  handlePartChange(vehicle.id, part.id, "distributor", distributorMap[supplier] || supplier);
-                                                }}
-                                              />
-                                            )}
+                                            <PartsPriceComparison
+                                              nagsPartNumber={part.glassPartNumber || ""}
+                                              partDescription={`${glassTypeLabels[part.glassType as keyof typeof glassTypeLabels] || part.glassType} - ${part.serviceType}`}
+                                              vehicleInfo={`${vehicle.vehicleYear} ${vehicle.vehicleMake} ${vehicle.vehicleModel}`}
+                                              jobId={undefined}
+                                              onSelectPrice={(supplier, price) => {
+                                                const distributorMap: Record<string, string> = { mygrant: "Mygrant", pgw: "PGW", igc: "IGC", pilkington: "Pilkington" };
+                                                handlePartChange(vehicle.id, part.id, "partPrice", price);
+                                                handlePartChange(vehicle.id, part.id, "distributor", distributorMap[supplier] || supplier);
+                                              }}
+                                            />
 
                                             <div className="grid sm:grid-cols-4 gap-4">
                                               <div className="flex items-center gap-2">
