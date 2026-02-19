@@ -392,7 +392,7 @@ function createDefaultVehicle(): Vehicle {
     id: crypto.randomUUID(),
     vin: "",
     licensePlate: "",
-    mileage: "",
+    mileage: "", // kept for backward compatibility
     vehicleYear: "",
     vehicleMake: "",
     vehicleModel: "",
@@ -2040,7 +2040,7 @@ export function JobDetailModal({
                                   </div>
                                 </div>
 
-                                <div className="grid sm:grid-cols-4 gap-4">
+                                <div className="grid sm:grid-cols-3 gap-4">
                                   <div className="grid gap-2">
                                     <Label>Year</Label>
                                     <Input
@@ -2048,7 +2048,6 @@ export function JobDetailModal({
                                       onChange={(e) => {
                                         const newYear = e.target.value;
                                         handleVehicleChange(vehicle.id, "vehicleYear", newYear);
-                                        // Recalculate labor for all parts when year changes
                                         if (vehicle.parts.length > 0) {
                                           const updatedParts = vehicle.parts.map(part => {
                                             const newLaborPrice = calculateLaborPrice(
@@ -2092,17 +2091,6 @@ export function JobDetailModal({
                                       }
                                       placeholder="Accord"
                                       data-testid={`input-vehicle-model-${vehicle.id}`}
-                                    />
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label>Mileage</Label>
-                                    <Input
-                                      value={vehicle.mileage}
-                                      onChange={(e) =>
-                                        handleVehicleChange(vehicle.id, "mileage", e.target.value)
-                                      }
-                                      placeholder="45000"
-                                      data-testid={`input-vehicle-mileage-${vehicle.id}`}
                                     />
                                   </div>
                                 </div>
