@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Megaphone,
   Send,
@@ -31,6 +32,13 @@ import {
   Hash,
   Mail,
   Phone,
+  MousePointerClick,
+  Eye,
+  Zap,
+  AlertCircle,
+  Settings,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 
 interface CMOMessage {
@@ -42,6 +50,43 @@ interface LeadSourceStat {
   source: string;
   count: number;
   label: string;
+}
+
+interface CampaignMetrics {
+  id: string;
+  name: string;
+  status: string;
+  clicks: number;
+  impressions: number;
+  cost: number;
+  conversions: number;
+  ctr: number;
+  avgCpc: number;
+  conversionRate: number;
+}
+
+interface KeywordMetrics {
+  keyword: string;
+  matchType: string;
+  campaignName: string;
+  adGroupName: string;
+  clicks: number;
+  impressions: number;
+  cost: number;
+  conversions: number;
+  ctr: number;
+  avgCpc: number;
+  qualityScore: number | null;
+}
+
+interface AccountOverview {
+  totalClicks: number;
+  totalImpressions: number;
+  totalCost: number;
+  totalConversions: number;
+  avgCtr: number;
+  avgCpc: number;
+  costPerConversion: number;
 }
 
 const QUICK_ACTIONS = [
@@ -126,6 +171,7 @@ export default function Marketing() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [adsDateRange, setAdsDateRange] = useState("LAST_30_DAYS");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -140,6 +186,25 @@ export default function Marketing() {
     conversionRate: number;
   }>({
     queryKey: ["/api/marketing/stats"],
+  });
+
+  const { data: adsStatus } = useQuery<{ configured: boolean }>({
+    queryKey: ["/api/marketing/google-ads/status"],
+  });
+
+  const { data: adsOverview, isLoading: loadingAdsOverview } = useQuery<AccountOverview>({
+    queryKey: ["/api/marketing/google-ads/overview", adsDateRange],
+    enabled: !!adsStatus?.configured,
+  });
+
+  const { data: adsCampaigns = [], isLoading: loadingCampaigns } = useQuery<CampaignMetrics[]>({
+    queryKey: ["/api/marketing/google-ads/campaigns", adsDateRange],
+    enabled: !!adsStatus?.configured,
+  });
+
+  const { data: adsKeywords = [], isLoading: loadingKeywords } = useQuery<KeywordMetrics[]>({
+    queryKey: ["/api/marketing/google-ads/keywords", adsDateRange],
+    enabled: !!adsStatus?.configured,
   });
 
   useEffect(() => {
@@ -287,6 +352,10 @@ export default function Marketing() {
             <TabsTrigger value="cmo" data-testid="tab-cmo">
               <Bot className="h-4 w-4 mr-1" />
               AI CMO
+            </TabsTrigger>
+            <TabsTrigger value="google-ads" data-testid="tab-google-ads">
+              <Search className="h-4 w-4 mr-1" />
+              Google Ads
             </TabsTrigger>
             <TabsTrigger value="leads" data-testid="tab-leads">
               <TrendingUp className="h-4 w-4 mr-1" />
@@ -486,6 +555,253 @@ export default function Marketing() {
                 </div>
               </form>
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="google-ads" className="flex-1 overflow-auto mt-0 px-4 pb-4">
+          <div className="pt-3 space-y-4">
+            {!adsStatus?.configured ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/30 mx-auto mb-4">
+                    <Settings className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Connect Google Ads</h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
+                    To see real campaign data, connect your Google Ads account. You'll need your Developer Token, OAuth credentials, and Customer ID.
+                  </p>
+                  <div className="bg-muted/50 rounded-lg p-4 text-left max-w-md mx-auto space-y-2">
+                    <p className="text-sm font-medium mb-2">Required credentials (add as Secrets):</p>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <p data-testid="text-ads-setup-1">GOOGLE_ADS_CLIENT_ID - OAuth Client ID from Google Cloud Console</p>
+                      <p data-testid="text-ads-setup-2">GOOGLE_ADS_CLIENT_SECRET - OAuth Client Secret</p>
+                      <p data-testid="text-ads-setup-3">GOOGLE_ADS_DEVELOPER_TOKEN - From Google Ads API Center</p>
+                      <p data-testid="text-ads-setup-4">GOOGLE_ADS_REFRESH_TOKEN - OAuth Refresh Token</p>
+                      <p data-testid="text-ads-setup-5">GOOGLE_ADS_CUSTOMER_ID - Your 10-digit account number</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-semibold">Google Ads Performance</h2>
+                  <Select value={adsDateRange} onValueChange={setAdsDateRange}>
+                    <SelectTrigger className="w-[180px]" data-testid="select-ads-date-range">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LAST_7_DAYS">Last 7 Days</SelectItem>
+                      <SelectItem value="LAST_14_DAYS">Last 14 Days</SelectItem>
+                      <SelectItem value="LAST_30_DAYS">Last 30 Days</SelectItem>
+                      <SelectItem value="THIS_MONTH">This Month</SelectItem>
+                      <SelectItem value="LAST_MONTH">Last Month</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {loadingAdsOverview ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : adsOverview ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                          <MousePointerClick className="h-4 w-4" />
+                          <span className="text-xs font-medium">Clicks</span>
+                        </div>
+                        <p className="text-2xl font-bold" data-testid="text-ads-clicks">
+                          {adsOverview.totalClicks.toLocaleString()}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                          <Eye className="h-4 w-4" />
+                          <span className="text-xs font-medium">Impressions</span>
+                        </div>
+                        <p className="text-2xl font-bold" data-testid="text-ads-impressions">
+                          {adsOverview.totalImpressions.toLocaleString()}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                          <DollarSign className="h-4 w-4" />
+                          <span className="text-xs font-medium">Total Spend</span>
+                        </div>
+                        <p className="text-2xl font-bold" data-testid="text-ads-cost">
+                          ${adsOverview.totalCost.toFixed(2)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                          <Zap className="h-4 w-4" />
+                          <span className="text-xs font-medium">Conversions</span>
+                        </div>
+                        <p className="text-2xl font-bold" data-testid="text-ads-conversions">
+                          {adsOverview.totalConversions.toFixed(1)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                          <TrendingUp className="h-4 w-4" />
+                          <span className="text-xs font-medium">Avg CTR</span>
+                        </div>
+                        <p className="text-2xl font-bold" data-testid="text-ads-ctr">
+                          {adsOverview.avgCtr.toFixed(2)}%
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                          <DollarSign className="h-4 w-4" />
+                          <span className="text-xs font-medium">Avg CPC</span>
+                        </div>
+                        <p className="text-2xl font-bold" data-testid="text-ads-cpc">
+                          ${adsOverview.avgCpc.toFixed(2)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                          <Target className="h-4 w-4" />
+                          <span className="text-xs font-medium">Cost/Conversion</span>
+                        </div>
+                        <p className="text-2xl font-bold" data-testid="text-ads-cost-per-conv">
+                          ${adsOverview.costPerConversion.toFixed(2)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : null}
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Megaphone className="h-5 w-5" />
+                      Campaign Performance
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingCampaigns ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : adsCampaigns.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">No campaign data for this period.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground">
+                              <th className="pb-2 pr-4 font-medium">Campaign</th>
+                              <th className="pb-2 pr-4 font-medium text-right">Status</th>
+                              <th className="pb-2 pr-4 font-medium text-right">Clicks</th>
+                              <th className="pb-2 pr-4 font-medium text-right">Impr.</th>
+                              <th className="pb-2 pr-4 font-medium text-right">Cost</th>
+                              <th className="pb-2 pr-4 font-medium text-right">Conv.</th>
+                              <th className="pb-2 pr-4 font-medium text-right">CTR</th>
+                              <th className="pb-2 font-medium text-right">Avg CPC</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {adsCampaigns.map((campaign) => (
+                              <tr key={campaign.id} className="border-b last:border-0" data-testid={`row-campaign-${campaign.id}`}>
+                                <td className="py-2.5 pr-4 font-medium">{campaign.name}</td>
+                                <td className="py-2.5 pr-4 text-right">
+                                  <Badge
+                                    variant={campaign.status === "ENABLED" ? "default" : "secondary"}
+                                    className="text-xs"
+                                  >
+                                    {campaign.status}
+                                  </Badge>
+                                </td>
+                                <td className="py-2.5 pr-4 text-right">{campaign.clicks.toLocaleString()}</td>
+                                <td className="py-2.5 pr-4 text-right">{campaign.impressions.toLocaleString()}</td>
+                                <td className="py-2.5 pr-4 text-right">${campaign.cost.toFixed(2)}</td>
+                                <td className="py-2.5 pr-4 text-right">{campaign.conversions.toFixed(1)}</td>
+                                <td className="py-2.5 pr-4 text-right">{(campaign.ctr * 100).toFixed(2)}%</td>
+                                <td className="py-2.5 text-right">${campaign.avgCpc.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Target className="h-5 w-5" />
+                      Top Keywords
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingKeywords ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : adsKeywords.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">No keyword data for this period.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground">
+                              <th className="pb-2 pr-4 font-medium">Keyword</th>
+                              <th className="pb-2 pr-4 font-medium">Match</th>
+                              <th className="pb-2 pr-4 font-medium">Campaign</th>
+                              <th className="pb-2 pr-4 font-medium text-right">Clicks</th>
+                              <th className="pb-2 pr-4 font-medium text-right">Cost</th>
+                              <th className="pb-2 pr-4 font-medium text-right">Conv.</th>
+                              <th className="pb-2 pr-4 font-medium text-right">CTR</th>
+                              <th className="pb-2 font-medium text-right">QS</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {adsKeywords.map((kw, i) => (
+                              <tr key={i} className="border-b last:border-0" data-testid={`row-keyword-${i}`}>
+                                <td className="py-2.5 pr-4 font-medium">"{kw.keyword}"</td>
+                                <td className="py-2.5 pr-4">
+                                  <Badge variant="outline" className="text-xs">{kw.matchType}</Badge>
+                                </td>
+                                <td className="py-2.5 pr-4 text-muted-foreground truncate max-w-[150px]">{kw.campaignName}</td>
+                                <td className="py-2.5 pr-4 text-right">{kw.clicks.toLocaleString()}</td>
+                                <td className="py-2.5 pr-4 text-right">${kw.cost.toFixed(2)}</td>
+                                <td className="py-2.5 pr-4 text-right">{kw.conversions.toFixed(1)}</td>
+                                <td className="py-2.5 pr-4 text-right">{(kw.ctr * 100).toFixed(2)}%</td>
+                                <td className="py-2.5 text-right">
+                                  {kw.qualityScore !== null ? (
+                                    <span className={kw.qualityScore >= 7 ? "text-green-600 dark:text-green-400 font-semibold" : kw.qualityScore >= 5 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}>
+                                      {kw.qualityScore}/10
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">--</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </div>
         </TabsContent>
 

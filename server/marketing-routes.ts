@@ -4,6 +4,14 @@ import { db } from "./db";
 import { jobs } from "@shared/schema";
 import { sql, desc, eq, and, isNotNull } from "drizzle-orm";
 import { isAuthenticated } from "./replit_integrations/auth";
+import {
+  isGoogleAdsConfigured,
+  getCampaignPerformance,
+  getKeywordPerformance,
+  getAccountOverview,
+  getDailyPerformance,
+  getGoogleAdsContextForAI,
+} from "./google-ads";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy-key",
@@ -102,8 +110,11 @@ export function registerMarketingRoutes(app: Express): void {
         return;
       }
 
-      const crmContext = await getMarketingCRMContext();
-      const systemPrompt = AI_CMO_SYSTEM_PROMPT + crmContext;
+      const [crmContext, adsContext] = await Promise.all([
+        getMarketingCRMContext(),
+        getGoogleAdsContextForAI("LAST_30_DAYS"),
+      ]);
+      const systemPrompt = AI_CMO_SYSTEM_PROMPT + crmContext + adsContext;
 
       const chatMessages: OpenAI.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
@@ -205,6 +216,77 @@ export function registerMarketingRoutes(app: Express): void {
     } catch (error) {
       console.error("[Marketing] Stats error:", error);
       res.status(500).json({ error: "Failed to fetch marketing stats" });
+    }
+  });
+
+  const VALID_DATE_RANGES = ["LAST_7_DAYS", "LAST_14_DAYS", "LAST_30_DAYS", "THIS_MONTH", "LAST_MONTH"];
+
+  function validateDateRange(raw: unknown): string {
+    const dr = (typeof raw === "string" ? raw : "LAST_30_DAYS");
+    return VALID_DATE_RANGES.includes(dr) ? dr : "LAST_30_DAYS";
+  }
+
+  app.get("/api/marketing/google-ads/status", isAuthenticated, async (_req: Request, res: Response) => {
+    res.json({ configured: isGoogleAdsConfigured() });
+  });
+
+  app.get("/api/marketing/google-ads/overview", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      if (!isGoogleAdsConfigured()) {
+        res.status(400).json({ error: "Google Ads not configured" });
+        return;
+      }
+      const dateRange = validateDateRange(req.query.dateRange);
+      const overview = await getAccountOverview(dateRange);
+      res.json(overview);
+    } catch (error: any) {
+      console.error("[Marketing] Google Ads overview error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch Google Ads overview" });
+    }
+  });
+
+  app.get("/api/marketing/google-ads/campaigns", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      if (!isGoogleAdsConfigured()) {
+        res.status(400).json({ error: "Google Ads not configured" });
+        return;
+      }
+      const dateRange = validateDateRange(req.query.dateRange);
+      const campaigns = await getCampaignPerformance(dateRange);
+      res.json(campaigns);
+    } catch (error: any) {
+      console.error("[Marketing] Google Ads campaigns error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch campaigns" });
+    }
+  });
+
+  app.get("/api/marketing/google-ads/keywords", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      if (!isGoogleAdsConfigured()) {
+        res.status(400).json({ error: "Google Ads not configured" });
+        return;
+      }
+      const dateRange = validateDateRange(req.query.dateRange);
+      const keywords = await getKeywordPerformance(dateRange);
+      res.json(keywords);
+    } catch (error: any) {
+      console.error("[Marketing] Google Ads keywords error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch keywords" });
+    }
+  });
+
+  app.get("/api/marketing/google-ads/daily", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      if (!isGoogleAdsConfigured()) {
+        res.status(400).json({ error: "Google Ads not configured" });
+        return;
+      }
+      const dateRange = validateDateRange(req.query.dateRange);
+      const daily = await getDailyPerformance(dateRange);
+      res.json(daily);
+    } catch (error: any) {
+      console.error("[Marketing] Google Ads daily error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch daily performance" });
     }
   });
 }
