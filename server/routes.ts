@@ -2244,6 +2244,44 @@ Only return the JSON object, no other text.`
     }
   });
 
+  app.get("/api/voice/recording-audio/:callId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { callId } = req.params;
+      const [call] = await db.select().from(aiReceptionistCalls)
+        .where(eq(aiReceptionistCalls.id, parseInt(callId)));
+
+      if (!call || !call.recordingUrl) {
+        return res.status(404).json({ message: "Recording not found" });
+      }
+
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+      if (!accountSid || !authToken) {
+        return res.status(500).json({ message: "Twilio credentials not configured" });
+      }
+
+      const audioResponse = await fetch(call.recordingUrl, {
+        headers: {
+          "Authorization": "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+        },
+        redirect: "follow",
+      });
+
+      if (!audioResponse.ok) {
+        return res.status(audioResponse.status).json({ message: "Failed to fetch recording from Twilio" });
+      }
+
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      const arrayBuffer = await audioResponse.arrayBuffer();
+      res.send(Buffer.from(arrayBuffer));
+    } catch (error: any) {
+      console.error("[Recording Proxy] Error:", error.message);
+      res.status(500).json({ message: "Failed to stream recording" });
+    }
+  });
+
   app.post("/api/voice/transfer", isAuthenticated, async (req: any, res) => {
     try {
       const { callSid, transferTo } = req.body;

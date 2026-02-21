@@ -311,7 +311,7 @@ export default function AIReceptionist() {
                               <div className="rounded-md border p-3">
                                 <p className="text-xs text-muted-foreground mb-2">Recording</p>
                                 <audio controls className="w-full" data-testid={`audio-recording-${call.id}`}>
-                                  <source src={call.recordingUrl} type="audio/mpeg" />
+                                  <source src={`/api/voice/recording-audio/${call.id}`} type="audio/mpeg" />
                                 </audio>
                               </div>
                             )}
