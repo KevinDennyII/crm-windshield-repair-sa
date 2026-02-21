@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -113,7 +113,7 @@ const defaultActions: QuickAction[] = [
 export function FloatingAIAssistant() {
   const { toast } = useToast();
   const [location] = useLocation();
-  const { selectedEntity, clearSelectedEntity } = useAIContext();
+  const { selectedEntity } = useAIContext();
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
@@ -162,25 +162,14 @@ export function FloatingAIAssistant() {
   const entityActions = getEntityActions();
   const hasEntityContext = entityActions.length > 0;
 
-  const { data: conversations = [], isLoading: loadingConversations } = useQuery<Conversation[]>({
+  const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/ai/conversations"],
     enabled: isOpen,
   });
 
-  const { data: currentConversation, isLoading: loadingMessages } = useQuery<ConversationWithMessages>({
+  const { data: currentConversation } = useQuery<ConversationWithMessages>({
     queryKey: ["/api/ai/conversations", selectedConversation],
     enabled: !!selectedConversation && isOpen,
-  });
-
-  const createConversationMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/ai/conversations", { title: `Chat - ${currentPage.title}` });
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/ai/conversations"] });
-      setSelectedConversation(data.id);
-    },
   });
 
   const sendMessage = async (content?: string) => {

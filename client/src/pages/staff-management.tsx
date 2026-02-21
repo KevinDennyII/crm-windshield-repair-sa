@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2, Plus, UserPlus, Edit, UserCheck, UserX, Trash2 } from "lucide-react";
+import { Loader2, UserPlus, Edit, UserCheck, UserX, Trash2 } from "lucide-react";
 
 interface User {
   id: string;

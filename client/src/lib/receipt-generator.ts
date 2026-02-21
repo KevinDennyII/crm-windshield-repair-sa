@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import type { Job, Vehicle, Part, ServiceType, GlassType, CustomerType } from '@shared/schema';
+import type { Job, Part } from '@shared/schema';
 import logoImage from '@assets/WhatsApp_Image_2026-01-25_at_7.43.18_PM_1769394237285.jpeg';
 
 export type ReceiptType = 'dealer' | 'fleet' | 'rock_chip_repair' | 'windshield_replacement' | 'other_glass_replacement';

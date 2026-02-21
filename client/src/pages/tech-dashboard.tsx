@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { 
@@ -14,12 +13,10 @@ import {
   Settings, 
   LogOut,
   Loader2,
-  ChevronRight,
   Package,
   ChevronDown,
   ChevronUp,
   Truck,
-  Phone,
   ClipboardCheck,
   Check,
   RefreshCw
@@ -43,18 +40,6 @@ const TIME_FRAME_ORDER: Record<string, number> = {
   "3p-6p": 5,
   "custom": 6
 };
-
-function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 3959;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
 
 function getStopLabel(index: number): string {
   const ordinals = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"];
@@ -91,14 +76,6 @@ function parseTimeFrameSlot(slot: string): string {
   const displayHour = hour === 12 ? 12 : (isPM && hour < 12 ? hour : hour);
   const period = isPM ? "PM" : "AM";
   return `${displayHour}:00 ${period}`;
-}
-
-function formatTimeFrame(timeFrame: string): string {
-  const parts = timeFrame.split("-");
-  if (parts.length === 2) {
-    return `${parseTimeFrameSlot(parts[0])} - ${parseTimeFrameSlot(parts[1])}`;
-  }
-  return timeFrame;
 }
 
 function calculateEndTime(startTime: string, durationHours: number): string {
@@ -140,7 +117,7 @@ function formatScheduleTimeRange(job: Job): string {
 
 export default function TechDashboard() {
   const { user, logout } = useAuth();
-  const [, navigate] = useLocation();
+  useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("current");
   const [pickupExpanded, setPickupExpanded] = useState<Record<string, boolean>>({
@@ -345,12 +322,6 @@ export default function TechDashboard() {
       case "yearly": return "Yearly";
       case "pickup": return "Today's Pickup List";
     }
-  };
-
-  const getInitials = (firstName?: string | null, lastName?: string | null) => {
-    const first = firstName?.charAt(0) || "";
-    const last = lastName?.charAt(0) || "";
-    return (first + last).toUpperCase() || "T";
   };
 
   const formatDate = (dateStr: string | null | undefined) => {

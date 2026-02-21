@@ -9,7 +9,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Loader2, LogIn } from "lucide-react";
 
 export default function StaffLogin() {
-  const [, setLocation] = useLocation();
+  useLocation();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [username, setUsername] = useState("");

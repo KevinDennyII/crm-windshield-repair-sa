@@ -36,13 +36,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import {
   Rocket,
-  MessageSquare,
-  Users,
   Megaphone,
   Zap,
   Globe,
   Star,
-  BarChart3,
 } from "lucide-react";
 
 function AdminCsrRouter() {

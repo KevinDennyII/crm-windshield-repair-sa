@@ -8,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -38,19 +37,11 @@ import {
   Briefcase,
   Calendar,
   Target,
-  Banknote,
-  Focus,
-  Truck,
   Building2,
   User,
   ArrowUpRight,
   ArrowDownRight,
-  CreditCard,
   Clock,
-  Car,
-  Package,
-  UserCheck,
-  FileText,
 } from "lucide-react";
 import { type Job, type InsertJob, type PaymentHistoryEntry } from "@shared/schema";
 
@@ -839,19 +830,6 @@ export default function Reports() {
       revenue[type] = (revenue[type] || 0) + job.totalDue;
     });
     return Object.entries(revenue).map(([name, value]) => ({
-      name: customerTypeLabels[name] || name,
-      value,
-    })).sort((a, b) => b.value - a.value);
-  }, [completedJobs]);
-
-  // Jobs by customer type
-  const jobsByCustomerType = useMemo(() => {
-    const counts: Record<string, number> = {};
-    completedJobs.forEach(job => {
-      const type = job.customerType || "retail";
-      counts[type] = (counts[type] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({
       name: customerTypeLabels[name] || name,
       value,
     })).sort((a, b) => b.value - a.value);

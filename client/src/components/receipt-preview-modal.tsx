@@ -43,15 +43,6 @@ export function ReceiptPreviewModal({ job, isOpen, onClose }: ReceiptPreviewModa
     }
   };
 
-  const handleOpenPreview = async () => {
-    if (!pdfUrl) {
-      await generatePdf();
-    }
-    if (pdfUrl) {
-      window.open(pdfUrl, '_blank');
-    }
-  };
-
   const handleGenerateAndOpen = async () => {
     if (!job) return;
     

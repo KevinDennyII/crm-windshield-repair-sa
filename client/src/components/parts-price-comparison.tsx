@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -82,7 +81,7 @@ export function PartsPriceComparison({
   const [showHistory, setShowHistory] = useState(false);
   const [prices, setPrices] = useState<Record<string, string>>({});
 
-  const { data: latestPrices, isLoading: loadingLatest } = useQuery({
+  const { data: latestPrices } = useQuery({
     queryKey: ["/api/parts-prices/latest", nagsPartNumber],
     queryFn: async () => {
       if (!nagsPartNumber) return {};

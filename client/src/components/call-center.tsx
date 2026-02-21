@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, Volume2, VolumeX, X, History, Settings, PhoneForwarded, Grid3X3, Delete, ArrowRightLeft, Pause, Play, MessageSquare, Send } from "lucide-react";
+import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Mic, MicOff, X, History, PhoneForwarded, Grid3X3, Delete, ArrowRightLeft, Pause, Play, MessageSquare, Send } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -66,7 +66,7 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
   const [isOnHold, setIsOnHold] = useState(false);
   const [isTogglingHold, setIsTogglingHold] = useState(false);
   const [holdCallSid, setHoldCallSid] = useState<string | null>(null);
-  const [pendingResume, setPendingResume] = useState(false);
+  const [, setPendingResume] = useState(false);
   const deviceRef = useRef<any>(null);
   const hasInitiatedDialRef = useRef<string | null>(null);
   const isOnHoldRef = useRef(false);
@@ -122,13 +122,6 @@ export function CallCenter({ isOpen, onClose, dialNumber, dialContactName, onDia
       setFwdWhisper(forwardingSettings.whisperMessage || "");
     }
   }, [forwardingSettings]);
-
-  const tokenMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/voice/token");
-      return res.json();
-    },
-  });
 
   const fetchToken = useCallback(async () => {
     const res = await apiRequest("POST", "/api/voice/token");

@@ -47,23 +47,19 @@ import {
   type Vehicle,
   type Part,
   pipelineStages,
-  paymentStatuses,
   serviceTypes,
   glassTypes,
   repairLocations,
   calibrationTypes,
   causesOfLoss,
   paymentSources,
-  paymentMethods,
   customerTypes,
   leadSources,
   timeFrames,
   timeFrameDetails,
   type PaymentHistoryEntry,
   type CustomerType,
-  type LeadSource,
   type TimeFrame,
-  type PaymentMethod,
   type ServiceType,
   type GlassType,
 } from "@shared/schema";
@@ -75,7 +71,6 @@ import {
   Save,
   X,
   Send,
-  FileText,
   Search,
   Plus,
   ChevronDown,
@@ -92,7 +87,6 @@ import {
   CalendarDays,
   ClipboardList,
 } from "lucide-react";
-import { determineReceiptType, getReceiptTypeLabel } from "@/lib/receipt-generator";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 import { EmailComposeModal } from "@/components/email-compose-modal";
 import { QuoteSendModal } from "@/components/quote-send-modal";
@@ -3052,8 +3046,8 @@ export function JobDetailModal({
                   <CardContent className="space-y-4">
                     <div className="grid sm:grid-cols-2 gap-6">
                       <div className="space-y-3">
-                        {vehicles.map((v, vi) =>
-                          v.parts.map((p, pi) => {
+                        {vehicles.map((v, _vi) =>
+                          v.parts.map((p, _pi) => {
                             const { partTotal } = calculatePartTotals(p, formData.customerType);
                             return (
                               <div
