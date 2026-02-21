@@ -80,7 +80,7 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
-  const { user, isAdmin, isCsr, isReports, logout } = useAuth();
+  const { user, isAdmin, hasAdminAccess, isCsr, isReports, logout } = useAuth();
 
   // Determine which nav items to show based on role
   const navItems = isCsr ? csrNavItems : isReports ? reportsNavItems : allNavItems;
@@ -138,7 +138,7 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
-              {isAdmin && (
+              {hasAdminAccess && (
                 <>
                   <SidebarMenuItem>
                     <SidebarMenuButton

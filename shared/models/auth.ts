@@ -14,7 +14,9 @@ export const sessions = pgTable(
 );
 
 // User roles for the CRM system
-export const userRoles = ["admin", "csr", "technician", "reports"] as const;
+// admin = highest privilege, full control including deleting other admins
+// manager = admin-level access but cannot delete admin accounts
+export const userRoles = ["admin", "manager", "csr", "technician", "reports"] as const;
 export type UserRole = typeof userRoles[number];
 
 // User storage table.

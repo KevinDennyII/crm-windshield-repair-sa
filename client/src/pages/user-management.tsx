@@ -12,6 +12,7 @@ import type { User, UserRole } from "@shared/models/auth";
 
 const roleLabels: Record<UserRole, string> = {
   admin: "Administrator",
+  manager: "Manager",
   csr: "Customer Service",
   technician: "Technician",
   reports: "Reports Only",
@@ -19,18 +20,19 @@ const roleLabels: Record<UserRole, string> = {
 
 const roleColors: Record<UserRole, string> = {
   admin: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+  manager: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
   csr: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
   technician: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
   reports: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
 };
 
 export default function UserManagement() {
-  const { user: currentUser, isAdmin } = useAuth();
+  const { user: currentUser, hasAdminAccess } = useAuth();
   const { toast } = useToast();
 
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
-    enabled: isAdmin,
+    enabled: hasAdminAccess,
   });
 
   const updateRoleMutation = useMutation({
@@ -54,7 +56,7 @@ export default function UserManagement() {
     },
   });
 
-  if (!isAdmin) {
+  if (!hasAdminAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Card className="max-w-md">

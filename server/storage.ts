@@ -40,6 +40,7 @@ export interface IStorage {
   // User management
   getAllUsers(): Promise<User[]>;
   updateUser(id: string, updates: Partial<UpsertUser>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<boolean>;
   
   // Processed leads (for preventing duplicate lead processing)
   isLeadProcessed(emailId: string): Promise<boolean>;
@@ -648,6 +649,13 @@ export class DatabaseStorage implements IStorage {
     return this.getUser(id);
   }
   
+  async deleteUser(id: string): Promise<boolean> {
+    const existing = await this.getUser(id);
+    if (!existing) return false;
+    await db.delete(users).where(eq(users.id, id));
+    return true;
+  }
+
   // Processed leads methods
   async isLeadProcessed(emailId: string): Promise<boolean> {
     const result = await db

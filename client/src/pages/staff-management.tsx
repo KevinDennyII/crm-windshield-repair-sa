@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, UserPlus, Edit, UserCheck, UserX } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { Loader2, Plus, UserPlus, Edit, UserCheck, UserX, Trash2 } from "lucide-react";
 
 interface User {
   id: string;
@@ -25,11 +27,13 @@ interface User {
 
 export default function StaffManagement() {
   const { toast } = useToast();
+  const { user: currentUser, isAdmin, hasAdminAccess } = useAuth();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
+    enabled: hasAdminAccess,
   });
 
   const createMutation = useMutation({
@@ -62,9 +66,30 @@ export default function StaffManagement() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/staff/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "Staff account deleted successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const canDeleteUser = (user: User) => {
+    if (user.id === currentUser?.id) return false;
+    if (user.role === "admin" && !isAdmin) return false;
+    return true;
+  };
+
   const getRoleBadgeVariant = (role: string) => {
     switch (role) {
       case "admin": return "default";
+      case "manager": return "default";
       case "csr": return "secondary";
       case "technician": return "outline";
       case "reports": return "outline";
@@ -154,6 +179,7 @@ export default function StaffManagement() {
               <SelectItem value="csr">CSR</SelectItem>
               <SelectItem value="technician">Technician</SelectItem>
               <SelectItem value="reports">Reports Only</SelectItem>
+              <SelectItem value="manager">Manager</SelectItem>
               <SelectItem value="admin">Admin</SelectItem>
             </SelectContent>
           </Select>
@@ -248,6 +274,7 @@ export default function StaffManagement() {
                 <SelectItem value="csr">CSR</SelectItem>
                 <SelectItem value="technician">Technician</SelectItem>
                 <SelectItem value="reports">Reports Only</SelectItem>
+                <SelectItem value="manager">Manager</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
@@ -277,6 +304,22 @@ export default function StaffManagement() {
       </form>
     );
   };
+
+  if (!hasAdminAccess) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <UserX className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+            <p className="text-muted-foreground">
+              Only administrators and managers can access staff management.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -355,14 +398,50 @@ export default function StaffManagement() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setEditingUser(user)}
-                        data-testid={`button-edit-${user.id}`}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingUser(user)}
+                          data-testid={`button-edit-${user.id}`}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        {canDeleteUser(user) && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                data-testid={`button-delete-${user.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Staff Account</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to permanently delete the account for{" "}
+                                  <strong>{user.firstName} {user.lastName}</strong> ({user.username})?
+                                  This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteMutation.mutate(user.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  data-testid={`button-confirm-delete-${user.id}`}
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

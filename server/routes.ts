@@ -45,6 +45,11 @@ async function getCurrentUser(req: any): Promise<{ id: string; username: string;
   return null;
 }
 
+// Helper to check if user has admin-level privileges (admin or manager)
+function hasAdminAccess(role: string): boolean {
+  return role === "admin" || role === "manager";
+}
+
 // Helper to log activity
 async function logActivity(
   userId: string,
@@ -288,12 +293,12 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     try {
       const adminId = req.user.claims.sub;
       const [admin] = await db.select().from(users).where(eq(users.id, adminId));
-      if (!admin || admin.role !== "admin") {
+      if (!admin || !hasAdminAccess(admin.role || '')) {
         return res.status(403).json({ message: "Only admins can change user roles" });
       }
 
       const { role } = req.body;
-      if (!["admin", "csr", "technician"].includes(role)) {
+      if (!["admin", "manager", "csr", "technician", "reports"].includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
       }
 
@@ -314,7 +319,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.get("/api/users", async (req: any, res) => {
     try {
       const currentUser = await getCurrentUser(req);
-      if (!currentUser || currentUser.role !== "admin") {
+      if (!currentUser || !hasAdminAccess(currentUser.role)) {
         return res.status(403).json({ message: "Only admins can view all users" });
       }
 
@@ -335,7 +340,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.post("/api/staff", async (req: any, res) => {
     try {
       const currentUser = await getCurrentUser(req);
-      if (!currentUser || currentUser.role !== "admin") {
+      if (!currentUser || !hasAdminAccess(currentUser.role)) {
         return res.status(403).json({ message: "Only admins can create staff accounts" });
       }
 
@@ -345,7 +350,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         firstName: z.string().min(1, "First name is required"),
         lastName: z.string().min(1, "Last name is required"),
         email: z.string().email("Valid email required").optional().or(z.literal("")),
-        role: z.enum(["admin", "csr", "technician", "reports"]),
+        role: z.enum(["admin", "manager", "csr", "technician", "reports"]),
       });
 
       const parsed = staffSchema.safeParse(req.body);
@@ -406,7 +411,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.patch("/api/staff/:id", async (req: any, res) => {
     try {
       const currentUser = await getCurrentUser(req);
-      if (!currentUser || currentUser.role !== "admin") {
+      if (!currentUser || !hasAdminAccess(currentUser.role)) {
         return res.status(403).json({ message: "Only admins can update staff accounts" });
       }
 
@@ -416,7 +421,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         firstName: z.string().min(1).optional(),
         lastName: z.string().min(1).optional(),
         email: z.string().email().optional().or(z.literal("")),
-        role: z.enum(["admin", "csr", "technician", "reports"]).optional(),
+        role: z.enum(["admin", "manager", "csr", "technician", "reports"]).optional(),
         isActive: z.enum(["true", "false"]).optional(),
       });
 
@@ -452,11 +457,54 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  // Delete staff account (admin/manager only, with role hierarchy enforcement)
+  app.delete("/api/staff/:id", async (req: any, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || !hasAdminAccess(currentUser.role)) {
+        return res.status(403).json({ message: "Only admins can delete staff accounts" });
+      }
+
+      const targetId = req.params.id;
+
+      if (targetId === currentUser.id) {
+        return res.status(400).json({ message: "You cannot delete your own account" });
+      }
+
+      const [targetUser] = await db.select().from(users).where(eq(users.id, targetId));
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (targetUser.role === "admin" && currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can delete other admin accounts" });
+      }
+
+      await storage.deleteUser(targetId);
+
+      await logActivity(
+        currentUser.id,
+        currentUser.username,
+        currentUser.role,
+        'user_deleted',
+        'other',
+        undefined,
+        undefined,
+        { deletedUsername: targetUser.username, deletedRole: targetUser.role }
+      );
+
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting staff account:", error);
+      res.status(500).json({ message: "Failed to delete staff account" });
+    }
+  });
+
   // Get activity logs (admin only)
   app.get("/api/activity-logs", async (req: any, res) => {
     try {
       const currentUser = await getCurrentUser(req);
-      if (!currentUser || currentUser.role !== "admin") {
+      if (!currentUser || !hasAdminAccess(currentUser.role)) {
         return res.status(403).json({ message: "Only admins can view activity logs" });
       }
 
@@ -483,7 +531,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.get("/api/activity-logs/user/:userId", async (req: any, res) => {
     try {
       const currentUser = await getCurrentUser(req);
-      if (!currentUser || currentUser.role !== "admin") {
+      if (!currentUser || !hasAdminAccess(currentUser.role)) {
         return res.status(403).json({ message: "Only admins can view activity logs" });
       }
 
@@ -502,7 +550,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.get("/api/activity-summary", async (req: any, res) => {
     try {
       const currentUser = await getCurrentUser(req);
-      if (!currentUser || currentUser.role !== "admin") {
+      if (!currentUser || !hasAdminAccess(currentUser.role)) {
         return res.status(403).json({ message: "Only admins can view activity summary" });
       }
 
@@ -2812,7 +2860,7 @@ Only return the JSON object, no other text.`
 
   app.post("/api/send-test-notification", isAuthenticated, async (req: any, res) => {
     try {
-      if (req.user?.role !== "admin") {
+      if (!req.user?.role || !hasAdminAccess(req.user.role)) {
         return res.status(403).json({ message: "Admin only" });
       }
       await sendTestSummaryNow();
@@ -3238,7 +3286,7 @@ Only return the JSON object, no other text.`
     try {
       // Check authentication
       const currentUser = await getCurrentUser(req);
-      if (!currentUser || currentUser.role !== "admin") {
+      if (!currentUser || !hasAdminAccess(currentUser.role)) {
         return res.status(403).json({ message: "Admin access required" });
       }
 
@@ -3293,7 +3341,7 @@ Only return the JSON object, no other text.`
       
       // Check authentication
       const currentUser = await getCurrentUser(req);
-      if (!currentUser || currentUser.role !== "admin") {
+      if (!currentUser || !hasAdminAccess(currentUser.role)) {
         return res.status(403).json({ message: "Admin access required" });
       }
       

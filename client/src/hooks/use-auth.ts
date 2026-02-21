@@ -43,6 +43,8 @@ export function useAuth() {
   };
 
   const isAdmin = user?.role === "admin";
+  const isManager = user?.role === "manager";
+  const hasAdminAccess = user?.role === "admin" || user?.role === "manager";
   const isCsr = user?.role === "csr";
   const isTechnician = user?.role === "technician";
   const isReports = user?.role === "reports";
@@ -55,6 +57,8 @@ export function useAuth() {
     isLoggingOut: logoutMutation.isPending,
     hasRole,
     isAdmin,
+    isManager,
+    hasAdminAccess,
     isCsr,
     isTechnician,
     isReports,
