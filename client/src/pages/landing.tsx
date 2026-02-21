@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Wrench, Loader2 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -13,7 +12,6 @@ import { useToast } from "@/hooks/use-toast";
 export default function Landing() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  const [userType, setUserType] = useState<string>("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -24,7 +22,6 @@ export default function Landing() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user-with-role"] });
-      // Force a full reload to refresh auth state
       window.location.reload();
     },
     onError: (error: Error) => {
@@ -49,26 +46,9 @@ export default function Landing() {
     loginMutation.mutate({ username, password });
   };
 
-  // Pre-fill credentials when user type is selected
-  const handleUserTypeChange = (value: string) => {
-    setUserType(value);
-    switch (value) {
-      case "admin":
-        setUsername("admin");
-        setPassword("admin123");
-        break;
-      case "csr":
-        setUsername("csr");
-        setPassword("csr123");
-        break;
-      case "technician":
-        setUsername("tech");
-        setPassword("tech123");
-        break;
-      default:
-        setUsername("");
-        setPassword("");
-    }
+  const quickFill = (u: string, p: string) => {
+    setUsername(u);
+    setPassword(p);
   };
 
   return (
@@ -86,32 +66,16 @@ export default function Landing() {
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="userType" className="text-slate-300">Select User Type</Label>
-              <Select value={userType} onValueChange={handleUserTypeChange}>
-                <SelectTrigger 
-                  className="bg-slate-700 border-slate-600 text-white"
-                  data-testid="select-user-type"
-                >
-                  <SelectValue placeholder="Choose who you are..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrator</SelectItem>
-                  <SelectItem value="csr">Customer Service (CSR)</SelectItem>
-                  <SelectItem value="technician">Technician</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="username" className="text-slate-300">Username</Label>
               <Input
                 id="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
+                placeholder="Enter your username"
                 className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
                 data-testid="input-username"
+                autoComplete="username"
               />
             </div>
 
@@ -122,9 +86,10 @@ export default function Landing() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder="Enter your password"
                 className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
                 data-testid="input-password"
+                autoComplete="current-password"
               />
             </div>
 
@@ -146,9 +111,39 @@ export default function Landing() {
           </form>
 
           <div className="mt-6 pt-4 border-t border-slate-700">
-            <p className="text-xs text-slate-500 text-center">
-              Default credentials are pre-filled when you select a user type
-            </p>
+            <p className="text-xs text-slate-500 text-center mb-3">Quick login</p>
+            <div className="flex gap-2 justify-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs border-slate-600 text-slate-300 hover:bg-slate-700"
+                onClick={() => quickFill("admin", "admin123")}
+                data-testid="button-quick-admin"
+              >
+                Admin
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs border-slate-600 text-slate-300 hover:bg-slate-700"
+                onClick={() => quickFill("csr", "csr123")}
+                data-testid="button-quick-csr"
+              >
+                CSR
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs border-slate-600 text-slate-300 hover:bg-slate-700"
+                onClick={() => quickFill("tech", "tech123")}
+                data-testid="button-quick-tech"
+              >
+                Technician
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
