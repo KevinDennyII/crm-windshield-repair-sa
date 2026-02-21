@@ -32,6 +32,7 @@ import Contacts from "@/pages/contacts";
 import AITools from "@/pages/ai-tools";
 import AIReceptionist from "@/pages/ai-receptionist";
 import MobileFeeMap from "@/pages/mobile-fee-map";
+import Marketing from "@/pages/marketing";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import {
@@ -59,13 +60,7 @@ function AdminCsrRouter() {
       <Route path="/conversations" component={Conversations} />
       <Route path="/calendar" component={CalendarPage} />
       <Route path="/contacts" component={Contacts} />
-      <Route path="/marketing">
-        <PlaceholderPage
-          title="Marketing"
-          description="Campaigns and lead generation"
-          icon={Megaphone}
-        />
-      </Route>
+      <Route path="/marketing" component={Marketing} />
       <Route path="/automation">
         <PlaceholderPage
           title="Automation"

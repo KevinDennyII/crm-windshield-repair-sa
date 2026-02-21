@@ -19,6 +19,7 @@ import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { COMPANY_LOGO_BASE64 } from "./logo";
 import { processNewLeads, startLeadPolling, stopLeadPolling } from "./lead-processor";
 import { registerAIRoutes } from "./ai-routes";
+import { registerMarketingRoutes } from "./marketing-routes";
 import { isAIReceptionistEnabled } from "./voice-receptionist";
 import bcrypt from "bcrypt";
 
@@ -132,6 +133,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   
   // Register AI routes
   registerAIRoutes(app);
+  registerMarketingRoutes(app);
 
   // Simple username/password login
   app.post("/api/auth/login", async (req, res) => {

@@ -17,6 +17,13 @@ Authentication is handled via Replit Auth (OIDC) and traditional username/passwo
 ### Automated Follow-Up System
 A 7-sequence automated follow-up system is triggered for new jobs in "quote" or "new_lead" stages. It schedules SMS and Email tasks with personalized templates at predefined intervals. Jobs can be set to `auto` mode for automatic sending or `manual` mode, which generates notifications for CSRs to review and send. The system auto-terminates and archives pending tasks when a job progresses to "scheduled" or "paid_completed." A background worker processes tasks and logs actions.
 
+### AI CMO Marketing Tab
+The Marketing tab (`/marketing`, `server/marketing-routes.ts`, `client/src/pages/marketing.tsx`) features an AI-powered Chief Marketing Officer agent for Windshield Repair SA. It includes:
+- **AI CMO Chat**: A streaming chat interface powered by GPT-4o with a detailed system prompt covering business identity, San Antonio market data, services, UVP, and strategic objectives. Live CRM data (total jobs, revenue, lead sources, recent jobs) is injected into context for data-driven recommendations.
+- **Quick Actions**: Pre-built prompt buttons for common marketing tasks - Write Google Ad, Draft Promo SMS, Email Campaign, Keyword Strategy, Social Media Posts, Review Responses, Fleet Proposals, Local SEO Tips, Competitor Analysis.
+- **Lead Source Tracking**: Stats cards (Total Jobs, Total Revenue, Avg Job Value, Conversion Rate) and lead source breakdown chart. The `leadSource` field on jobs supports: google_ads, referral, dealer, repeat, subcontractor, facebook, website, phone, walk_in, insurance, fleet.
+- All marketing API routes are protected with `isAuthenticated` middleware.
+
 ### AI Tools
 A suite of AI-powered tools, accessible to Admin and CSR roles via OpenAI (through Replit AI Integrations), includes:
 - **Chat & Compose**: Chat assistant, message composer, quote generator, follow-up suggester, insurance claim helper.
